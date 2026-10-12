@@ -3501,68 +3501,162 @@
             <style>
                 #page-jurnal .inv-table th { background: #1e3a8a !important; color: white !important; text-align: center !important; border: 1px solid #cbd5e1 !important; }
                 #page-jurnal .inv-table td { border: 1px solid #e2e8f0 !important; }
+                .jurnal-filter-card {
+                    display: flex;
+                    gap: 15px;
+                    margin-bottom: 15px;
+                    background: white;
+                    padding: 15px;
+                    border-radius: 8px;
+                    border: 1px solid #ddd;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+                }
+                .jurnal-filter-inputs {
+                    flex: 3;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                }
+                .jurnal-filter-actions {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                }
+                .jurnal-filter-label {
+                    font-size: 11px;
+                    font-weight: bold;
+                    color: #555;
+                    display: block;
+                    margin-bottom: 4px;
+                    text-transform: uppercase;
+                }
+                .jurnal-filter-control {
+                    width: 100%;
+                    border: 1px solid #ccc;
+                    border-radius: 4px;
+                    padding: 8px 10px;
+                    font-size: 13px;
+                    box-sizing: border-box;
+                    background: white;
+                    height: 38px;
+                }
+                .jurnal-btn-action {
+                    margin: 0 !important;
+                    height: 38px;
+                    padding: 8px 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 6px;
+                    font-size: 13px;
+                    font-weight: bold;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    box-sizing: border-box;
+                    color: white;
+                    border: none;
+                    width: 100%;
+                    transition: opacity 0.15s ease;
+                }
+                .jurnal-btn-action:hover {
+                    opacity: 0.9;
+                }
+                @media (max-width: 768px) {
+                    .jurnal-filter-card {
+                        flex-direction: column;
+                    }
+                    .jurnal-filter-actions {
+                        flex-direction: row;
+                        gap: 10px;
+                    }
+                    .jurnal-filter-actions > div {
+                        flex: 1;
+                    }
+                    .jurnal-filter-actions .jurnal-filter-label {
+                        display: none;
+                    }
+                    .jurnal-filter-row-col3 {
+                        flex-direction: column;
+                    }
+                }
             </style>
             <!-- TAB MENU JURNAL -->
-            <div class="filter-group" style="display:flex; flex-direction:column; gap:10px; margin-bottom:15px; background:white; padding:15px; border-radius:8px; border:1px solid #ddd;">
-                <div style="display:flex; gap:10px;">
-                    <div style="flex:1;">
-                        <label style="font-size:11px; font-weight:bold; color:#555;">Bulan</label>
-                        <select id="jurnal-bulan" style="width:100%; border:1px solid #ccc; border-radius:4px; padding:8px;">
-                            <option value="ALL">Semua Bulan</option>
-                            <option value="01">Januari</option>
-                            <option value="02">Februari</option>
-                            <option value="03">Maret</option>
-                            <option value="04">April</option>
-                            <option value="05">Mei</option>
-                            <option value="06">Juni</option>
-                            <option value="07">Juli</option>
-                            <option value="08">Agustus</option>
-                            <option value="09">September</option>
-                            <option value="10">Oktober</option>
-                            <option value="11">November</option>
-                            <option value="12">Desember</option>
-                        </select>
-                    </div>
-                    <div style="flex:1;">
-                        <label style="font-size:11px; font-weight:bold; color:#555;">Tahun</label>
-                        <select id="jurnal-tahun" style="width:100%; border:1px solid #ccc; border-radius:4px; padding:8px;">
-                            <option value="2025">2025</option>
-                            <option value="2026">2026</option>
-                            <option value="2027">2027</option>
-                            <option value="2028">2028</option>
-                        </select>
-                    </div>
-                </div>
-                <div style="display:flex; gap:10px;">
-                    <div style="flex:1;">
-                        <label style="font-size:11px; font-weight:bold; color:#555;">KODE</label>
-                        <select id="jurnal-kode" style="width:100%; border:1px solid #ccc; border-radius:4px; padding:8px;">
-                            <option value="">Semua Kode</option>
-                            <option value="1">1 - Aset / Piutang / Kas</option>
-                            <option value="2">2 - Kewajiban / Hutang</option>
-                            <option value="3">3 - Ekuitas / Modal</option>
-                            <option value="4">4 - Pendapatan Penjualan</option>
-                            <option value="5">5 - Biaya / HPP</option>
-                        </select>
-                    </div>
-                    <div style="flex:1;">
-                        <label style="font-size:11px; font-weight:bold; color:#555;">Perkiraan</label>
-                        <input type="text" id="jurnal-perkiraan" placeholder="Semua Perkiraan..." style="width:100%; border:1px solid #ccc; border-radius:4px; padding:8px; box-sizing:border-box;">
-                    </div>
-                </div>
-                <div style="display:flex; gap:10px; align-items:flex-end;">
-                    <div style="flex:2;">
-                        <label style="font-size:11px; font-weight:bold; color:#555;">Relasi</label>
-                        <div class="autocomplete-wrapper">
-                            <input type="text" id="jurnal-relasi" placeholder="Ketik nama relasi..." autocomplete="off" 
-                                oninput="tampilkanSaran(this, 'saran-relasi-jurnal', false)" 
-                                style="width:100%; border:1px solid #ccc; border-radius:4px; padding:8px; background:white;">
-                            <div id="saran-relasi-jurnal" class="autocomplete-items hidden"></div>
+            <div class="jurnal-filter-card">
+                <!-- Kolom Filter (3/4) -->
+                <div class="jurnal-filter-inputs">
+                    <!-- Baris 1: Filter Bulan dan Tahun -->
+                    <div style="display:flex; gap:10px;">
+                        <div style="flex:1;">
+                            <label class="jurnal-filter-label">Bulan</label>
+                            <select id="jurnal-bulan" class="jurnal-filter-control">
+                                <option value="ALL">Semua Bulan</option>
+                                <option value="01">Januari</option>
+                                <option value="02">Februari</option>
+                                <option value="03">Maret</option>
+                                <option value="04">April</option>
+                                <option value="05">Mei</option>
+                                <option value="06">Juni</option>
+                                <option value="07">Juli</option>
+                                <option value="08">Agustus</option>
+                                <option value="09">September</option>
+                                <option value="10">Oktober</option>
+                                <option value="11">November</option>
+                                <option value="12">Desember</option>
+                            </select>
+                        </div>
+                        <div style="flex:1;">
+                            <label class="jurnal-filter-label">Tahun</label>
+                            <select id="jurnal-tahun" class="jurnal-filter-control">
+                                <option value="2025">2025</option>
+                                <option value="2026">2026</option>
+                                <option value="2027">2027</option>
+                                <option value="2028">2028</option>
+                            </select>
                         </div>
                     </div>
-                    <div style="flex:1; display:flex; gap:5px;">
-                        <button class="btn-submit" onclick="fetchDataJurnal()" style="margin:0; background:#8AA624; flex:1; padding:8px;"><span class="material-symbols-outlined" style="font-size:18px;">search</span></button>
-                        <button class="btn-submit" onclick="exportExcelJurnal()" style="margin:0; background:#2196F3; flex:1; padding:8px;"><span class="material-symbols-outlined" style="font-size:18px;">download</span></button>
+                    <!-- Baris 2: Kode, Perkiraan, dan Relasi (Satu Baris) -->
+                    <div class="jurnal-filter-row-col3" style="display:flex; gap:10px;">
+                        <div style="flex:1;">
+                            <label class="jurnal-filter-label">Kode</label>
+                            <select id="jurnal-kode" class="jurnal-filter-control">
+                                <option value="">Semua Kode</option>
+                                <option value="1">1 - Aset / Piutang / Kas</option>
+                                <option value="2">2 - Kewajiban / Hutang</option>
+                                <option value="3">3 - Ekuitas / Modal</option>
+                                <option value="4">4 - Pendapatan Penjualan</option>
+                                <option value="5">5 - Biaya / HPP</option>
+                            </select>
+                        </div>
+                        <div style="flex:1;">
+                            <label class="jurnal-filter-label">Perkiraan</label>
+                            <input type="text" id="jurnal-perkiraan" placeholder="Semua Perkiraan..." class="jurnal-filter-control">
+                        </div>
+                        <div style="flex:1;">
+                            <label class="jurnal-filter-label">Relasi</label>
+                            <div class="autocomplete-wrapper">
+                                <input type="text" id="jurnal-relasi" placeholder="Ketik nama relasi..." autocomplete="off" 
+                                    oninput="tampilkanSaran(this, 'saran-relasi-jurnal', false)" 
+                                    class="jurnal-filter-control">
+                                <div id="saran-relasi-jurnal" class="autocomplete-items hidden"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tombol Aksi Search & Download (1/4) -->
+                <div class="jurnal-filter-actions">
+                    <div>
+                        <label class="jurnal-filter-label" style="visibility:hidden;">Aksi</label>
+                        <button class="btn-submit jurnal-btn-action" onclick="fetchDataJurnal()" style="background:#8AA624;" title="Cari Data Jurnal">
+                            <span class="material-symbols-outlined" style="font-size:18px;">search</span> Cari
+                        </button>
+                    </div>
+                    <div>
+                        <label class="jurnal-filter-label" style="visibility:hidden;">Download</label>
+                        <button class="btn-submit jurnal-btn-action" onclick="exportExcelJurnal()" style="background:#2196F3;" title="Download Excel">
+                            <span class="material-symbols-outlined" style="font-size:18px;">download</span> Download
+                        </button>
                     </div>
                 </div>
             </div>
