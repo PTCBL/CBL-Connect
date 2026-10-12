@@ -84,7 +84,9 @@ function renderJurnal(data) {
     
     // Tarik data piutang lokal untuk lookup detail potongan nota
     let dataPiutangCache = localStorage.getItem('piutang_ptcbl_cache');
-    let piutangParsed = dataPiutangCache ? JSON.parse(dataPiutangCache) : null;
+    let piutangParsed = (typeof dataPiutangLokal !== 'undefined' && dataPiutangLokal && Object.keys(dataPiutangLokal).length > 0)
+        ? dataPiutangLokal
+        : (dataPiutangCache ? JSON.parse(dataPiutangCache) : null);
     
     filtered.forEach((d, index) => {
         let tglStr = d.tanggal.split('-').reverse().join('/');

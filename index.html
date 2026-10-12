@@ -5512,7 +5512,7 @@ function aturAksesMenu(role) {
                                     piutangCache[key].total -= nominalHapus;
                                     if (dateObj.items.length === 0) delete piutangCache[key].dates[tglPiutang];
                                     if (Object.keys(piutangCache[key].dates).length === 0) delete piutangCache[key];
-                                    localStorage.setItem('piutang_ptcbl_cache', JSON.stringify(piutangCache));
+                                    try { localStorage.setItem('piutang_ptcbl_cache', JSON.stringify(piutangCache)); } catch(e) { console.warn("Quota full:", e); }
                                     dataPiutangLokal = piutangCache;
                                     break;
                                 }
@@ -6658,13 +6658,79 @@ function aturAksesMenu(role) {
 
         let chartAgingPiutang;
 
+        function simpanCachePiutang(data) {
+            try {
+                // Buat salinan ringkas tanpa data bloated (buang riwayat_all dan buang raw database row)
+                let slim = {};
+                for (let r in data) {
+                    let item = data[r];
+                    slim[r] = {
+                        total_sisa: item.total_sisa,
+                        alamat: item.alamat || "-",
+                        total_telat: item.total_telat,
+                        total_sehat: item.total_sehat,
+                        aging: item.aging,
+                        dates: item.dates,
+                        riwayat: (item.riwayat || []).map(b => ({
+                            tgl: b.tgl,
+                            nominal: b.nominal,
+                            sisaBayar: b.sisaBayar,
+                            metode: b.metode,
+                            pakanRetur: b.pakanRetur,
+                            detailPotongan: b.detailPotongan,
+                            isTunaiLangsung: b.isTunaiLangsung,
+                            isTarikDeposit: b.isTarikDeposit,
+                            bukti_url: b.bukti_url
+                        }))
+                    };
+                }
+                localStorage.removeItem('piutang_ptcbl_cache');
+                localStorage.setItem('piutang_ptcbl_cache', JSON.stringify(slim));
+            } catch (err) {
+                console.warn("Storage quota exceeded saat simpan piutang cache. Membersihkan cache lama...", err);
+                try {
+                    localStorage.removeItem('data_relasi_cbl');
+                    let minimal = {};
+                    for (let r in data) {
+                        let item = data[r];
+                        if (Math.abs(item.total_sisa || 0) > 0.01 || (item.aging && item.aging.total_telat > 0) || Object.keys(item.dates || {}).length > 0) {
+                            minimal[r] = {
+                                total_sisa: item.total_sisa,
+                                alamat: item.alamat || "-",
+                                total_telat: item.total_telat,
+                                total_sehat: item.total_sehat,
+                                aging: item.aging,
+                                dates: item.dates,
+                                riwayat: (item.riwayat || []).slice(0, 3).map(b => ({
+                                    tgl: b.tgl,
+                                    nominal: b.nominal,
+                                    sisaBayar: b.sisaBayar,
+                                    metode: b.metode,
+                                    pakanRetur: b.pakanRetur,
+                                    detailPotongan: b.detailPotongan
+                                }))
+                            };
+                        }
+                    }
+                    localStorage.removeItem('piutang_ptcbl_cache');
+                    localStorage.setItem('piutang_ptcbl_cache', JSON.stringify(minimal));
+                } catch (err2) {
+                    console.warn("localStorage penuh. Data piutang tetap aktif di memori sesi saat ini.", err2);
+                }
+            }
+        }
+
         function tarikDataPiutang(forceSync = false) {
             let cached = localStorage.getItem('piutang_ptcbl_cache');
             if (cached && !forceSync) {
-                dataPiutangLokal = JSON.parse(cached);
-                renderAgingDashboard();
-                renderListPiutang();
-                return;
+                try {
+                    dataPiutangLokal = JSON.parse(cached);
+                    renderAgingDashboard();
+                    renderListPiutang();
+                    return;
+                } catch(e) {
+                    console.warn("Gagal parse cache piutang, reload dari server...", e);
+                }
             }
 
             let btn = document.getElementById('btn-sync-piutang');
@@ -6938,7 +7004,7 @@ function aturAksesMenu(role) {
                 });
 
                 dataPiutangLokal = serverData;
-                localStorage.setItem('piutang_ptcbl_cache', JSON.stringify(serverData));
+                simpanCachePiutang(serverData);
                 renderAgingDashboard();
                 renderListPiutang();
                 
@@ -9827,7 +9893,7 @@ function renderLiveStokDiInput() {
                         piutangCache[pRelasi].dates[tglPiutang].sisaNyata += totalNominalTrans;
                         piutangCache[pRelasi].total += totalNominalTrans;
 
-                        localStorage.setItem('piutang_ptcbl_cache', JSON.stringify(piutangCache));
+                        try { localStorage.setItem('piutang_ptcbl_cache', JSON.stringify(piutangCache)); } catch(e) { console.warn("Quota full:", e); }
                         dataPiutangLokal = piutangCache;
                     }
                 }
