@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sistem Pakan CBL</title>
@@ -4302,7 +4302,7 @@
         <script src="po_logic.js"></script>
         <script src="jurnal_logic.js"></script>
     <script>
-        const APP_VERSION = "v5.7";
+        const APP_VERSION = "v5.8";
         if (localStorage.getItem('cbl_app_version') !== APP_VERSION) {
             localStorage.setItem('cbl_app_version', APP_VERSION);
             if ('caches' in window) {
@@ -4364,7 +4364,9 @@
         let queueUploadPWA = [], isProsesUploadPWA = false, globalLossGainData = [];
         let chMix, chDonut, chDaily, chGudang, chOpr, chartKonsumen;
 
-        window.myDeviceId = window.myDeviceId || Math.random().toString(36).substring(2, 15);
+        // Simpan Device ID permanen di HP agar konsisten
+        window.myDeviceId = localStorage.getItem('cbl_device_id') || ('dev_' + Math.random().toString(36).substring(2, 11));
+        localStorage.setItem('cbl_device_id', window.myDeviceId);
         Chart.register(ChartDataLabels);
 
         // ==========================================
@@ -5200,6 +5202,12 @@ async function prosesAntreanBackground() {
             if (resPakan.ok) {
                 let payloads = payloadsToProcess;
                 await cekUpdateStatusPOLinked(payloads);
+                // 📡 Broadcast sinyal data baru ke seluruh perangkat online
+                if (typeof broadcastRealtimeUpdate === 'function') {
+                    for (let pl of payloads) {
+                        broadcastRealtimeUpdate(pl);
+                    }
+                }
             }
 
             if (!resPakan.ok) {
@@ -5235,7 +5243,13 @@ async function prosesAntreanBackground() {
                 },
                 body: JSON.stringify(cashflowRows)
             });
-            if (!resCF.ok && resCF.status !== 409) console.error("Gagal insert cashflow");
+            if (resCF.ok && typeof broadcastRealtimeUpdate === 'function') {
+                for (let cfRow of cashflowRows) {
+                    broadcastRealtimeUpdate(cfRow);
+                }
+            } else if (!resCF.ok && resCF.status !== 409) {
+                console.error("Gagal insert cashflow");
+            }
         }
 
         // BERHASIL! HAPUS DARI ANTREAN LOKAL
@@ -8678,11 +8692,14 @@ function aturAksesMenu(role) {
                         bukti_url: linkPdfSupa, 
                         petugas: activeUser || 'Admin'
                     };
-                    await fetch(`${SUPA_URL}/rest/v1/cashflow`, {
+                    let resCFInv = await fetch(`${SUPA_URL}/rest/v1/cashflow`, {
                         method: 'POST',
                         headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
                         body: JSON.stringify(cfPayload)
                     });
+                    if (resCFInv && resCFInv.ok && typeof broadcastRealtimeUpdate === 'function') {
+                        broadcastRealtimeUpdate(cfPayload);
+                    }
                 }
 
                 if (navigator.share) {
@@ -9307,6 +9324,11 @@ function renderLiveStokDiInput() {
             status.innerText = "Berhasil masuk Brankas Database!";
             status.style.color = "#8AA624";
             
+            // 📡 Broadcast ke perangkat lain
+            if (typeof broadcastRealtimeUpdate === 'function') {
+                broadcastRealtimeUpdate(payloadSupa);
+            }
+
             // --- MAINKAN SUARA NOTIFIKASI DI SINI ---
             try {
                 let notifSound = new Audio('notifdatamasuk.mp3');
@@ -12149,77 +12171,126 @@ function renderLiveStokDiInput() {
             }, 1000);
         }
         // ==========================================
-        // PUSHER REAL-TIME RECEIVER (TELINGA SINKRONISASI)
+        // SUPABASE REAL-TIME (BROADCAST & SINKRONISASI ANTAR DEVICE)
         // ==========================================
-        try {
-            const pusher = new Pusher('b8320dcc9c1e40177646', {
-                cluster: 'ap1'
-            });
+        let supaRealtimeClient = null;
+        let supaRealtimeChannel = null;
 
-            const channel = pusher.subscribe('cbl-channel');
-            channel.bind('update-data', function (res) {
-                // Jaga-jaga kalau data dari server dikemas dalam bentuk string
-                if (typeof res === 'string') {
-                    try { res = JSON.parse(res); } catch (e) { }
-                }
+        // Buka gembok audio browser pada sentuhan/klik pertama agar notifikasi suara bisa berbunyi di background/layar aktif
+        let isAudioUnlocked = false;
+        let audioPlayerNotif = new Audio('notifdatamasuk.mp3');
+        document.addEventListener('click', function unlockAudioContext() {
+            if (!isAudioUnlocked) {
+                audioPlayerNotif.play().then(() => {
+                    audioPlayerNotif.pause();
+                    audioPlayerNotif.currentTime = 0;
+                    isAudioUnlocked = true;
+                }).catch(() => {});
+                document.removeEventListener('click', unlockAudioContext);
+            }
+        }, { once: true });
 
-                // 1. Abaikan jika ini adalah HP kita sendiri yang baru aja ngirim
-                if (res.device_id === window.myDeviceId) return;
+        // Fungsi kirim broadcast ke seluruh device lain yang online
+        function broadcastRealtimeUpdate(payloadData) {
+            if (!supaRealtimeChannel) {
+                console.warn("Channel realtime belum siap");
+                return;
+            }
+            try {
+                let cleanPayload = JSON.parse(JSON.stringify(payloadData));
+                // Buang gambar base64 & teks WA agar payload WebSocket super enteng & hemat kuota
+                delete cleanPayload.fileSJ;
+                delete cleanPayload.fileData;
+                delete cleanPayload.teksWA;
 
-                let payloadData = res.data_payload;
-
-                // 2. ADAPTER UNTUK FLAT ROW DARI SUPABASE WEBHOOK
-                // Ubah format eceran tabel menjadi format keranjang agar PWA tidak crash
-                if (payloadData && payloadData.pakan && payloadData.qty !== undefined) {
-                    let locReal = payloadData.cabang === 'SPN' ? '/spn' : (payloadData.cabang === 'RPH' ? '/rph' : '/pm');
-                    if (String(payloadData.relasi).toLowerCase().includes('kandang')) {
-                        locReal = payloadData.cabang === 'SPN' ? '/spn_kandang' : '/kandang';
+                supaRealtimeChannel.send({
+                    type: 'broadcast',
+                    event: 'update-data',
+                    payload: {
+                        device_id: window.myDeviceId,
+                        data_payload: cleanPayload
                     }
-                    payloadData = {
-                        lokasi: locReal,
-                        status: payloadData.status,
-                        relasi: payloadData.relasi,
-                        items: { [payloadData.pakan]: payloadData.qty },
-                        tanggal: payloadData.tanggal || new Date().toISOString().split('T')[0]
-                    };
+                }).catch(e => console.warn("Gagal kirim broadcast realtime:", e));
+            } catch (err) {
+                console.warn("Error saat broadcast:", err);
+            }
+        }
+        window.broadcastRealtimeUpdate = broadcastRealtimeUpdate;
+
+        // Fungsi penerima sinyal realtime dari device lain
+        function handleRealtimeUpdate(res) {
+            if (typeof res === 'string') {
+                try { res = JSON.parse(res); } catch (e) { }
+            }
+            if (!res) return;
+
+            // 1. Abaikan jika ini adalah HP/device kita sendiri yang baru saja mengirim
+            if (res.device_id && res.device_id === window.myDeviceId) return;
+
+            let payloadData = res.data_payload;
+            if (!payloadData) return;
+
+            // 2. ADAPTER UNTUK FLAT ROW DARI SUPABASE
+            if (payloadData.pakan && payloadData.qty !== undefined) {
+                let locReal = payloadData.cabang === 'SPN' ? '/spn' : (payloadData.cabang === 'RPH' ? '/rph' : '/pm');
+                if (String(payloadData.relasi).toLowerCase().includes('kandang')) {
+                    locReal = payloadData.cabang === 'SPN' ? '/spn_kandang' : '/kandang';
                 }
+                payloadData = {
+                    lokasi: locReal,
+                    status: payloadData.status,
+                    relasi: payloadData.relasi,
+                    items: { [payloadData.pakan]: payloadData.qty },
+                    tanggal: payloadData.tanggal || new Date().toISOString().split('T')[0]
+                };
+            }
 
-                // =========================================
-                // BIKIN POP-UP MENGAMBANG (TOAST NOTIFICATION)
-                // =========================================
-                let popup = document.createElement('div');
-                popup.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">cloud_download</span> Data Baru Masuk!`;
+            // =========================================
+            // BIKIN POP-UP MENGAMBANG (TOAST NOTIFICATION)
+            // =========================================
+            let popup = document.createElement('div');
+            let infoTeks = "Data Baru Masuk!";
+            if (payloadData.tipe === 'PO') {
+                infoTeks = `PO Baru: ${payloadData.kode_po || ''} (${payloadData.supplier || '-'})`;
+            } else if (payloadData.petugas) {
+                infoTeks = `Data Masuk dari ${payloadData.petugas}!`;
+            } else if (payloadData.relasi) {
+                infoTeks = `Data Masuk: ${payloadData.relasi}`;
+            }
 
-                // Mainkan suara notifikasi (Ding!)
-                try {
-                    let notifSound = new Audio('notifdatamasuk.mp3');
-                    notifSound.play().catch(e => console.log("Browser memblokir suara otomatis"));
-                } catch (err) { }
+            popup.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">cloud_download</span> ${infoTeks}`;
 
-                // Agar pop-up tidak numpuk jadi satu jika ada banyak item bersamaan (Bulk Insert)
-                let existingToasts = document.querySelectorAll('[id^="toast-"]').length;
-                popup.id = 'toast-' + Math.floor(Math.random() * 1000);
-                popup.style.cssText = "position:fixed; top:-60px; left:50%; transform:translateX(-50%); background:#4A90E2; color:white; padding:10px 25px; border-radius:25px; font-weight:bold; font-size:12px; display:flex; align-items:center; gap:8px; box-shadow:0 5px 15px rgba(0,0,0,0.3); z-index:999999; transition: top 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);";
+            // Mainkan suara notifikasi (Ding!)
+            try {
+                let notifSound = new Audio('notifdatamasuk.mp3');
+                notifSound.play().catch(e => console.log("Browser memblokir suara otomatis"));
+            } catch (err) { }
 
-                document.body.appendChild(popup);
+            // Agar pop-up tidak numpuk jadi satu jika ada banyak item bersamaan (Bulk Insert)
+            let existingToasts = document.querySelectorAll('[id^="toast-"]').length;
+            popup.id = 'toast-' + Math.floor(Math.random() * 1000);
+            popup.style.cssText = "position:fixed; top:-60px; left:50%; transform:translateX(-50%); background:#4A90E2; color:white; padding:10px 25px; border-radius:25px; font-weight:bold; font-size:12px; display:flex; align-items:center; gap:8px; box-shadow:0 5px 15px rgba(0,0,0,0.3); z-index:999999; transition: top 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);";
 
-                // Animasi turun berjejer rapi
-                let topPosition = 20 + (existingToasts * 45); 
-                setTimeout(() => { popup.style.top = topPosition + "px"; }, 50);
+            document.body.appendChild(popup);
 
-                // Animasi naik lalu dihapus setelah 4 detik
-                setTimeout(() => {
-                    popup.style.top = "-60px";
-                    setTimeout(() => { if (popup.parentNode) popup.remove(); }, 500);
-                }, 4000);
+            // Animasi turun berjejer rapi
+            let topPosition = 20 + (existingToasts * 45); 
+            setTimeout(() => { popup.style.top = topPosition + "px"; }, 50);
 
-                // Suntikkan diam-diam ke Memory Cache Laptop (Biar di Rekap langsung update)
-                if (typeof suntikCacheOptimistic === 'function') {
-                    suntikCacheOptimistic(payloadData);
-                }
+            // Animasi naik lalu dihapus setelah 4 detik
+            setTimeout(() => {
+                popup.style.top = "-60px";
+                setTimeout(() => { if (popup.parentNode) popup.remove(); }, 500);
+            }, 4000);
 
-                // SINKRON STOK KANDANG ANTAR DEVICE SECARA REAL-TIME!
-                if (payloadData.lokasi === "/kandang" || payloadData.lokasi === "/spn_kandang") {
+            // Suntikkan diam-diam ke Memory Cache Laptop (Biar di Rekap langsung update)
+            if (typeof suntikCacheOptimistic === 'function') {
+                suntikCacheOptimistic(payloadData);
+            }
+
+            // SINKRON STOK KANDANG ANTAR DEVICE SECARA REAL-TIME!
+            if (payloadData.lokasi === "/kandang" || payloadData.lokasi === "/spn_kandang") {
+                if (payloadData.items) {
                     for (let pakan in payloadData.items) {
                         let qty = parseFloat(payloadData.items[pakan]) || 0;
                         if (globalStokAktif[pakan] === undefined) globalStokAktif[pakan] = 0;
@@ -12229,13 +12300,38 @@ function renderLiveStokDiInput() {
                     localStorage.setItem('stok_live_ptcbl', JSON.stringify(globalStokAktif));
                     let ind = document.getElementById('stok-kandang-indicator');
                     if (ind) ind.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle; color:#FEA405;" title="Data Lokal (Belum Tersinkron)">cloud</span>`;
-                    if (typeof renderMiniDashboardKandang === 'function') {
+                    if (typeof renderMiniDashboardKandang === 'function' || typeof renderLiveStokDiInput === 'function') {
                         renderLiveStokDiInput();
                     }
                 }
-            });
+            }
+        }
+
+        // Inisialisasi Klien Supabase Realtime
+        try {
+            if (window.supabase && typeof window.supabase.createClient === 'function') {
+                supaRealtimeClient = window.supabase.createClient(SUPA_URL, SUPA_ANON_KEY);
+                supaRealtimeChannel = supaRealtimeClient.channel('cbl-channel', {
+                    config: {
+                        broadcast: { self: false }
+                    }
+                });
+
+                supaRealtimeChannel.on('broadcast', { event: 'update-data' }, function (res) {
+                    let data = res && res.payload ? res.payload : res;
+                    handleRealtimeUpdate(data);
+                });
+
+                supaRealtimeChannel.subscribe(function (status) {
+                    if (status === 'SUBSCRIBED') {
+                        console.log("📡 Supabase Realtime Aktif di Channel: cbl-channel");
+                    }
+                });
+            } else {
+                console.warn("Supabase JS Library belum termuat.");
+            }
         } catch (e) {
-            console.log("Pusher tidak aktif: ", e);
+            console.error("Supabase Realtime Gagal Inisialisasi: ", e);
         }
         // ==========================================
 // 🚀 FUNGSI UPLOAD GAMBAR KE SUPABASE STORAGE

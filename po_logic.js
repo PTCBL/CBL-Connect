@@ -302,6 +302,16 @@ async function konfirmasiBuatPO() {
             throw new Error(`Gagal menyimpan PO ke database. Detail: ${errText}`);
         }
 
+        // 📡 Broadcast PO baru ke perangkat lain
+        if (typeof window.broadcastRealtimeUpdate === 'function') {
+            window.broadcastRealtimeUpdate({
+                tipe: 'PO',
+                kode_po: payload.kode_po,
+                supplier: payload.supplier,
+                petugas: payload.petugas || 'Admin'
+            });
+        }
+
         // 2. Generate PDF dari Modal yang sedang terbuka (terlihat di layar)
         let element = document.getElementById('po-print-template');
         let modal = document.getElementById('modal-preview-po');
