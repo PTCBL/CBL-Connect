@@ -4302,7 +4302,7 @@
         <script src="po_logic.js"></script>
         <script src="jurnal_logic.js"></script>
     <script>
-        const APP_VERSION = "v5.8";
+        const APP_VERSION = "v5.9";
         if (localStorage.getItem('cbl_app_version') !== APP_VERSION) {
             localStorage.setItem('cbl_app_version', APP_VERSION);
             if ('caches' in window) {
@@ -7827,24 +7827,33 @@ function aturAksesMenu(role) {
 
             // KODE BARU: Munculkan SEMUA, dan Sort dari Terbesar ke Terkecil
             let keys = Object.keys(dataPiutangLokal);
-            keys.sort((a,b) => dataPiutangLokal[b].total_sisa - dataPiutangLokal[a].total_sisa);
+            keys.sort((a,b) => (dataPiutangLokal[b]?.total_sisa || 0) - (dataPiutangLokal[a]?.total_sisa || 0));
 
             keys.forEach(k => {
                 let d = dataPiutangLokal[k];
-                tSisa += d.total_sisa; tSehat += d.aging.sehat; t15 += d.aging.t15; t30 += d.aging.t30; t60 += d.aging.t60;
+                if (!d) return;
+                let aging = d.aging || { sehat: 0, t15: 0, t30: 0, t60: 0, total_telat: 0 };
+                let dSisa = d.total_sisa !== undefined ? d.total_sisa : (d.total || 0);
+                let dTelat = d.total_telat !== undefined ? d.total_telat : (aging.total_telat || 0);
+                let dSehat = aging.sehat || d.total_sehat || 0;
+                let dt15 = aging.t15 || 0;
+                let dt30 = aging.t30 || 0;
+                let dt60 = aging.t60 || 0;
 
-                let btnRemind = d.total_telat > 0 ? `<button onclick="reminderCepatWA('${k.replace(/'/g, "\\'")}')" style="background:#2196F3; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:10px; font-weight:bold; cursor:pointer; display:flex; align-items:center; gap:2px; margin:auto;"><span class="material-symbols-outlined" style="font-size:12px;">send_to_mobile</span> WA</button>` : `<span style="color:#8AA624; font-size:10px; font-weight:bold;">Aman</span>`;
+                tSisa += dSisa; tSehat += dSehat; t15 += dt15; t30 += dt30; t60 += dt60;
 
-                let warnaSisa = d.total_sisa < 0 ? '#8AA624' : (d.total_sisa === 0 ? '#888' : '#000');
-                let displaySisa = d.total_sisa < 0 ? `- Rp ${nf.format(Math.abs(d.total_sisa))}` : `Rp ${nf.format(d.total_sisa)}`;
+                let btnRemind = dTelat > 0 ? `<button onclick="reminderCepatWA('${k.replace(/'/g, "\\'")}')" style="background:#2196F3; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:10px; font-weight:bold; cursor:pointer; display:flex; align-items:center; gap:2px; margin:auto;"><span class="material-symbols-outlined" style="font-size:12px;">send_to_mobile</span> WA</button>` : `<span style="color:#8AA624; font-size:10px; font-weight:bold;">Aman</span>`;
+
+                let warnaSisa = dSisa < 0 ? '#8AA624' : (dSisa === 0 ? '#888' : '#000');
+                let displaySisa = dSisa < 0 ? `- Rp ${nf.format(Math.abs(dSisa))}` : `Rp ${nf.format(dSisa)}`;
 
                 html += `<tr style="border-bottom:1px solid #eee; background:#fff;">
                     <td style="padding:8px 10px; font-weight:bold; color:#333;">${k}</td>
                     <td style="padding:8px 10px; text-align:right; font-weight:bold; color:${warnaSisa};">${displaySisa}</td>
-                    <td style="padding:8px 10px; text-align:right; color:#2e7d32;">Rp ${nf.format(d.aging.sehat)}</td>
-                    <td style="padding:8px 10px; text-align:right; color:#f57c00;">Rp ${nf.format(d.aging.t15)}</td>
-                    <td style="padding:8px 10px; text-align:right; color:#e65100;">Rp ${nf.format(d.aging.t30)}</td>
-                    <td style="padding:8px 10px; text-align:right; color:#c62828;">Rp ${nf.format(d.aging.t60)}</td>
+                    <td style="padding:8px 10px; text-align:right; color:#2e7d32;">Rp ${nf.format(dSehat)}</td>
+                    <td style="padding:8px 10px; text-align:right; color:#f57c00;">Rp ${nf.format(dt15)}</td>
+                    <td style="padding:8px 10px; text-align:right; color:#e65100;">Rp ${nf.format(dt30)}</td>
+                    <td style="padding:8px 10px; text-align:right; color:#c62828;">Rp ${nf.format(dt60)}</td>
                     <td style="padding:8px 10px; text-align:center;">${btnRemind}</td>
                 </tr>`;
             });
@@ -9928,94 +9937,7 @@ function renderLiveStokDiInput() {
                     terapkanFilter();
                     if (document.getElementById(`cal-${tglFormatStr}`)) klikTanggalMaster(tglFormatStr);
                 }
-
-                // =================================================================
-                // 1.5 INJECT PIUTANG LOCAL (SULAP UI OFFLINE PIUTANG)
-                // =================================================================
-                // 1.5 INJECT PIUTANG LOCAL (SULAP UI OFFLINE PIUTANG)
-                // =================================================================
-                if (payload.status === "Keluar" && payload.relasi && !payload.relasi.toLowerCase().includes("kandang")) {
-                    let piutangCache = JSON.parse(localStorage.getItem('piutang_ptcbl_cache') || "{}");
-                    let relasiClean = (payload.relasi || "").trim();
-                    let alamatClean = (payload.alamat || "").trim();
-                    let pRelasi = alamatClean ? `${relasiClean} - ${alamatClean}` : relasiClean;
-
-                    if (!piutangCache[pRelasi]) {
-                        piutangCache[pRelasi] = { total: 0, totalSehat: 0, totalTelat: 0, alamat: alamatClean, dates: {} };
-                    }
-
-                    let tglPiutang = ("0" + dObj.getDate()).slice(-2) + "/" + ("0" + (dObj.getMonth() + 1)).slice(-2) + "/" + dObj.getFullYear().toString().substring(2);
-
-                    if (!piutangCache[pRelasi].dates[tglPiutang]) {
-                        piutangCache[pRelasi].dates[tglPiutang] = {
-                            isLokal: true,
-                            tgl: tglPiutang,
-                            tagihan: 0,
-                            dp: 0,
-                            sisaNyata: 0,
-                            items: []
-                        };
-                    }
-
-                    let totalNominalTrans = 0;
-                    for (let p in payload.items) {
-                        let qty = payload.items[p];
-
-                        // 🔥 LOGIKA SAKTI: AMBIL HARGA PALING AKURAT DARI MEMORI HP, BUKAN DARI PAYLOAD FORM
-                        let hargaAkurat = 0;
-                        let satuanAkurat = "Kg";
-                        // Kita cari harga pakan ini di list pakan yang udah di-refresh sama fungsi getDaftarPakanDynamic
-                        if (window.currentItems && window.currentItems.length > 0) {
-                            let matchPakan = window.currentItems.find(item => item.nama.toLowerCase() === p.toLowerCase());
-                            if (matchPakan) {
-                                hargaAkurat = matchPakan.harga;
-                                satuanAkurat = matchPakan.satuan || "Kg";
-                            }
-                        }
-
-                        // Kalau ternyata gagal nemu, baru fallback (terpaksa) pakai harga dari form
-                        if (hargaAkurat === 0) {
-                            hargaAkurat = (payload.detail_items && payload.detail_items[p]) ? payload.detail_items[p].harga : 0;
-                            satuanAkurat = (payload.detail_items && payload.detail_items[p]) ? payload.detail_items[p].satuan : "Kg";
-                        }
-
-                        let nom = hargaAkurat * qty;
-                        totalNominalTrans += nom;
-
-                        piutangCache[pRelasi].dates[tglPiutang].items.push({
-                            pakan: p,
-                            qty: qty,
-                            satuan: satuanAkurat,
-                            nominal: nom
-                        });
-                    }
-
-                    // TAMBAHKAN ONGKIR KE CACHE PIUTANG LOKAL
-                    let ongkirVal = parseFloat(String(payload.ongkir || "0").replace(/[^0-9]/g, ''));
-                    if (isNaN(ongkirVal)) ongkirVal = 0;
-
-                    if (payload.ongkir !== "" && payload.ongkir !== undefined && payload.ongkir !== null) {
-                        totalNominalTrans += ongkirVal;
-                        piutangCache[pRelasi].dates[tglPiutang].items.push({
-                            pakan: "Ongkir Pengiriman",
-                            qty: 1,
-                            satuan: "Rit",
-                            nominal: ongkirVal
-                        });
-                    }
-
-                    if (totalNominalTrans > 0) {
-                        piutangCache[pRelasi].dates[tglPiutang].tagihan += totalNominalTrans;
-                        piutangCache[pRelasi].dates[tglPiutang].sisaNyata += totalNominalTrans;
-                        piutangCache[pRelasi].total += totalNominalTrans;
-
-                        try { localStorage.setItem('piutang_ptcbl_cache', JSON.stringify(piutangCache)); } catch(e) { console.warn("Quota full:", e); }
-                        dataPiutangLokal = piutangCache;
-                    }
-                }
             }
-
-            // =================================================================
             // 2. SUNTIK SILUMAN KE CACHE ANALITIK (BIAR GAK USAH SYNC 1 TAHUN)
             // =================================================================
             let cacheKeyAnalytics = `analytics_raw_data_${rekY}`;
