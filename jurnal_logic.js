@@ -26,20 +26,25 @@ async function fetchDataJurnal(silent = false) {
     }
 
     try {
-        let res = await fetch(`${SUPA_URL}/rest/v1/view_jurnal_umum?tanggal=gte.${start}&tanggal=lte.${end}&order=tanggal.asc,id_jurnal.asc`, {
-            headers: {
-                'apikey': SUPA_ANON_KEY,
-                'Authorization': `Bearer ${SUPA_ANON_KEY}`
-            }
-        });
+        let fnFetch = (typeof fetchSupabaseAll === 'function') ? fetchSupabaseAll : (typeof window !== 'undefined' && typeof window.fetchSupabaseAll === 'function' ? window.fetchSupabaseAll : null);
+        let urlTarget = `${SUPA_URL}/rest/v1/view_jurnal_umum?tanggal=gte.${start}&tanggal=lte.${end}&order=tanggal.asc,id_jurnal.asc`;
         
-        if (res.ok) {
-            let data = await res.json();
-            jurnalDataGlobal = data;
-            renderJurnal(data);
+        let data = [];
+        if (fnFetch) {
+            data = await fnFetch(urlTarget);
         } else {
-            console.error("Gagal load jurnal", await res.text());
+            let res = await fetch(urlTarget, {
+                headers: {
+                    'apikey': SUPA_ANON_KEY,
+                    'Authorization': `Bearer ${SUPA_ANON_KEY}`
+                }
+            });
+            if (res.ok) data = await res.json();
+            else console.error("Gagal load jurnal", await res.text());
         }
+        
+        jurnalDataGlobal = data;
+        renderJurnal(data);
     } catch (e) {
         console.error("Network error jurnal", e);
     } finally {
