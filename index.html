@@ -2826,18 +2826,6 @@
                         </div>
                     </div>
 
-                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                        <button id="tab-ringkasan-relasi" onclick="switchTabKonsumen('ringkasan')"
-                            style="flex: 1; padding: 12px 10px; background: #8AA624; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); transition: 0.3s;">
-                            <span class="material-symbols-outlined" style="font-size:16px;">dashboard</span> RINGKASAN
-                        </button>
-                        <button id="tab-estatement-relasi" onclick="switchTabKonsumen('estatement')"
-                            style="flex: 1; padding: 12px 10px; background: #fff; color: #555; border: 1px solid #DBE4C9; border-radius: 8px; font-weight: bold; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); transition: 0.3s;">
-                            <span class="material-symbols-outlined" style="font-size:16px;">history</span> RIWAYAT (3
-                            BLN)
-                        </button>
-                    </div>
-
                     <div id="view-ringkasan-relasi">
                         <div class="rekap-card">
                             <div class="rekap-title"><span class="material-symbols-outlined"
@@ -2895,27 +2883,6 @@
                             <div class="rekap-title"><span class="material-symbols-outlined"
                                     style="font-size:18px;">emoji_events</span> Top 5 Pakan Favorit</div>
                             <div id="an_rank_produk" class="rank-list"></div>
-                        </div>
-                    </div>
-
-                    <div id="view-estatement-relasi" class="hidden">
-                        <div class="rekap-card">
-                            <div class="rekap-title"><span class="material-symbols-outlined"
-                                    style="font-size:18px;">history</span> Mutasi E-Statement</div>
-                            <div id="tabel-preview-estatement"
-                                style="max-height: 350px; overflow-y: auto; margin-bottom: 15px;">
-                                <div style="text-align:center; padding:20px; font-size:12px; color:#888;">Memuat data
-                                    mutasi 3 bulan terakhir...</div>
-                            </div>
-
-                            <div
-                                style="display:flex; gap:10px; background:#f9f9f9; padding:12px; border-radius:8px; border:1px solid #DBE4C9; align-items:center;">
-                                <button id="btn-cetak-es" class="btn-submit" onclick="bukaModalCetakES()"
-                                    style="background:#4A90E2; width:100%; margin:0; font-size:14px; padding:12px; display:flex; justify-content:center; align-items:center; gap:6px;">
-                                    <span class="material-symbols-outlined"
-                                        style="font-size:18px;">settings</span> Pengaturan Tampilan & Cetak
-                                </button>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -3491,11 +3458,11 @@
             </div>
         </div>
 
-        <!-- MULAI: HALAMAN JURNAL UMUM -->
+        <!-- MULAI: HALAMAN JURNAL & KARTU PIUTANG -->
         <div id="page-jurnal" class="container hidden">
             <div class="header">
-                <h2 style="margin:0;"><span class="material-symbols-outlined" style="vertical-align:bottom; font-size:24px;">menu_book</span> Buku Jurnal Umum</h2>
-                <div style="font-size: 11px; opacity: 0.8; margin-top:2px;">Sistem Akuntansi Double-Entry</div>
+                <h2 style="margin:0;"><span class="material-symbols-outlined" style="vertical-align:bottom; font-size:24px;">menu_book</span> Buku Jurnal & Kartu Piutang</h2>
+                <div style="font-size: 11px; opacity: 0.8; margin-top:2px;">Sistem Akuntansi Double-Entry & Buku Pembantu Piutang</div>
             </div>
 
             <style>
@@ -3581,119 +3548,233 @@
                     }
                 }
             </style>
-            <!-- TAB MENU JURNAL -->
-            <div class="jurnal-filter-card">
-                <!-- Kolom Filter (3/4) -->
-                <div class="jurnal-filter-inputs">
-                    <!-- Baris 1: Filter Bulan dan Tahun -->
-                    <div style="display:flex; gap:10px;">
-                        <div style="flex:1;">
-                            <label class="jurnal-filter-label">Bulan</label>
-                            <select id="jurnal-bulan" class="jurnal-filter-control">
-                                <option value="ALL">Semua Bulan</option>
-                                <option value="01">Januari</option>
-                                <option value="02">Februari</option>
-                                <option value="03">Maret</option>
-                                <option value="04">April</option>
-                                <option value="05">Mei</option>
-                                <option value="06">Juni</option>
-                                <option value="07">Juli</option>
-                                <option value="08">Agustus</option>
-                                <option value="09">September</option>
-                                <option value="10">Oktober</option>
-                                <option value="11">November</option>
-                                <option value="12">Desember</option>
-                            </select>
+
+            <!-- SUB-TAB MENU JURNAL -->
+            <div class="analytics-tabs" style="margin-bottom: 15px;">
+                <button class="tab-btn active" id="tab-jurnal-umum" onclick="switchTabJurnal('umum')">
+                    <span class="material-symbols-outlined" style="font-size:15px; vertical-align:middle; margin-right:4px;">menu_book</span> JURNAL UMUM
+                </button>
+                <button class="tab-btn" id="tab-jurnal-kartu-piutang" onclick="switchTabJurnal('kartu-piutang')">
+                    <span class="material-symbols-outlined" style="font-size:15px; vertical-align:middle; margin-right:4px;">assignment_ind</span> KARTU PIUTANG
+                </button>
+            </div>
+
+            <!-- ================= SUB-HALAMAN: JURNAL UMUM ================= -->
+            <div id="view-jurnal-umum">
+                <div class="jurnal-filter-card">
+                    <!-- Kolom Filter (3/4) -->
+                    <div class="jurnal-filter-inputs">
+                        <!-- Baris 1: Filter Bulan dan Tahun -->
+                        <div style="display:flex; gap:10px;">
+                            <div style="flex:1;">
+                                <label class="jurnal-filter-label">Bulan</label>
+                                <select id="jurnal-bulan" class="jurnal-filter-control">
+                                    <option value="ALL">Semua Bulan</option>
+                                    <option value="01">Januari</option>
+                                    <option value="02">Februari</option>
+                                    <option value="03">Maret</option>
+                                    <option value="04">April</option>
+                                    <option value="05">Mei</option>
+                                    <option value="06">Juni</option>
+                                    <option value="07">Juli</option>
+                                    <option value="08">Agustus</option>
+                                    <option value="09">September</option>
+                                    <option value="10">Oktober</option>
+                                    <option value="11">November</option>
+                                    <option value="12">Desember</option>
+                                </select>
+                            </div>
+                            <div style="flex:1;">
+                                <label class="jurnal-filter-label">Tahun</label>
+                                <select id="jurnal-tahun" class="jurnal-filter-control">
+                                    <option value="2025">2025</option>
+                                    <option value="2026">2026</option>
+                                    <option value="2027">2027</option>
+                                    <option value="2028">2028</option>
+                                </select>
+                            </div>
                         </div>
-                        <div style="flex:1;">
-                            <label class="jurnal-filter-label">Tahun</label>
-                            <select id="jurnal-tahun" class="jurnal-filter-control">
-                                <option value="2025">2025</option>
-                                <option value="2026">2026</option>
-                                <option value="2027">2027</option>
-                                <option value="2028">2028</option>
-                            </select>
+                        <!-- Baris 2: Kode, Perkiraan, dan Relasi (Satu Baris) -->
+                        <div class="jurnal-filter-row-col3" style="display:flex; gap:10px;">
+                            <div style="flex:1;">
+                                <label class="jurnal-filter-label">Kode</label>
+                                <select id="jurnal-kode" class="jurnal-filter-control">
+                                    <option value="">Semua Kode</option>
+                                    <option value="1">1 - Aset / Piutang / Kas</option>
+                                    <option value="2">2 - Kewajiban / Hutang</option>
+                                    <option value="3">3 - Ekuitas / Modal</option>
+                                    <option value="4">4 - Pendapatan Penjualan</option>
+                                    <option value="5">5 - Biaya / HPP</option>
+                                </select>
+                            </div>
+                            <div style="flex:1;">
+                                <label class="jurnal-filter-label">Perkiraan</label>
+                                <input type="text" id="jurnal-perkiraan" placeholder="Semua Perkiraan..." class="jurnal-filter-control">
+                            </div>
+                            <div style="flex:1;">
+                                <label class="jurnal-filter-label">Relasi</label>
+                                <div class="autocomplete-wrapper">
+                                    <input type="text" id="jurnal-relasi" placeholder="Ketik nama relasi..." autocomplete="off" 
+                                        oninput="tampilkanSaran(this, 'saran-relasi-jurnal', false)" 
+                                        class="jurnal-filter-control">
+                                    <div id="saran-relasi-jurnal" class="autocomplete-items hidden"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <!-- Baris 2: Kode, Perkiraan, dan Relasi (Satu Baris) -->
-                    <div class="jurnal-filter-row-col3" style="display:flex; gap:10px;">
-                        <div style="flex:1;">
-                            <label class="jurnal-filter-label">Kode</label>
-                            <select id="jurnal-kode" class="jurnal-filter-control">
-                                <option value="">Semua Kode</option>
-                                <option value="1">1 - Aset / Piutang / Kas</option>
-                                <option value="2">2 - Kewajiban / Hutang</option>
-                                <option value="3">3 - Ekuitas / Modal</option>
-                                <option value="4">4 - Pendapatan Penjualan</option>
-                                <option value="5">5 - Biaya / HPP</option>
-                            </select>
+
+                    <!-- Tombol Aksi Search & Download (1/4) -->
+                    <div class="jurnal-filter-actions">
+                        <div>
+                            <label class="jurnal-filter-label" style="visibility:hidden;">Aksi</label>
+                            <button class="btn-submit jurnal-btn-action" onclick="fetchDataJurnal()" style="background:#8AA624;" title="Cari Data Jurnal">
+                                <span class="material-symbols-outlined" style="font-size:18px;">search</span> Cari
+                            </button>
                         </div>
-                        <div style="flex:1;">
-                            <label class="jurnal-filter-label">Perkiraan</label>
-                            <input type="text" id="jurnal-perkiraan" placeholder="Semua Perkiraan..." class="jurnal-filter-control">
+                        <div>
+                            <label class="jurnal-filter-label" style="visibility:hidden;">Download</label>
+                            <button class="btn-submit jurnal-btn-action" onclick="exportExcelJurnal()" style="background:#2196F3;" title="Download Excel">
+                                <span class="material-symbols-outlined" style="font-size:18px;">download</span> Download
+                            </button>
                         </div>
-                        <div style="flex:1;">
-                            <label class="jurnal-filter-label">Relasi</label>
-                            <div class="autocomplete-wrapper">
-                                <input type="text" id="jurnal-relasi" placeholder="Ketik nama relasi..." autocomplete="off" 
-                                    oninput="tampilkanSaran(this, 'saran-relasi-jurnal', false)" 
-                                    class="jurnal-filter-control">
-                                <div id="saran-relasi-jurnal" class="autocomplete-items hidden"></div>
+                    </div>
+                </div>
+                
+                <div id="jurnal-loader" class="loader hidden" style="text-align:center; padding:15px; color:#8AA624; font-size:12px; font-weight:bold;">
+                    <span class="material-symbols-outlined" style="animation: spin 1s linear infinite;">sync</span><br>Memuat Buku Jurnal...
+                </div>
+                
+                <div style="overflow-x:auto; background:white; border-radius:8px; border:1px solid #ddd; margin-bottom:20px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+                    <table class="inv-table" style="width:100%; min-width:900px; border-collapse:collapse;">
+                        <thead>
+                            <tr>
+                                <th style="padding:10px; font-size:11px; width:8%;">Tanggal</th>
+                                <th style="padding:10px; font-size:11px; width:5%;">KODE</th>
+                                <th style="padding:10px; font-size:11px; width:15%;">Perkiraan</th>
+                                <th style="padding:10px; font-size:11px; width:12%;">Relasi</th>
+                                <th style="padding:10px; font-size:11px; width:26%;">Uraian</th>
+                                <th style="padding:10px; font-size:11px; width:12%;">Debit</th>
+                                <th style="padding:10px; font-size:11px; width:12%;">Kredit</th>
+                                <th style="padding:10px; font-size:11px; width:10%;">Saldo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-jurnal" style="font-size:11px;">
+                            <tr><td colspan="8" style="text-align:center; padding:20px; color:#888;">Gunakan filter untuk menampilkan data jurnal</td></tr>
+                        </tbody>
+                        <tfoot id="tfoot-jurnal" style="font-size:12px; font-weight:bold; background:#e8f0fe; border-top:2px solid #ccc;">
+                            <tr>
+                                <td colspan="5" style="text-align:right; padding:10px; color:#333;">TOTAL BALANCE:</td>
+                                <td id="jurnal-total-debit" style="text-align:right; padding:10px; color:#1a5c40;">0</td>
+                                <td id="jurnal-total-kredit" style="text-align:right; padding:10px; color:#1a5c40;">0</td>
+                                <td id="jurnal-total-saldo" style="text-align:right; padding:10px; color:#1a5c40;">0</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            <!-- ================= AKHIR SUB-HALAMAN: JURNAL UMUM ================= -->
+
+            <!-- ================= SUB-HALAMAN: KARTU PIUTANG ================= -->
+            <div id="view-jurnal-kartu-piutang" class="hidden">
+                <div class="jurnal-filter-card">
+                    <div class="jurnal-filter-inputs">
+                        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                            <div style="flex:2; min-width:180px;">
+                                <label class="jurnal-filter-label">Nama Konsumen / Peternak</label>
+                                <div class="autocomplete-wrapper" style="position:relative;">
+                                    <input type="text" id="kp-filter-konsumen" placeholder="Ketik nama konsumen..." autocomplete="off"
+                                        oninput="tampilkanSaran(this, 'saran-relasi-kp', false)"
+                                        onkeydown="if(event.key==='Enter') muatKartuPiutang()"
+                                        class="jurnal-filter-control">
+                                    <div id="saran-relasi-kp" class="autocomplete-items hidden"></div>
+                                </div>
+                            </div>
+                            <div style="flex:1; min-width:130px;">
+                                <label class="jurnal-filter-label">Filter Periode</label>
+                                <select id="kp-filter-periode" class="jurnal-filter-control" onchange="onPeriodChangeKP()">
+                                    <option value="ALL">Semua Riwayat (All-Time)</option>
+                                    <option value="2026">Tahun 2026</option>
+                                    <option value="2025">Tahun 2025</option>
+                                    <option value="2024">Tahun 2024</option>
+                                </select>
+                            </div>
+                            <div style="flex:1.4; min-width:160px; position:relative;">
+                                <label class="jurnal-filter-label">Filter Tanggal</label>
+                                <div id="kp-multidate-btn" class="jurnal-filter-control" onclick="toggleMultiDateDropdownKP(event)"
+                                    style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none; background:#ffffff;">
+                                    <span id="kp-multidate-label" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:12px; color:#334155;">Semua Tanggal</span>
+                                    <span class="material-symbols-outlined" style="font-size:18px; color:#64748b;">arrow_drop_down</span>
+                                </div>
+                                <!-- Dropdown Multi-Date Selection -->
+                                <div id="kp-multidate-dropdown" class="hidden"
+                                    style="position:absolute; top:calc(100% + 4px); left:0; width:100%; min-width:230px; max-height:280px; background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; box-shadow:0 10px 25px rgba(0,0,0,0.15); z-index:1050; display:flex; flex-direction:column; overflow:hidden;">
+                                    <div style="padding:8px 10px; background:#f8fafc; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+                                        <label style="display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:#1e293b; cursor:pointer; margin:0;">
+                                            <input type="checkbox" id="kp-multidate-checkall" onchange="toggleSelectAllDatesKP(this.checked)" checked style="cursor:pointer;">
+                                            <span>Pilih Semua</span>
+                                        </label>
+                                        <span id="kp-multidate-count-badge" style="font-size:10px; background:#e2e8f0; color:#475569; padding:2px 6px; border-radius:10px; font-weight:600;">0 Tgl</span>
+                                    </div>
+                                    <div id="kp-multidate-list" style="overflow-y:auto; max-height:220px; padding:4px 0;">
+                                        <div style="padding:15px; text-align:center; font-size:11px; color:#94a3b8; font-style:italic;">
+                                            Pilih konsumen terlebih dahulu
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="jurnal-filter-actions">
+                        <div>
+                            <label class="jurnal-filter-label" style="visibility:hidden;">Aksi</label>
+                            <div style="display:flex; gap:8px;">
+                                <button class="btn-submit jurnal-btn-action" onclick="muatKartuPiutang()" style="flex:1; background:#8AA624;" title="Tampilkan Kartu Piutang">
+                                    <span class="material-symbols-outlined" style="font-size:18px;">search</span> Tampilkan
+                                </button>
+                                <button id="btn-cetak-kp" class="btn-submit jurnal-btn-action" onclick="bukaModalCetakKP()" style="flex:1; background:#2563eb;" title="Cetak Kartu Piutang / Laporan">
+                                    <span class="material-symbols-outlined" style="font-size:18px;">print</span> Cetak
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Tombol Aksi Search & Download (1/4) -->
-                <div class="jurnal-filter-actions">
-                    <div>
-                        <label class="jurnal-filter-label" style="visibility:hidden;">Aksi</label>
-                        <button class="btn-submit jurnal-btn-action" onclick="fetchDataJurnal()" style="background:#8AA624;" title="Cari Data Jurnal">
-                            <span class="material-symbols-outlined" style="font-size:18px;">search</span> Cari
-                        </button>
-                    </div>
-                    <div>
-                        <label class="jurnal-filter-label" style="visibility:hidden;">Download</label>
-                        <button class="btn-submit jurnal-btn-action" onclick="exportExcelJurnal()" style="background:#2196F3;" title="Download Excel">
-                            <span class="material-symbols-outlined" style="font-size:18px;">download</span> Download
-                        </button>
+                <div id="kp-loader" class="loader hidden" style="text-align:center; padding:20px; color:#8AA624; font-size:12px; font-weight:bold;">
+                    <span class="material-symbols-outlined" style="animation: spin 1s linear infinite; font-size:24px;">sync</span><br>Menghitung & Memuat Kartu Piutang...
+                </div>
+
+                <!-- Header Ringkasan Saldo Konsumen -->
+                <div id="kp-summary-card" class="hidden" style="margin-bottom:15px;"></div>
+
+                <!-- Tabel Kartu Piutang (Strictly 5 Kolom) -->
+                <div id="kp-table-container" class="hidden" style="overflow-x:auto; background:white; border-radius:8px; border:1px solid #cbd5e1; margin-bottom:20px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+                    <table class="inv-table" style="width:100%; min-width:750px; border-collapse:collapse;">
+                        <thead>
+                            <tr style="background:#1e3a8a; color:white;">
+                                <th style="padding:10px 8px; font-size:11px; width:12%; text-align:center;">Tanggal</th>
+                                <th style="padding:10px 12px; font-size:11px; width:46%; text-align:left;">Keterangan Transaksi</th>
+                                <th style="padding:10px 10px; font-size:11px; width:14%; text-align:right;">Tagihan (+)</th>
+                                <th style="padding:10px 10px; font-size:11px; width:14%; text-align:right;">Pembayaran (-)</th>
+                                <th style="padding:10px 10px; font-size:11px; width:14%; text-align:right;">Sisa Saldo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="kp-tbody" style="font-size:12px;"></tbody>
+                        <tfoot id="kp-tfoot" style="font-size:12px; font-weight:bold; background:#e8f0fe; border-top:2px solid #cbd5e1;"></tfoot>
+                    </table>
+                </div>
+
+                <!-- Empty State -->
+                <div id="kp-empty-state" style="text-align:center; padding:45px 20px; background:white; border-radius:8px; border:1px dashed #cbd5e1; margin-bottom:20px;">
+                    <span class="material-symbols-outlined" style="font-size:48px; color:#94a3b8; display:block; margin-bottom:10px;">assignment_ind</span>
+                    <div style="font-size:14px; font-weight:bold; color:#475569;">Kartu Piutang Konsumen</div>
+                    <div style="font-size:12px; color:#64748b; margin-top:4px; max-width:480px; margin-left:auto; margin-right:auto; line-height:1.5;">
+                        Silakan pilih nama konsumen pada kolom pencarian di atas untuk melihat buku pembantu piutang lengkap dengan rincian pakan, ongkir, serta alokasi pelunasannya.
                     </div>
                 </div>
             </div>
-            
-            <div id="jurnal-loader" class="loader hidden" style="text-align:center; padding:15px; color:#8AA624; font-size:12px; font-weight:bold;">
-                <span class="material-symbols-outlined" style="animation: spin 1s linear infinite;">sync</span><br>Memuat Buku Jurnal...
-            </div>
-            
-            <div style="overflow-x:auto; background:white; border-radius:8px; border:1px solid #ddd; margin-bottom:20px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
-                <table class="inv-table" style="width:100%; min-width:900px; border-collapse:collapse;">
-                    <thead>
-                        <tr>
-                            <th style="padding:10px; font-size:11px; width:8%;">Tanggal</th>
-                            <th style="padding:10px; font-size:11px; width:5%;">KODE</th>
-                            <th style="padding:10px; font-size:11px; width:15%;">Perkiraan</th>
-                            <th style="padding:10px; font-size:11px; width:12%;">Relasi</th>
-                            <th style="padding:10px; font-size:11px; width:26%;">Uraian</th>
-                            <th style="padding:10px; font-size:11px; width:12%;">Debit</th>
-                            <th style="padding:10px; font-size:11px; width:12%;">Kredit</th>
-                            <th style="padding:10px; font-size:11px; width:10%;">Saldo</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tbody-jurnal" style="font-size:11px;">
-                        <tr><td colspan="8" style="text-align:center; padding:20px; color:#888;">Gunakan filter untuk menampilkan data jurnal</td></tr>
-                    </tbody>
-                    <tfoot id="tfoot-jurnal" style="font-size:12px; font-weight:bold; background:#e8f0fe; border-top:2px solid #ccc;">
-                        <tr>
-                            <td colspan="5" style="text-align:right; padding:10px; color:#333;">TOTAL BALANCE:</td>
-                            <td id="jurnal-total-debit" style="text-align:right; padding:10px; color:#1a5c40;">0</td>
-                            <td id="jurnal-total-kredit" style="text-align:right; padding:10px; color:#1a5c40;">0</td>
-                            <td id="jurnal-total-saldo" style="text-align:right; padding:10px; color:#1a5c40;">0</td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
+            <!-- ================= AKHIR SUB-HALAMAN: KARTU PIUTANG ================= -->
         </div>
-        <!-- AKHIR: HALAMAN JURNAL UMUM -->
+        <!-- AKHIR: HALAMAN JURNAL & KARTU PIUTANG -->
 
         <div id="modal-confirm" class="hidden"
             style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:9999; display:flex; justify-content:center; align-items:center; padding:20px; backdrop-filter: blur(2px);">
@@ -7199,9 +7280,6 @@ function aturAksesMenu(role) {
             let namaRelasi = document.getElementById('analytics_relasi').value.trim();
             if (!namaRelasi) { alert("Nama relasi harus diisi!"); return; }
 
-            window.isEStatementLoaded = false;
-            document.getElementById('tabel-preview-estatement').innerHTML = '<div style="text-align:center; padding:20px; font-size:12px; color:#888;">Memuat data mutasi 3 bulan terakhir...</div>';
-
             let cacheKey = `analytics_relasi_cbl_v3_${namaRelasi.toLowerCase()}`;
             let savedData = localStorage.getItem(cacheKey);
             let nf = new Intl.NumberFormat('id-ID');
@@ -7601,9 +7679,6 @@ function aturAksesMenu(role) {
                 
                 localStorage.setItem(cacheKey, JSON.stringify(finalData));
                 renderAnalisaData(finalData);
-
-                setTimeout(() => { fetchPreviewEStatement(true); }, 1000);
-
             })
             .catch(e => {
                 document.getElementById('analytics-loader').classList.add('hidden');
@@ -9082,7 +9157,7 @@ function renderLiveStokDiInput() {
         }
 
         function tampilkanSaran(inputElement, listId, isGudang) { let val = inputElement.value; let listContainer = document.getElementById(listId); listContainer.innerHTML = ""; listContainer.classList.add('hidden'); if (!val) return; let matches = globalRelasi.filter(r => r.nama.toLowerCase().includes(val.toLowerCase())); if (matches.length > 0) { listContainer.classList.remove('hidden'); matches.forEach(match => { let div = document.createElement("div"); div.className = "autocomplete-item"; let regex = new RegExp(`(${val})`, "gi"); div.innerHTML = match.nama.replace(regex, "<strong>$1</strong>"); if (match.alamat) div.innerHTML += `<span class="alamat-hint">${match.alamat}</span>`; div.addEventListener("click", function () { inputElement.value = match.nama; listContainer.innerHTML = ""; listContainer.classList.add('hidden'); if (isGudang && match.alamat && getLokasiAktif() !== '/kandang') { document.getElementById('ekor').value = match.alamat; } }); listContainer.appendChild(div); }); } }
-        document.addEventListener("click", function (e) { if (e.target.id !== "relasi") document.getElementById("saran-relasi-gudang")?.classList.add("hidden"); if (e.target.id !== "cf_relasi") document.getElementById("saran-relasi-cf")?.classList.add("hidden"); if (e.target.id !== "analytics_relasi") document.getElementById("saran-relasi-analytics")?.classList.add("hidden"); if (e.target.id !== "jurnal-relasi") document.getElementById("saran-relasi-jurnal")?.classList.add("hidden"); if (e.target.id !== "filter-pakan") document.getElementById("saran-pakan-stok")?.classList.add("hidden"); });
+        document.addEventListener("click", function (e) { if (e.target.id !== "relasi") document.getElementById("saran-relasi-gudang")?.classList.add("hidden"); if (e.target.id !== "cf_relasi") document.getElementById("saran-relasi-cf")?.classList.add("hidden"); if (e.target.id !== "analytics_relasi") document.getElementById("saran-relasi-analytics")?.classList.add("hidden"); if (e.target.id !== "jurnal-relasi") document.getElementById("saran-relasi-jurnal")?.classList.add("hidden"); if (e.target.id !== "kp-filter-konsumen") document.getElementById("saran-relasi-kp")?.classList.add("hidden"); if (e.target.id !== "filter-pakan") document.getElementById("saran-pakan-stok")?.classList.add("hidden"); });
 
         function cekStatusSJ() {
             let status = document.getElementById('status').value;
@@ -10617,55 +10692,15 @@ function renderLiveStokDiInput() {
             });
         }
 
-        function switchTabKonsumen(tabId) {
-            // Sembunyikan semua konten
-            document.getElementById('view-ringkasan-relasi').classList.add('hidden');
-            document.getElementById('view-estatement-relasi').classList.add('hidden');
-
-            // Reset warna tombol
-            let btnRingkasan = document.getElementById('tab-ringkasan-relasi');
-            let btnEstatement = document.getElementById('tab-estatement-relasi');
-
-            if (btnRingkasan) {
-                btnRingkasan.style.background = '#fff';
-                btnRingkasan.style.color = '#555';
-                btnRingkasan.style.border = '1px solid #DBE4C9';
-            }
-
-            if (btnEstatement) {
-                btnEstatement.style.background = '#fff';
-                btnEstatement.style.color = '#555';
-                btnEstatement.style.border = '1px solid #DBE4C9';
-            }
-
-            // Tampilkan konten yang diklik
-            let targetView = document.getElementById('view-' + tabId + '-relasi');
-            if (targetView) targetView.classList.remove('hidden');
-
-            // Aktifkan warna tombol yang diklik
-            let activeBtn = document.getElementById('tab-' + tabId + '-relasi');
-            if (activeBtn) {
-                activeBtn.style.background = '#8AA624';
-                activeBtn.style.color = 'white';
-                activeBtn.style.border = 'none';
-            }
-
-            // Eksekusi API jika tab riwayat diklik
-            if (tabId === 'estatement') {
-                fetchPreviewEStatement();
-            }
-        }
+        function switchTabKonsumen(tabId) {}
 
         window.isEStatementLoaded = false;
         window.isFetchingEStatement = false;
 
         function fetchPreviewEStatement(isPreload = false) {
-            let namaKonsumen = document.getElementById('analytics_relasi').value.trim();
-            if (!namaKonsumen) return;
-
-            if (window.isEStatementLoaded || window.isFetchingEStatement) return;
-            window.isFetchingEStatement = true;
-            let targetContainer = document.getElementById('tabel-preview-estatement');
+            return;
+        }
+        function _deprecated_fetchPreviewEStatement() {
 
             if (!isPreload) {
                 targetContainer.innerHTML = '<div style="text-align:center; padding:20px; font-size:12px; color:#8AA624;"><span class="material-symbols-outlined icon-spin" style="font-size:18px; vertical-align:middle;">sync</span> Menarik riwayat E-Statement...</div>';
@@ -10979,10 +11014,33 @@ function renderLiveStokDiInput() {
         }
 
         function bukaModalCetakES() {
+            window.cetakSource = 'analisa_konsumen';
             if (!window.isCustomerPortal) {
                 document.getElementById('es-cetak-format-container').style.display = 'block';
             } else {
                 document.getElementById('es-cetak-format-container').style.display = 'none';
+            }
+            document.getElementById('modal-pengaturan-cetak-es').classList.remove('hidden');
+        }
+
+        function bukaModalCetakKP() {
+            let namaKonsumen = document.getElementById('kp-filter-konsumen')?.value?.trim();
+            if (!namaKonsumen) {
+                alert("Silakan pilih / ketik nama konsumen terlebih dahulu sebelum mencetak!");
+                return;
+            }
+            window.cetakSource = 'kartu_piutang';
+            document.getElementById('es-cetak-format-container').style.display = 'block';
+            let selFormat = document.getElementById('es-cetak-format');
+            if (selFormat) selFormat.value = 'simple';
+
+            let curPeriode = document.getElementById('kp-filter-periode')?.value;
+            if (curPeriode && curPeriode !== 'ALL') {
+                let selTipe = document.getElementById('es-cetak-tipe');
+                if (selTipe) selTipe.value = 'tahun';
+                toggleInputCetakES();
+                let selTahun = document.getElementById('es-cetak-tahun');
+                if (selTahun) selTahun.value = curPeriode;
             }
             document.getElementById('modal-pengaturan-cetak-es').classList.remove('hidden');
         }
@@ -11009,6 +11067,24 @@ function renderLiveStokDiInput() {
             }
 
             document.getElementById('modal-pengaturan-cetak-es').classList.add('hidden');
+
+            if (window.cetakSource === 'kartu_piutang') {
+                if (tipe === 'tahun') {
+                    let selPeriode = document.getElementById('kp-filter-periode');
+                    if (selPeriode) {
+                        if (![...selPeriode.options].some(o => o.value === options.tahun)) {
+                            let opt = document.createElement('option');
+                            opt.value = options.tahun;
+                            opt.textContent = `Tahun ${options.tahun}`;
+                            selPeriode.appendChild(opt);
+                        }
+                        selPeriode.value = options.tahun;
+                    }
+                }
+                muatKartuPiutang();
+                return;
+            }
+
             window.esCurrentPreviewOptions = options;
             window.isEStatementLoaded = false;
             fetchPreviewEStatement();
@@ -11044,13 +11120,20 @@ function renderLiveStokDiInput() {
         }
 
         function cetakEStatement(tahunPilihan) {
-            let namaKonsumen = document.getElementById('analytics_relasi').value.trim();
+            let isKP = (window.cetakSource === 'kartu_piutang');
+            let namaKonsumen = isKP
+                ? (document.getElementById('kp-filter-konsumen')?.value?.trim() || '')
+                : (document.getElementById('analytics_relasi')?.value?.trim() || '');
             if (!namaKonsumen) return alert("Pilih nama konsumen/relasi terlebih dahulu!");
 
-            let btn = document.getElementById('btn-cetak-es');
-            let originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="material-symbols-outlined icon-spin" style="font-size:14px;">sync</span> <span style="font-size:10px; font-weight:bold;">Merakit...</span>';
-            btn.style.pointerEvents = 'none';
+            let btn = isKP
+                ? (document.getElementById('btn-cetak-kp') || document.getElementById('btn-cetak-es'))
+                : document.getElementById('btn-cetak-es');
+            let originalText = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.innerHTML = '<span class="material-symbols-outlined icon-spin" style="font-size:14px;">sync</span> <span style="font-size:10px; font-weight:bold;">Merakit...</span>';
+                btn.style.pointerEvents = 'none';
+            }
 
             fetchSupabaseAll(`${SUPA_URL}/rest/v1/view_mutasi_piutang_detail?relasi=eq.${encodeURIComponent(namaKonsumen)}&order=tanggal.asc`)
             .then(resData => {
@@ -11066,11 +11149,14 @@ function renderLiveStokDiInput() {
                 }
             })
             .catch(err => {
-                alert('Terjadi kesalahan koneksi saat merakit E-Statement.');
+                console.error(err);
+                alert('Terjadi kesalahan koneksi saat merakit dokumen cetak.');
             })
             .finally(() => {
-                btn.innerHTML = originalText;
-                btn.style.pointerEvents = 'auto';
+                if (btn) {
+                    btn.innerHTML = originalText;
+                    btn.style.pointerEvents = 'auto';
+                }
             });
         }
 

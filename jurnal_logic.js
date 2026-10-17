@@ -26,20 +26,25 @@ async function fetchDataJurnal(silent = false) {
     }
 
     try {
-        let res = await fetch(`${SUPA_URL}/rest/v1/view_jurnal_umum?tanggal=gte.${start}&tanggal=lte.${end}&order=tanggal.asc,id_jurnal.asc`, {
-            headers: {
-                'apikey': SUPA_ANON_KEY,
-                'Authorization': `Bearer ${SUPA_ANON_KEY}`
-            }
-        });
+        let fnFetch = (typeof fetchSupabaseAll === 'function') ? fetchSupabaseAll : (typeof window !== 'undefined' && typeof window.fetchSupabaseAll === 'function' ? window.fetchSupabaseAll : null);
+        let urlTarget = `${SUPA_URL}/rest/v1/view_jurnal_umum?tanggal=gte.${start}&tanggal=lte.${end}&order=tanggal.asc,id_jurnal.asc`;
         
-        if (res.ok) {
-            let data = await res.json();
-            jurnalDataGlobal = data;
-            renderJurnal(data);
+        let data = [];
+        if (fnFetch) {
+            data = await fnFetch(urlTarget);
         } else {
-            console.error("Gagal load jurnal", await res.text());
+            let res = await fetch(urlTarget, {
+                headers: {
+                    'apikey': SUPA_ANON_KEY,
+                    'Authorization': `Bearer ${SUPA_ANON_KEY}`
+                }
+            });
+            if (res.ok) data = await res.json();
+            else console.error("Gagal load jurnal", await res.text());
         }
+        
+        jurnalDataGlobal = data;
+        renderJurnal(data);
     } catch (e) {
         console.error("Network error jurnal", e);
     } finally {
@@ -181,6 +186,800 @@ function exportExcelJurnal() {
 }
 
 // Tambahkan Event Listener Search Realtime
-document.getElementById('jurnal-kode').addEventListener('change', () => renderJurnal(jurnalDataGlobal));
-document.getElementById('jurnal-perkiraan').addEventListener('input', () => renderJurnal(jurnalDataGlobal));
-document.getElementById('jurnal-relasi').addEventListener('input', () => renderJurnal(jurnalDataGlobal));
+document.getElementById('jurnal-kode')?.addEventListener('change', () => renderJurnal(jurnalDataGlobal));
+document.getElementById('jurnal-perkiraan')?.addEventListener('input', () => renderJurnal(jurnalDataGlobal));
+document.getElementById('jurnal-relasi')?.addEventListener('input', () => renderJurnal(jurnalDataGlobal));
+
+// ==========================================
+// SUB-MENU: KARTU PIUTANG KONSUMEN
+// ==========================================
+
+function switchTabJurnal(tab) {
+    let btnUmum = document.getElementById('tab-jurnal-umum');
+    let btnKP = document.getElementById('tab-jurnal-kartu-piutang');
+    let viewUmum = document.getElementById('view-jurnal-umum');
+    let viewKP = document.getElementById('view-jurnal-kartu-piutang');
+
+    if (tab === 'umum') {
+        btnUmum?.classList.add('active');
+        btnKP?.classList.remove('active');
+        viewUmum?.classList.remove('hidden');
+        viewKP?.classList.add('hidden');
+    } else if (tab === 'kartu-piutang') {
+        btnKP?.classList.add('active');
+        btnUmum?.classList.remove('active');
+        viewKP?.classList.remove('hidden');
+        viewUmum?.classList.add('hidden');
+
+        let inp = document.getElementById('kp-filter-konsumen');
+        if (inp && !inp.value.trim()) {
+            setTimeout(() => inp.focus(), 150);
+        }
+    }
+}
+
+function escapeHtmlKP(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+async function muatKartuPiutang() {
+    let inputEl = document.getElementById('kp-filter-konsumen');
+    let namaKonsumen = inputEl ? inputEl.value.trim() : '';
+    let periode = document.getElementById('kp-filter-periode') ? document.getElementById('kp-filter-periode').value : 'ALL';
+
+    if (!namaKonsumen) {
+        alert("Silakan masukkan atau pilih nama konsumen / peternak terlebih dahulu!");
+        inputEl?.focus();
+        return;
+    }
+
+    let loader = document.getElementById('kp-loader');
+    let summaryCard = document.getElementById('kp-summary-card');
+    let tableContainer = document.getElementById('kp-table-container');
+    let emptyState = document.getElementById('kp-empty-state');
+
+    loader?.classList.remove('hidden');
+    summaryCard?.classList.add('hidden');
+    tableContainer?.classList.add('hidden');
+    emptyState?.classList.add('hidden');
+
+    try {
+        let fnFetch = (typeof fetchSupabaseAll === 'function') ? fetchSupabaseAll : (typeof window !== 'undefined' && typeof window.fetchSupabaseAll === 'function' ? window.fetchSupabaseAll : null);
+        let urlTarget = `${SUPA_URL}/rest/v1/view_mutasi_piutang_detail?relasi=eq.${encodeURIComponent(namaKonsumen)}&order=tanggal.asc,id_sumber.asc`;
+        
+        let data = [];
+        if (fnFetch) {
+            data = await fnFetch(urlTarget);
+        } else {
+            let res = await fetch(urlTarget, {
+                headers: {
+                    'apikey': SUPA_ANON_KEY,
+                    'Authorization': `Bearer ${SUPA_ANON_KEY}`
+                }
+            });
+            if (res.ok) data = await res.json();
+            else throw new Error(await res.text());
+        }
+
+        if (!data || data.length === 0) {
+            loader?.classList.add('hidden');
+            emptyState?.classList.remove('hidden');
+            emptyState.innerHTML = `
+                <span class="material-symbols-outlined" style="font-size:48px; color:#cbd5e1; display:block; margin-bottom:10px;">search_off</span>
+                <div style="font-size:14px; font-weight:bold; color:#475569;">Tidak Ditemukan Riwayat</div>
+                <div style="font-size:12px; color:#64748b; margin-top:4px;">Tidak ada riwayat mutasi piutang untuk konsumen "<strong>${escapeHtmlKP(namaKonsumen)}</strong>". Pastikan nama sesuai dengan data peternak.</div>
+            `;
+            return;
+        }
+
+        prosesDanRenderKartuPiutang(data, namaKonsumen, periode);
+    } catch (e) {
+        console.error("Gagal muat kartu piutang", e);
+        loader?.classList.add('hidden');
+        emptyState?.classList.remove('hidden');
+        emptyState.innerHTML = `
+            <span class="material-symbols-outlined" style="font-size:48px; color:#ef4444; display:block; margin-bottom:10px;">error</span>
+            <div style="font-size:14px; font-weight:bold; color:#b91c1c;">Gagal Memuat Data</div>
+            <div style="font-size:12px; color:#64748b; margin-top:4px;">Terjadi kesalahan saat mengambil data mutasi piutang. Silakan coba kembali.</div>
+        `;
+    } finally {
+        loader?.classList.add('hidden');
+    }
+}
+
+function prosesDanRenderKartuPiutang(data, namaKonsumen, periode) {
+    let summaryCard = document.getElementById('kp-summary-card');
+    let tableContainer = document.getElementById('kp-table-container');
+    let tbody = document.getElementById('kp-tbody');
+    let tfoot = document.getElementById('kp-tfoot');
+    let emptyState = document.getElementById('kp-empty-state');
+
+    let nf = new Intl.NumberFormat('id-ID');
+
+    // 1. Pilah Tagihan & Pembayaran
+    let tagihanArr = [];
+    let bayarArr = [];
+
+    data.forEach(row => {
+        let namaPkn = row.pakan_kategori || 'Pakan';
+        let jenisMutasi = String(row.jenis_mutasi || '').toLowerCase();
+        let nominal = parseFloat(row.nominal) || parseFloat(row.tagihan) || parseFloat(row.pembayaran) || 0;
+        let qtyFisik = parseFloat(row.qty) || 0;
+        let isBayar = jenisMutasi === 'pembayaran' || namaPkn.toLowerCase().includes('bayar');
+
+        if (isBayar) {
+            bayarArr.push({
+                id: row.id_sumber,
+                tgl: row.tanggal,
+                nominal: Math.abs(nominal),
+                sisaBayar: Math.abs(nominal),
+                metode: row.metode || 'Cash',
+                bukti_url: (row.bukti_url && row.bukti_url !== '-' && row.bukti_url !== 'null') ? row.bukti_url : null,
+                keterangan: row.keterangan || '',
+                detailPotongan: [],
+                raw: row
+            });
+        } else {
+            let isOngkir = namaPkn.toLowerCase().includes('ongkir');
+            let isTarikDeposit = namaPkn.toLowerCase().includes('tarik deposit') || jenisMutasi.includes('tarik deposit');
+            let hargaSatuan = parseFloat(row.harga_satuan) || 0;
+            if (!hargaSatuan && qtyFisik > 0) hargaSatuan = Math.abs(nominal) / qtyFisik;
+
+            tagihanArr.push({
+                id: row.id_sumber,
+                tgl: row.tanggal,
+                pakan: isTarikDeposit ? 'Tarik Deposit / Penyesuaian Kas' : (isOngkir ? 'Ongkir Pengiriman' : namaPkn),
+                isOngkir: isOngkir,
+                isTarikDeposit: isTarikDeposit,
+                qty: qtyFisik,
+                satuan: isOngkir ? 'Rit' : (row.satuan || 'Kg'),
+                harga_satuan: hargaSatuan,
+                nominal: Math.abs(nominal),
+                raw: row
+            });
+        }
+    });
+
+    // 2. Kelompokkan Tagihan berdasarkan Tanggal Nota
+    let groupedNota = {};
+    tagihanArr.forEach(item => {
+        if (!groupedNota[item.tgl]) {
+            groupedNota[item.tgl] = { tgl: item.tgl, totalTagihan: 0, terbayar: 0, items: [] };
+        }
+        groupedNota[item.tgl].totalTagihan += item.nominal;
+        groupedNota[item.tgl].items.push(item);
+    });
+    let arrNota = Object.values(groupedNota).sort((a, b) => new Date(a.tgl) - new Date(b.tgl));
+
+    // 3. FIFO Matching (Alokasi Pembayaran ke Nota)
+    // FASE 1: Exact Match untuk Bayar Tunai Langsung pada tanggal yang sama
+    bayarArr.forEach(uang => {
+        let isTunaiLangsung = String(uang.raw?.pakan_kategori || '').toLowerCase().includes('bayar tunai');
+        if (isTunaiLangsung && uang.sisaBayar > 0) {
+            let matched = arrNota.find(n => n.tgl === uang.tgl && n.totalTagihan > 0 && n.terbayar === 0 && !n.isExactMatched);
+            if (matched) {
+                let dipotong = Math.min(matched.totalTagihan, uang.sisaBayar);
+                uang.detailPotongan.push({ tglNota: matched.tgl, jumlah: dipotong, isTunai: true });
+                matched.terbayar += dipotong;
+                uang.sisaBayar -= dipotong;
+                if (matched.terbayar >= matched.totalTagihan) matched.isExactMatched = true;
+            }
+        }
+    });
+
+    // FASE 2: Sequential FIFO Matching (HANYA untuk nota dengan tglNota <= uang.tgl)
+    // Aturan penting: Uang masuk tidak bisa memotong nota di masa depan yang tanggalnya melebihi tanggal uang masuk
+    for (let i = 0; i < bayarArr.length; i++) {
+        let uang = bayarArr[i];
+        if (uang.sisaBayar <= 0) continue;
+
+        for (let j = 0; j < arrNota.length; j++) {
+            let nota = arrNota[j];
+            // Syarat: Tanggal nota tidak boleh melebihi tanggal uang masuk
+            if (nota.tgl > uang.tgl) break;
+
+            let sisaNota = nota.totalTagihan - nota.terbayar;
+            if (sisaNota <= 0) continue;
+
+            let dipotong = Math.min(sisaNota, uang.sisaBayar);
+            uang.detailPotongan.push({ tglNota: nota.tgl, jumlah: dipotong });
+            nota.terbayar += dipotong;
+            uang.sisaBayar -= dipotong;
+
+            if (uang.sisaBayar <= 0) break;
+        }
+    }
+
+    // 4. Hitung Saldo Keseluruhan Konsumen (All-Time) & Klasifikasi Sehat vs Jatuh Tempo
+    let grandTagihan = tagihanArr.reduce((s, t) => s + t.nominal, 0);
+    let grandBayar = bayarArr.reduce((s, b) => s + b.nominal, 0);
+    let grandSisaSaldo = grandTagihan - grandBayar;
+
+    // Klasifikasi Piutang Sehat vs Terlambat (Berdasarkan Jatuh Tempo 15 Hari)
+    let hariIni = new Date();
+    hariIni.setHours(0, 0, 0, 0);
+    let piutangSehat = 0;
+    let piutangTelat = 0;
+
+    arrNota.forEach(nota => {
+        let sisaNyata = nota.totalTagihan - nota.terbayar;
+        if (sisaNyata > 0) {
+            let dTrx = new Date(nota.tgl);
+            dTrx.setHours(0, 0, 0, 0);
+            let jtDate = new Date(dTrx);
+            jtDate.setDate(jtDate.getDate() + 15);
+            if (jtDate < hariIni) {
+                piutangTelat += sisaNyata;
+            } else {
+                piutangSehat += sisaNyata;
+            }
+        }
+    });
+
+    let totalHutangAktif = piutangSehat + piutangTelat;
+    let basePiutang = totalHutangAktif > 0 ? totalHutangAktif : 1;
+    let pctSehat = Math.round((piutangSehat / basePiutang) * 100);
+    let pctTelat = Math.round((piutangTelat / basePiutang) * 100);
+
+    // Cari info konsumen di master relasi
+    let relasiList = (typeof globalRelasi !== 'undefined' && Array.isArray(globalRelasi)) ? globalRelasi : [];
+    let relasiObj = relasiList.find(r => r.nama && r.nama.toLowerCase() === namaKonsumen.toLowerCase());
+    let alamat = (relasiObj && relasiObj.alamat) ? relasiObj.alamat : 'Alamat tidak terdata';
+    let kategori = (relasiObj && relasiObj.kategori) ? relasiObj.kategori : 'Peternak';
+
+    // Status Badge: Hanya tampilkan badge jika DEPOSIT atau LUNAS (Badge "BELUM LUNAS" dihilangkan sesuai permintaan user)
+    let badgeHtml = '';
+    if (grandSisaSaldo < 0) {
+        badgeHtml = `<span style="font-size:10px; font-weight:700; padding:3px 9px; border-radius:20px; background:#e0f2fe; color:#0369a1; border:1px solid #7dd3fc;">DEPOSIT</span>`;
+    } else if (grandSisaSaldo === 0 && tagihanArr.length > 0) {
+        badgeHtml = `<span style="font-size:10px; font-weight:700; padding:3px 9px; border-radius:20px; background:#dcfce7; color:#15803d; border:1px solid #86efac;">LUNAS</span>`;
+    }
+
+    // Diagram Pembagian Piutang Sehat vs Terlambat (Ditampilkan jika Belum Lunas)
+    let diagramHtml = '';
+    if (grandSisaSaldo > 0) {
+        diagramHtml = `
+            <div style="background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 8px; padding: 12px 14px; margin-top: 14px; width: 100%; box-sizing: border-box;">
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; margin-bottom:7px; color:#e2e8f0; font-weight:600;">
+                    <span style="display:inline-flex; align-items:center; gap:5px;">
+                        <span class="material-symbols-outlined" style="font-size:16px; color:#93c5fd;">pie_chart</span>
+                        Status Pembagian Piutang (Jatuh Tempo 15 Hari)
+                    </span>
+                    <span style="font-size:10px; color:#cbd5e1;">Total Piutang: Rp ${nf.format(grandSisaSaldo)}</span>
+                </div>
+                
+                <div style="height: 10px; border-radius: 5px; background: rgba(0, 0, 0, 0.35); overflow: hidden; display: flex; box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);">
+                    <div style="width: ${pctSehat}%; background-color: #FEA405; transition: width 0.4s ease;" title="Tagihan Berjalan (Sehat): Rp ${nf.format(piutangSehat)} (${pctSehat}%)"></div>
+                    <div style="width: ${pctTelat}%; background-color: #ef4444; transition: width 0.4s ease;" title="Jatuh Tempo (Terlambat): Rp ${nf.format(piutangTelat)} (${pctTelat}%)"></div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-top: 9px; gap: 15px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 140px;">
+                        <div style="font-size: 10px; color: #fde68a; font-weight: 700; text-transform: uppercase; display: flex; align-items: center; gap: 5px;">
+                            <span style="width: 8px; height: 8px; border-radius: 50%; background: #FEA405; display: inline-block;"></span> TAGIHAN BERJALAN (SEHAT)
+                        </div>
+                        <div style="font-size: 14px; font-weight: 800; color: #ffffff; margin-top: 2px;">
+                            Rp ${nf.format(piutangSehat)} <span style="font-size: 11px; font-weight: normal; opacity: 0.85;">(${pctSehat}%)</span>
+                        </div>
+                    </div>
+                    <div style="flex: 1; min-width: 140px; text-align: right;">
+                        <div style="font-size: 10px; color: #fca5a5; font-weight: 700; text-transform: uppercase; display: flex; align-items: center; justify-content: flex-end; gap: 5px;">
+                            <span style="width: 8px; height: 8px; border-radius: 50%; background: #ef4444; display: inline-block;"></span> JATUH TEMPO (TERLAMBAT)
+                        </div>
+                        <div style="font-size: 14px; font-weight: 800; color: #ffffff; margin-top: 2px;">
+                            Rp ${nf.format(piutangTelat)} <span style="font-size: 11px; font-weight: normal; opacity: 0.85;">(${pctTelat}%)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Render Summary Card (Solid Biru Tua & Teks Total Saldo Putih Kontras)
+    summaryCard.innerHTML = `
+        <div style="background: #1e3a8a; border-radius: 12px; padding: 18px 20px; color: white; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12); display: flex; flex-direction: column;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; width: 100%;">
+                <div style="flex: 1; min-width: 220px;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span class="material-symbols-outlined" style="font-size:22px; color:#93c5fd;">person</span>
+                        <span style="font-size:18px; font-weight:800; letter-spacing:0.3px;">${escapeHtmlKP(namaKonsumen)}</span>
+                        ${badgeHtml}
+                    </div>
+                    <div style="font-size:11px; opacity:0.85; margin-top:6px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+                        <span style="display:inline-flex; align-items:center; gap:3px;"><span class="material-symbols-outlined" style="font-size:14px; color:#93c5fd;">location_on</span> ${escapeHtmlKP(alamat)}</span>
+                        <span style="display:inline-flex; align-items:center; gap:3px;"><span class="material-symbols-outlined" style="font-size:14px; color:#93c5fd;">category</span> ${escapeHtmlKP(kategori)}</span>
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.6px; opacity:0.85; font-weight:600;">Sisa Saldo Piutang (Total)</div>
+                    <div style="font-size:22px; font-weight:800; color:#ffffff; margin-top:2px;">Rp ${nf.format(Math.abs(grandSisaSaldo))}${grandSisaSaldo < 0 ? ' (Deposit)' : ''}</div>
+                </div>
+            </div>
+            ${diagramHtml}
+        </div>
+    `;
+    summaryCard.classList.remove('hidden');
+
+    // 5. Susun Timeline Kronologis Gabungan: Nota + Standalone Payments (Deposit)
+    let timeline = [];
+    let attachedPaymentIds = new Set();
+
+    arrNota.forEach(nota => {
+        let attached = bayarArr.filter(b => {
+            if (!b.detailPotongan || b.detailPotongan.length === 0) return false;
+            let lastCut = b.detailPotongan[b.detailPotongan.length - 1];
+            return lastCut.tglNota === nota.tgl;
+        });
+        attached.forEach(b => attachedPaymentIds.add(b.id || (b.tgl + '_' + b.nominal)));
+        timeline.push({
+            date: nota.tgl,
+            type: 'NOTA',
+            nota: nota,
+            attachedPayments: attached
+        });
+    });
+
+    bayarArr.forEach(b => {
+        let key = b.id || (b.tgl + '_' + b.nominal);
+        if (!attachedPaymentIds.has(key)) {
+            timeline.push({
+                date: b.tgl,
+                type: 'STANDALONE_PAYMENT',
+                payment: b
+            });
+        }
+    });
+
+    // Urutkan timeline berdasarkan tanggal secara kronologis
+    timeline.sort((a, b) => {
+        if (a.date !== b.date) return new Date(a.date) - new Date(b.date);
+        if (a.type === 'NOTA' && b.type !== 'NOTA') return -1;
+        if (a.type !== 'NOTA' && b.type === 'NOTA') return 1;
+        return 0;
+    });
+
+    // 6. Kumpulkan Semua Tanggal Unik Transaksi
+    let allEventDates = Array.from(new Set(timeline.map(ev => ev.date))).sort();
+    if (periode !== 'ALL') {
+        allEventDates = allEventDates.filter(d => d.startsWith(periode));
+    }
+
+    // Inisialisasi / Reset set tanggal terpilih jika berganti konsumen atau periode
+    if (!window.kpSelectedDates || window.kpCurrentConsumer !== namaKonsumen || window.kpCurrentPeriode !== periode) {
+        window.kpSelectedDates = new Set(allEventDates);
+        window.kpCurrentConsumer = namaKonsumen;
+        window.kpCurrentPeriode = periode;
+    }
+
+    // Cache state untuk instant re-render saat toggle checkbox tanggal
+    window.kpCachedState = {
+        data,
+        tagihanArr,
+        bayarArr,
+        arrNota,
+        timeline,
+        namaKonsumen,
+        periode,
+        allEventDates
+    };
+
+    // 7. Render Opsi Checkbox pada Dropdown Multi-Date Filter
+    populateMultiDateDropdownKP(allEventDates, timeline, periode);
+
+    // 8. Render Tabel Kartu Piutang
+    renderKartuPiutangTable();
+}
+
+// Format Tanggal Helper (YYYY-MM-DD -> DD/MM/YYYY)
+function fmtTglKP(tglStr) {
+    if (!tglStr) return '-';
+    let parts = tglStr.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return tglStr;
+}
+
+// Render Dropdown Checkbox Daftar Tanggal
+function populateMultiDateDropdownKP(allEventDates, timeline, periode) {
+    let listContainer = document.getElementById('kp-multidate-list');
+    if (!listContainer) return;
+
+    if (allEventDates.length === 0) {
+        listContainer.innerHTML = `<div style="padding:15px; text-align:center; font-size:11px; color:#94a3b8; font-style:italic;">Tidak ada transaksi pada periode ini</div>`;
+        updateMultiDateLabelKP(allEventDates);
+        return;
+    }
+
+    // Hitung jumlah aktivitas transaksi per tanggal
+    let dateCounts = {};
+    timeline.forEach(ev => {
+        if (periode === 'ALL' || ev.date.startsWith(periode)) {
+            let count = 0;
+            if (ev.type === 'NOTA') {
+                count += (ev.nota.items ? ev.nota.items.length : 1) + (ev.attachedPayments ? ev.attachedPayments.length : 0);
+            } else {
+                count += 1;
+            }
+            dateCounts[ev.date] = (dateCounts[ev.date] || 0) + count;
+        }
+    });
+
+    let listHtml = allEventDates.map(tgl => {
+        let isChecked = window.kpSelectedDates ? window.kpSelectedDates.has(tgl) : true;
+        let count = dateCounts[tgl] || 1;
+        return `
+            <label style="display:flex; align-items:center; gap:8px; padding:7px 12px; font-size:12px; color:#334155; cursor:pointer; transition:background 0.15s; border-bottom:1px solid #f1f5f9; user-select:none;"
+                   onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                <input type="checkbox" class="kp-date-checkbox" value="${tgl}" ${isChecked ? 'checked' : ''} onchange="onDateCheckboxChangeKP()" style="cursor:pointer; accent-color:#8AA624; width:15px; height:15px;">
+                <span style="font-weight:600; color:#1e293b;">${fmtTglKP(tgl)}</span>
+                <span style="font-size:10px; color:#64748b; margin-left:auto; background:#f1f5f9; padding:2px 7px; border-radius:4px; font-weight:500;">${count} trx</span>
+            </label>
+        `;
+    }).join('');
+
+    listContainer.innerHTML = listHtml;
+    updateMultiDateLabelKP(allEventDates);
+}
+
+// Update Label Tombol Filter Tanggal & Badge Counter
+function updateMultiDateLabelKP(allDates) {
+    let lbl = document.getElementById('kp-multidate-label');
+    let badge = document.getElementById('kp-multidate-count-badge');
+    let chkAll = document.getElementById('kp-multidate-checkall');
+    if (!lbl || !badge || !window.kpSelectedDates) return;
+
+    let total = allDates ? allDates.length : 0;
+    let selectedCount = window.kpSelectedDates.size;
+
+    badge.textContent = `${selectedCount} / ${total} Tgl`;
+
+    if (chkAll) {
+        chkAll.checked = (total > 0 && selectedCount === total);
+        chkAll.indeterminate = (selectedCount > 0 && selectedCount < total);
+    }
+
+    if (total === 0) {
+        lbl.textContent = "Tidak ada tanggal";
+    } else if (selectedCount === total) {
+        lbl.textContent = "Semua Tanggal";
+    } else if (selectedCount === 0) {
+        lbl.textContent = "0 Tanggal Dipilih";
+    } else if (selectedCount === 1) {
+        let onlyDate = Array.from(window.kpSelectedDates)[0];
+        lbl.textContent = fmtTglKP(onlyDate);
+    } else if (selectedCount === 2) {
+        let arr = Array.from(window.kpSelectedDates).sort();
+        lbl.textContent = `${fmtTglKP(arr[0])}, ${fmtTglKP(arr[1])}`;
+    } else {
+        lbl.textContent = `${selectedCount} Tanggal Terpilih`;
+    }
+}
+
+// Handler Saat Checkbox Tanggal Diubah
+function onDateCheckboxChangeKP() {
+    let checkboxes = document.querySelectorAll('.kp-date-checkbox');
+    let selected = new Set();
+    checkboxes.forEach(cb => {
+        if (cb.checked) selected.add(cb.value);
+    });
+    window.kpSelectedDates = selected;
+
+    let allDates = Array.from(checkboxes).map(cb => cb.value);
+    updateMultiDateLabelKP(allDates);
+
+    if (window.kpCachedState) {
+        renderKartuPiutangTable();
+    }
+}
+
+// Handler Pilih Semua / Hapus Pilihan
+function toggleSelectAllDatesKP(checked) {
+    let checkboxes = document.querySelectorAll('.kp-date-checkbox');
+    let selected = new Set();
+    checkboxes.forEach(cb => {
+        cb.checked = checked;
+        if (checked) selected.add(cb.value);
+    });
+    window.kpSelectedDates = selected;
+
+    let allDates = Array.from(checkboxes).map(cb => cb.value);
+    updateMultiDateLabelKP(allDates);
+
+    if (window.kpCachedState) {
+        renderKartuPiutangTable();
+    }
+}
+
+// Toggle Dropdown Filter Tanggal
+function toggleMultiDateDropdownKP(e) {
+    if (e) e.stopPropagation();
+    let dropdown = document.getElementById('kp-multidate-dropdown');
+    if (!dropdown) return;
+    dropdown.classList.toggle('hidden');
+}
+
+// Handler Ganti Periode Tahun
+function onPeriodChangeKP() {
+    window.kpSelectedDates = null;
+    muatKartuPiutang();
+}
+
+// Tutup Dropdown saat klik di luar area
+document.addEventListener('click', function(e) {
+    let dropdown = document.getElementById('kp-multidate-dropdown');
+    let btn = document.getElementById('kp-multidate-btn');
+    if (dropdown && !dropdown.classList.contains('hidden')) {
+        if (!dropdown.contains(e.target) && !btn?.contains(e.target)) {
+            dropdown.classList.add('hidden');
+        }
+    }
+});
+
+// Render Isi Tabel Kartu Piutang Berdasarkan Filter Tanggal
+function renderKartuPiutangTable() {
+    if (!window.kpCachedState) return;
+
+    let { tagihanArr, bayarArr, timeline, periode, allEventDates } = window.kpCachedState;
+    let tbody = document.getElementById('kp-tbody');
+    let tfoot = document.getElementById('kp-tfoot');
+    let tableContainer = document.getElementById('kp-table-container');
+    let emptyState = document.getElementById('kp-empty-state');
+    let nf = new Intl.NumberFormat('id-ID');
+
+    if (!window.kpSelectedDates) {
+        window.kpSelectedDates = new Set(allEventDates);
+    }
+
+    let isPartialDateFilter = (allEventDates.length > 0 && window.kpSelectedDates.size < allEventDates.length);
+    let sortedSelectedDates = Array.from(window.kpSelectedDates).sort();
+    let firstSelectedDate = sortedSelectedDates[0] || '';
+
+    // Hitung Saldo Awal Tahun jika bukan ALL
+    let saldoAwalTahun = 0;
+    if (periode !== 'ALL') {
+        let tgtStart = `${periode}-01-01`;
+        tagihanArr.filter(t => t.tgl < tgtStart).forEach(t => saldoAwalTahun += t.nominal);
+        bayarArr.filter(b => b.tgl < tgtStart).forEach(b => saldoAwalTahun -= b.nominal);
+    }
+
+    let runningSaldo = saldoAwalTahun;
+    let periodTagihan = 0;
+    let periodBayar = 0;
+    let rowsHtml = '';
+    let rowCount = 0;
+
+    // Jika filter tanggal sebagian aktif, akumulasikan transaksi sebelum firstSelectedDate ke saldo awal
+    let saldoSebelumFirstSelected = saldoAwalTahun;
+    if (isPartialDateFilter && firstSelectedDate) {
+        timeline.forEach(event => {
+            let eventYear = event.date.split('-')[0];
+            let isWithin = (periode === 'ALL' || eventYear === periode);
+            if (isWithin && event.date < firstSelectedDate) {
+                if (event.type === 'NOTA') {
+                    event.nota.items.forEach(it => saldoSebelumFirstSelected += it.nominal);
+                    if (event.attachedPayments) {
+                        event.attachedPayments.forEach(b => saldoSebelumFirstSelected -= b.nominal);
+                    }
+                } else if (event.type === 'STANDALONE_PAYMENT') {
+                    saldoSebelumFirstSelected -= event.payment.nominal;
+                }
+            }
+        });
+    }
+
+    // Baris Saldo Awal
+    if (isPartialDateFilter && firstSelectedDate && window.kpSelectedDates.size > 0) {
+        let saldoStr = saldoSebelumFirstSelected < 0 ? `-Rp ${nf.format(Math.abs(saldoSebelumFirstSelected))}` : `Rp ${nf.format(saldoSebelumFirstSelected)}`;
+        rowsHtml += `
+            <tr style="background:#f1f5f9; font-weight:bold; border-bottom:2px solid #cbd5e1;">
+                <td style="text-align:center; padding:10px 8px; color:#475569;">-</td>
+                <td style="padding:10px 12px; color:#1e3a8a;">
+                    <div style="font-weight:700;">SALDO AWAL (SEBELUM ${fmtTglKP(firstSelectedDate)})</div>
+                    <div style="font-size:10px; color:#64748b; font-weight:normal;">Akumulasi transaksi sebelum tanggal terpilih</div>
+                </td>
+                <td style="text-align:right; padding:10px; color:#94a3b8;">-</td>
+                <td style="text-align:right; padding:10px; color:#94a3b8;">-</td>
+                <td style="text-align:right; padding:10px; font-weight:700; color:#1e293b;">${saldoStr}</td>
+            </tr>
+        `;
+    } else if (periode !== 'ALL' && (!isPartialDateFilter || window.kpSelectedDates.size > 0)) {
+        let saldoAwalStr = saldoAwalTahun < 0 ? `-Rp ${nf.format(Math.abs(saldoAwalTahun))}` : `Rp ${nf.format(saldoAwalTahun)}`;
+        rowsHtml += `
+            <tr style="background:#f1f5f9; font-weight:bold; border-bottom:2px solid #cbd5e1;">
+                <td style="text-align:center; padding:10px 8px; color:#475569;">-</td>
+                <td style="padding:10px 12px; color:#1e3a8a;">
+                    <div style="font-weight:700;">SALDO AWAL TAHUN ${periode}</div>
+                    <div style="font-size:10px; color:#64748b; font-weight:normal;">Saldo bawaan per 1 Januari ${periode}</div>
+                </td>
+                <td style="text-align:right; padding:10px; color:#94a3b8;">-</td>
+                <td style="text-align:right; padding:10px; color:#94a3b8;">-</td>
+                <td style="text-align:right; padding:10px; font-weight:700; color:#1e293b;">${saldoAwalStr}</td>
+            </tr>
+        `;
+    }
+
+    if (window.kpSelectedDates.size === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:#64748b; font-style:italic;">Tidak ada tanggal yang dipilih pada filter tanggal.</td></tr>`;
+        tfoot.innerHTML = `
+            <tr style="background:#f8fafc; border-top:2px solid #cbd5e1;">
+                <td colspan="2" style="text-align:right; padding:12px 10px; color:#334155; font-size:12px; font-weight:800; text-transform:uppercase;">TOTAL MUTASI:</td>
+                <td style="text-align:right; padding:12px 10px; color:#1e293b; font-size:12px; font-weight:800;">Rp 0</td>
+                <td style="text-align:right; padding:12px 10px; color:#1e293b; font-size:12px; font-weight:800;">Rp 0</td>
+                <td style="text-align:right; padding:12px 10px; color:#1e293b; font-size:13px; font-weight:800;">Rp 0</td>
+            </tr>
+        `;
+        tableContainer.classList.remove('hidden');
+        emptyState?.classList.add('hidden');
+        return;
+    }
+
+    // Render Events
+    timeline.forEach(event => {
+        let eventYear = event.date.split('-')[0];
+        let isWithin = (periode === 'ALL' || eventYear === periode);
+        if (!isWithin) return;
+
+        let isDateSelected = window.kpSelectedDates.has(event.date);
+
+        if (event.type === 'NOTA') {
+            event.nota.items.forEach(it => {
+                runningSaldo += it.nominal;
+                if (isDateSelected) {
+                    periodTagihan += it.nominal;
+                    rowCount++;
+
+                    let bg = rowCount % 2 === 0 ? "background:#ffffff;" : "background:#f8fafc;";
+                    let ketHtml = '';
+                    if (it.isOngkir) {
+                        ketHtml = `
+                            <div style="font-weight:700; color:#1e293b;">Ongkir Pengiriman</div>
+                            <div style="font-size:11px; color:#64748b; margin-top:1px;">1 Rit x @${nf.format(it.nominal)}</div>
+                        `;
+                    } else if (it.isTarikDeposit) {
+                        ketHtml = `
+                            <div style="font-weight:700; color:#b45309;">${escapeHtmlKP(it.pakan)}</div>
+                            <div style="font-size:11px; color:#64748b; margin-top:1px;">Penyesuaian Saldo Kas / Deposit</div>
+                        `;
+                    } else {
+                        ketHtml = `
+                            <div style="font-weight:700; color:#1e293b;">${escapeHtmlKP(it.pakan)}</div>
+                            <div style="font-size:11px; color:#64748b; margin-top:1px;">${nf.format(it.qty)} ${escapeHtmlKP(it.satuan)} x @${nf.format(it.harga_satuan)}</div>
+                        `;
+                    }
+
+                    let saldoStr = runningSaldo < 0 ? `-Rp ${nf.format(Math.abs(runningSaldo))}` : `Rp ${nf.format(runningSaldo)}`;
+
+                    rowsHtml += `
+                        <tr style="${bg} border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                            <td style="text-align:center; padding:9px 8px; color:#475569; font-size:11px;">${fmtTglKP(it.tgl)}</td>
+                            <td style="padding:9px 12px; line-height:1.35;">${ketHtml}</td>
+                            <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">Rp ${nf.format(it.nominal)}</td>
+                            <td style="text-align:right; padding:9px 10px; color:#94a3b8;">-</td>
+                            <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">${saldoStr}</td>
+                        </tr>
+                    `;
+                }
+            });
+
+            event.attachedPayments.forEach(b => {
+                runningSaldo -= b.nominal;
+                if (isDateSelected) {
+                    periodBayar += b.nominal;
+
+                    let buktiHtml = '';
+                    if (b.bukti_url) {
+                        buktiHtml = `
+                            <a href="${b.bukti_url}" target="_blank" rel="noopener noreferrer" 
+                               style="display:inline-flex; align-items:center; gap:2px; font-size:10px; background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; padding:2px 7px; border-radius:4px; text-decoration:none; font-weight:700; vertical-align:middle; transition:0.2s;"
+                               title="Lihat Bukti Transfer">
+                                <span class="material-symbols-outlined" style="font-size:12px;">attach_file</span> Bukti TF
+                            </a>
+                        `;
+                    }
+
+                    let subKetHtml = '';
+                    if (b.keterangan && b.keterangan !== '-' && b.keterangan !== 'null') {
+                        subKetHtml = `<div style="font-size:10px; color:#64748b; margin-top:2px; font-style:italic;">${escapeHtmlKP(b.keterangan)}</div>`;
+                    }
+
+                    let saldoStr = runningSaldo < 0 ? `-Rp ${nf.format(Math.abs(runningSaldo))}` : `Rp ${nf.format(runningSaldo)}`;
+
+                    rowsHtml += `
+                        <tr style="background:#f0fdf4; border-bottom: 1px solid #bbf7d0; border-left: 4px solid #16a34a; vertical-align: top;">
+                            <td style="text-align:center; padding:9px 8px; color:#166534; font-size:11px; font-weight:600;">${fmtTglKP(b.tgl)}</td>
+                            <td style="padding:9px 12px; line-height:1.35;">
+                                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                    <span style="font-weight:700; color:#166534;">Pembayaran</span>
+                                    <span style="font-size:10px; background:#dcfce7; color:#166534; border:1px solid #86efac; padding:1px 6px; border-radius:4px; font-weight:700;">${escapeHtmlKP(b.metode)}</span>
+                                    ${buktiHtml}
+                                </div>
+                                ${subKetHtml}
+                            </td>
+                            <td style="text-align:right; padding:9px 10px; color:#94a3b8;">-</td>
+                            <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">Rp ${nf.format(b.nominal)}</td>
+                            <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">${saldoStr}</td>
+                        </tr>
+                    `;
+                }
+            });
+        } else if (event.type === 'STANDALONE_PAYMENT') {
+            let b = event.payment;
+            runningSaldo -= b.nominal;
+            if (isDateSelected) {
+                periodBayar += b.nominal;
+
+                let buktiHtml = '';
+                if (b.bukti_url) {
+                    buktiHtml = `
+                        <a href="${b.bukti_url}" target="_blank" rel="noopener noreferrer" 
+                           style="display:inline-flex; align-items:center; gap:2px; font-size:10px; background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; padding:2px 7px; border-radius:4px; text-decoration:none; font-weight:700; vertical-align:middle;"
+                           title="Lihat Bukti Transfer">
+                            <span class="material-symbols-outlined" style="font-size:12px;">attach_file</span> Bukti TF
+                        </a>
+                    `;
+                }
+
+                let subKetHtml = '';
+                if (b.keterangan && b.keterangan !== '-' && b.keterangan !== 'null') {
+                    subKetHtml = `<div style="font-size:10px; color:#64748b; margin-top:2px; font-style:italic;">${escapeHtmlKP(b.keterangan)}</div>`;
+                }
+
+                let saldoStr = runningSaldo < 0 ? `-Rp ${nf.format(Math.abs(runningSaldo))}` : `Rp ${nf.format(runningSaldo)}`;
+
+                rowsHtml += `
+                    <tr style="background:#e0f2fe; border-bottom: 1px solid #bae6fd; border-left: 4px solid #0284c7; vertical-align: top;">
+                        <td style="text-align:center; padding:9px 8px; color:#0369a1; font-size:11px; font-weight:600;">${fmtTglKP(b.tgl)}</td>
+                        <td style="padding:9px 12px; line-height:1.35;">
+                            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                <span style="font-weight:700; color:#0369a1;">Pembayaran (Deposit / Lebih Bayar)</span>
+                                <span style="font-size:10px; background:#bae6fd; color:#0369a1; padding:1px 6px; border-radius:4px; font-weight:700;">${escapeHtmlKP(b.metode)}</span>
+                                ${buktiHtml}
+                            </div>
+                            ${subKetHtml}
+                        </td>
+                        <td style="text-align:right; padding:9px 10px; color:#94a3b8;">-</td>
+                        <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">Rp ${nf.format(b.nominal)}</td>
+                        <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">${saldoStr}</td>
+                    </tr>
+                `;
+            }
+        }
+    });
+
+    if (!rowsHtml) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:25px; color:#64748b; font-style:italic;">Tidak ada transaksi dalam filter yang dipilih.</td></tr>`;
+    } else {
+        tbody.innerHTML = rowsHtml;
+    }
+
+    // TFoot
+    let labelTFoot = isPartialDateFilter 
+        ? 'TOTAL MUTASI (TANGGAL TERPILIH):' 
+        : `TOTAL MUTASI ${periode === 'ALL' ? 'KESELURUHAN' : 'TAHUN ' + periode}:`;
+
+    let finalSaldoStr = runningSaldo < 0 ? `-Rp ${nf.format(Math.abs(runningSaldo))}` : `Rp ${nf.format(runningSaldo)}`;
+    tfoot.innerHTML = `
+        <tr style="background:#f8fafc; border-top:2px solid #cbd5e1;">
+            <td colspan="2" style="text-align:right; padding:12px 10px; color:#334155; font-size:12px; font-weight:800; text-transform:uppercase;">${labelTFoot}</td>
+            <td style="text-align:right; padding:12px 10px; color:#1e293b; font-size:12px; font-weight:800;">Rp ${nf.format(periodTagihan)}</td>
+            <td style="text-align:right; padding:12px 10px; color:#1e293b; font-size:12px; font-weight:800;">Rp ${nf.format(periodBayar)}</td>
+            <td style="text-align:right; padding:12px 10px; color:#1e293b; font-size:13px; font-weight:800;">${finalSaldoStr}</td>
+        </tr>
+    `;
+
+    tableContainer.classList.remove('hidden');
+    emptyState?.classList.add('hidden');
+}
+
+// Expose fungsi ke window agar dapat dipanggil dari event inline HTML
+window.muatKartuPiutang = muatKartuPiutang;
+window.toggleMultiDateDropdownKP = toggleMultiDateDropdownKP;
+window.toggleSelectAllDatesKP = toggleSelectAllDatesKP;
+window.onDateCheckboxChangeKP = onDateCheckboxChangeKP;
+window.onPeriodChangeKP = onPeriodChangeKP;
+window.renderKartuPiutangTable = renderKartuPiutangTable;
