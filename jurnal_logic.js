@@ -464,10 +464,26 @@ function hitungKartuPiutang(data, namaKonsumen, periode) {
         return 0;
     });
 
-    let allEventDates = Array.from(new Set(timeline.map(ev => ev.date))).sort();
-    if (periode !== 'ALL') {
-        allEventDates = allEventDates.filter(d => d.startsWith(periode));
-    }
+    let allDatesSet = new Set();
+    timeline.forEach(ev => {
+        if (ev.type === 'NOTA') {
+            if (periode === 'ALL' || ev.nota.tgl.startsWith(periode)) {
+                allDatesSet.add(ev.nota.tgl);
+            }
+            if (ev.attachedPayments) {
+                ev.attachedPayments.forEach(b => {
+                    if (periode === 'ALL' || b.tgl.startsWith(periode)) {
+                        allDatesSet.add(b.tgl);
+                    }
+                });
+            }
+        } else if (ev.type === 'STANDALONE_PAYMENT') {
+            if (periode === 'ALL' || ev.payment.tgl.startsWith(periode)) {
+                allDatesSet.add(ev.payment.tgl);
+            }
+        }
+    });
+    let allEventDates = Array.from(allDatesSet).sort();
 
     return {
         tagihanArr,
@@ -564,14 +580,23 @@ function populateMultiDateDropdownGeneric(prefix, allEventDates, timeline, perio
 
     let dateCounts = {};
     timeline.forEach(ev => {
-        if (periode === 'ALL' || ev.date.startsWith(periode)) {
-            let count = 0;
-            if (ev.type === 'NOTA') {
-                count += (ev.nota.items ? ev.nota.items.length : 1) + (ev.attachedPayments ? ev.attachedPayments.length : 0);
-            } else {
-                count += 1;
+        if (ev.type === 'NOTA') {
+            if (periode === 'ALL' || ev.nota.tgl.startsWith(periode)) {
+                let count = ev.nota.items ? ev.nota.items.length : 1;
+                dateCounts[ev.nota.tgl] = (dateCounts[ev.nota.tgl] || 0) + count;
             }
-            dateCounts[ev.date] = (dateCounts[ev.date] || 0) + count;
+            if (ev.attachedPayments) {
+                ev.attachedPayments.forEach(b => {
+                    if (periode === 'ALL' || b.tgl.startsWith(periode)) {
+                        dateCounts[b.tgl] = (dateCounts[b.tgl] || 0) + 1;
+                    }
+                });
+            }
+        } else if (ev.type === 'STANDALONE_PAYMENT') {
+            let b = ev.payment;
+            if (periode === 'ALL' || b.tgl.startsWith(periode)) {
+                dateCounts[b.tgl] = (dateCounts[b.tgl] || 0) + 1;
+            }
         }
     });
 
@@ -802,25 +827,15 @@ function renderKartuPiutangTableGeneric(prefix) {
     let firstSelectedDate = sortedSelectedDates[0] || '';
 
     // Hitung Saldo Awal Tahun jika bukan ALL secara konsisten dengan alur timeline
+    // Hitung Saldo Awal Tahun jika bukan ALL secara murni berdasarkan tanggal cut-off kalender (< 1 Jan tahun berjalan)
     let saldoAwalTahun = 0;
     if (periode !== 'ALL') {
-        timeline.forEach(event => {
-            let eventYear = event.date.split('-')[0];
-            if (eventYear < periode) {
-                if (event.type === 'NOTA') {
-                    event.nota.items.forEach(it => saldoAwalTahun += it.nominal);
-                    if (event.attachedPayments) {
-                        event.attachedPayments.forEach(b => saldoAwalTahun -= b.nominal);
-                    }
-                } else if (event.type === 'STANDALONE_PAYMENT') {
-                    saldoAwalTahun -= event.payment.nominal;
-                }
-            }
-        });
+        let startYearStr = `${periode}-01-01`;
+        tagihanArr.filter(t => t.tgl < startYearStr).forEach(t => saldoAwalTahun += t.nominal);
+        bayarArr.filter(b => b.tgl < startYearStr).forEach(b => saldoAwalTahun -= b.nominal);
     }
 
     let isPortal = (prefix === 'portal-kp');
-    let runningSaldo = saldoAwalTahun;
     let periodTagihan = 0;
     let periodBayar = 0;
     let rowsHtml = '';
@@ -828,21 +843,11 @@ function renderKartuPiutangTableGeneric(prefix) {
 
     let saldoSebelumFirstSelected = saldoAwalTahun;
     if (isPartialDateFilter && firstSelectedDate) {
-        timeline.forEach(event => {
-            let eventYear = event.date.split('-')[0];
-            let isWithin = (periode === 'ALL' || eventYear === periode);
-            if (isWithin && event.date < firstSelectedDate) {
-                if (event.type === 'NOTA') {
-                    event.nota.items.forEach(it => saldoSebelumFirstSelected += it.nominal);
-                    if (event.attachedPayments) {
-                        event.attachedPayments.forEach(b => saldoSebelumFirstSelected -= b.nominal);
-                    }
-                } else if (event.type === 'STANDALONE_PAYMENT') {
-                    saldoSebelumFirstSelected -= event.payment.nominal;
-                }
-            }
-        });
+        tagihanArr.filter(t => (periode === 'ALL' || t.tgl.startsWith(periode)) && t.tgl < firstSelectedDate).forEach(t => saldoSebelumFirstSelected += t.nominal);
+        bayarArr.filter(b => (periode === 'ALL' || b.tgl.startsWith(periode)) && b.tgl < firstSelectedDate).forEach(b => saldoSebelumFirstSelected -= b.nominal);
     }
+
+    let runningSaldo = (isPartialDateFilter && firstSelectedDate) ? saldoSebelumFirstSelected : saldoAwalTahun;
 
     // Baris Saldo Awal
     if (isPartialDateFilter && firstSelectedDate && selectedDates.size > 0) {
@@ -934,105 +939,55 @@ function renderKartuPiutangTableGeneric(prefix) {
 
     // Render Events
     timeline.forEach(event => {
-        let eventYear = event.date.split('-')[0];
-        let isWithin = (periode === 'ALL' || eventYear === periode);
-        if (!isWithin) return;
-
-        let isDateSelected = selectedDates.has(event.date);
-
         if (event.type === 'NOTA') {
-            event.nota.items.forEach(it => {
-                runningSaldo += it.nominal;
-                if (isDateSelected) {
-                    periodTagihan += it.nominal;
-                    rowCount++;
-
-                    let bg = rowCount % 2 === 0 ? "background:#ffffff;" : "background:#f8fafc;";
-                    let ketHtml = '';
-                    if (it.isOngkir) {
-                        ketHtml = `
-                            <div style="font-weight:700; color:#1e293b;">Ongkir Pengiriman</div>
-                            <div style="font-size:11px; color:#64748b; margin-top:1px;">1 Rit x @${nf.format(it.nominal)}</div>
-                        `;
-                    } else if (it.isTarikDeposit) {
-                        ketHtml = `
-                            <div style="font-weight:700; color:#b45309;">${escapeHtmlKP(it.pakan)}</div>
-                            <div style="font-size:11px; color:#64748b; margin-top:1px;">Penyesuaian Saldo Kas / Deposit</div>
-                        `;
-                    } else {
-                        ketHtml = `
-                            <div style="font-weight:700; color:#1e293b;">${escapeHtmlKP(it.pakan)}</div>
-                            <div style="font-size:11px; color:#64748b; margin-top:1px;">${nf.format(it.qty)} ${escapeHtmlKP(it.satuan)} x @${nf.format(it.harga_satuan)}</div>
-                        `;
+            let isNotaInPeriod = (periode === 'ALL' || event.nota.tgl.startsWith(periode));
+            if (isNotaInPeriod) {
+                let isDateSelected = selectedDates.has(event.nota.tgl);
+                event.nota.items.forEach(it => {
+                    let isBeforeFirst = (isPartialDateFilter && firstSelectedDate && it.tgl < firstSelectedDate);
+                    if (!isBeforeFirst) {
+                        runningSaldo += it.nominal;
                     }
-
-                    let saldoDisplay = runningSaldo < 0 ? `-Rp ${nf.format(Math.abs(runningSaldo))}` : `Rp ${nf.format(runningSaldo)}`;
-                    if (isPortal) {
-                        rowsHtml += `
-                            <tr style="${bg} border-bottom:1px solid #e2e8f0; vertical-align: top;">
-                                <td style="text-align:center; padding:8px 6px; color:#475569; font-size:11px; white-space:nowrap;">${fmtTglKP(it.tgl)}</td>
-                                <td style="padding:8px 8px; line-height:1.35;">${ketHtml}</td>
-                                <td style="text-align:right; padding:8px 6px; font-weight:700; color:#1e293b; font-size:11px; white-space:nowrap;">+ Rp ${nf.format(it.nominal)}</td>
-                                <td style="text-align:right; padding:8px 6px; font-weight:700; color:#1e293b; font-size:11px; white-space:nowrap;">${saldoDisplay}</td>
-                            </tr>
-                        `;
-                    } else {
-                        rowsHtml += `
-                            <tr style="${bg} border-bottom:1px solid #e2e8f0; vertical-align: top;">
-                                <td style="text-align:center; padding:9px 8px; color:#475569; font-size:11px;">${fmtTglKP(it.tgl)}</td>
-                                <td style="padding:9px 12px; line-height:1.35;">${ketHtml}</td>
-                                <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">Rp ${nf.format(it.nominal)}</td>
-                                <td style="text-align:right; padding:9px 10px; color:#94a3b8;">-</td>
-                                <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">${saldoDisplay}</td>
-                            </tr>
-                        `;
-                    }
-                }
-            });
-
-            if (event.attachedPayments && event.attachedPayments.length > 0) {
-                event.attachedPayments.forEach(b => {
-                    runningSaldo -= b.nominal;
                     if (isDateSelected) {
-                        periodBayar += b.nominal;
+                        periodTagihan += it.nominal;
                         rowCount++;
 
                         let bg = rowCount % 2 === 0 ? "background:#ffffff;" : "background:#f8fafc;";
-                        let linkBukti = b.bukti_url 
-                            ? `<a href="${b.bukti_url}" target="_blank" style="margin-left:6px; color:#2563eb; text-decoration:none; display:inline-flex; align-items:center; gap:2px; font-size:10px; font-weight:600;"><span class="material-symbols-outlined" style="font-size:13px;">receipt_long</span> Bukti</a>` 
-                            : '';
-                        
-                        let labelBayar = b.metode === "Retur Barang" ? `Retur Barang` : `Pembayaran (${escapeHtmlKP(b.metode || 'Cash')})`;
-                        let colorBayar = b.metode === "Retur Barang" ? "#b45309" : "#15803d";
-
-                        let ketBayar = `
-                            <div style="font-weight:700; color:${colorBayar}; display:flex; align-items:center; flex-wrap:wrap;">
-                                <span>${labelBayar}</span>
-                                ${linkBukti}
-                            </div>
-                        `;
-
-                        if (b.keterangan && b.keterangan !== '-') {
-                            ketBayar += `<div style="font-size:10px; color:#64748b; font-style:italic; margin-top:1px;">${escapeHtmlKP(b.keterangan)}</div>`;
+                        let ketHtml = '';
+                        if (it.isOngkir) {
+                            ketHtml = `
+                                <div style="font-weight:700; color:#1e293b;">Ongkir Pengiriman</div>
+                                <div style="font-size:11px; color:#64748b; margin-top:1px;">1 Rit x @${nf.format(it.nominal)}</div>
+                            `;
+                        } else if (it.isTarikDeposit) {
+                            ketHtml = `
+                                <div style="font-weight:700; color:#b45309;">${escapeHtmlKP(it.pakan)}</div>
+                                <div style="font-size:11px; color:#64748b; margin-top:1px;">Penyesuaian Saldo Kas / Deposit</div>
+                            `;
+                        } else {
+                            ketHtml = `
+                                <div style="font-weight:700; color:#1e293b;">${escapeHtmlKP(it.pakan)}</div>
+                                <div style="font-size:11px; color:#64748b; margin-top:1px;">${nf.format(it.qty)} ${escapeHtmlKP(it.satuan)} x @${nf.format(it.harga_satuan)}</div>
+                            `;
                         }
 
                         let saldoDisplay = runningSaldo < 0 ? `-Rp ${nf.format(Math.abs(runningSaldo))}` : `Rp ${nf.format(runningSaldo)}`;
                         if (isPortal) {
                             rowsHtml += `
                                 <tr style="${bg} border-bottom:1px solid #e2e8f0; vertical-align: top;">
-                                    <td style="text-align:center; padding:8px 6px; color:#475569; font-size:11px; white-space:nowrap;">${fmtTglKP(b.tgl)}</td>
-                                    <td style="padding:8px 8px; line-height:1.35;">${ketBayar}</td>
-                                    <td style="text-align:right; padding:8px 6px; font-weight:700; color:#15803d; font-size:11px; white-space:nowrap;">- Rp ${nf.format(b.nominal)}</td>
+                                    <td style="text-align:center; padding:8px 6px; color:#475569; font-size:11px; white-space:nowrap;">${fmtTglKP(it.tgl)}</td>
+                                    <td style="padding:8px 8px; line-height:1.35;">${ketHtml}</td>
+                                    <td style="text-align:right; padding:8px 6px; font-weight:700; color:#1e293b; font-size:11px; white-space:nowrap;">+ Rp ${nf.format(it.nominal)}</td>
                                     <td style="text-align:right; padding:8px 6px; font-weight:700; color:#1e293b; font-size:11px; white-space:nowrap;">${saldoDisplay}</td>
                                 </tr>
                             `;
                         } else {
                             rowsHtml += `
                                 <tr style="${bg} border-bottom:1px solid #e2e8f0; vertical-align: top;">
-                                    <td style="text-align:center; padding:9px 8px; color:#475569; font-size:11px;">${fmtTglKP(b.tgl)}</td>
-                                    <td style="padding:9px 12px; line-height:1.35;">${ketBayar}</td>
+                                    <td style="text-align:center; padding:9px 8px; color:#475569; font-size:11px;">${fmtTglKP(it.tgl)}</td>
+                                    <td style="padding:9px 12px; line-height:1.35;">${ketHtml}</td>
+                                    <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">Rp ${nf.format(it.nominal)}</td>
                                     <td style="text-align:right; padding:9px 10px; color:#94a3b8;">-</td>
-                                    <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">Rp ${nf.format(b.nominal)}</td>
                                     <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">${saldoDisplay}</td>
                                 </tr>
                             `;
@@ -1040,52 +995,117 @@ function renderKartuPiutangTableGeneric(prefix) {
                     }
                 });
             }
+
+            if (event.attachedPayments && event.attachedPayments.length > 0) {
+                event.attachedPayments.forEach(b => {
+                    let isPaymentInPeriod = (periode === 'ALL' || b.tgl.startsWith(periode));
+                    if (isPaymentInPeriod) {
+                        let isBeforeFirst = (isPartialDateFilter && firstSelectedDate && b.tgl < firstSelectedDate);
+                        if (!isBeforeFirst) {
+                            runningSaldo -= b.nominal;
+                        }
+                        let isDateSelected = selectedDates.has(b.tgl);
+                        if (isDateSelected) {
+                            periodBayar += b.nominal;
+                            rowCount++;
+
+                            let bg = rowCount % 2 === 0 ? "background:#ffffff;" : "background:#f8fafc;";
+                            let linkBukti = b.bukti_url 
+                                ? `<a href="${b.bukti_url}" target="_blank" style="margin-left:6px; color:#2563eb; text-decoration:none; display:inline-flex; align-items:center; gap:2px; font-size:10px; font-weight:600;"><span class="material-symbols-outlined" style="font-size:13px;">receipt_long</span> Bukti</a>` 
+                                : '';
+                            
+                            let labelBayar = b.metode === "Retur Barang" ? `Retur Barang` : `Pembayaran (${escapeHtmlKP(b.metode || 'Cash')})`;
+                            let colorBayar = b.metode === "Retur Barang" ? "#b45309" : "#15803d";
+
+                            let ketBayar = `
+                                <div style="font-weight:700; color:${colorBayar}; display:flex; align-items:center; flex-wrap:wrap;">
+                                    <span>${labelBayar}</span>
+                                    ${linkBukti}
+                                </div>
+                            `;
+
+                            if (b.keterangan && b.keterangan !== '-') {
+                                ketBayar += `<div style="font-size:10px; color:#64748b; font-style:italic; margin-top:1px;">${escapeHtmlKP(b.keterangan)}</div>`;
+                            }
+
+                            let saldoDisplay = runningSaldo < 0 ? `-Rp ${nf.format(Math.abs(runningSaldo))}` : `Rp ${nf.format(runningSaldo)}`;
+                            if (isPortal) {
+                                rowsHtml += `
+                                    <tr style="${bg} border-bottom:1px solid #e2e8f0; vertical-align: top;">
+                                        <td style="text-align:center; padding:8px 6px; color:#475569; font-size:11px; white-space:nowrap;">${fmtTglKP(b.tgl)}</td>
+                                        <td style="padding:8px 8px; line-height:1.35;">${ketBayar}</td>
+                                        <td style="text-align:right; padding:8px 6px; font-weight:700; color:#15803d; font-size:11px; white-space:nowrap;">- Rp ${nf.format(b.nominal)}</td>
+                                        <td style="text-align:right; padding:8px 6px; font-weight:700; color:#1e293b; font-size:11px; white-space:nowrap;">${saldoDisplay}</td>
+                                    </tr>
+                                `;
+                            } else {
+                                rowsHtml += `
+                                    <tr style="${bg} border-bottom:1px solid #e2e8f0; vertical-align: top;">
+                                        <td style="text-align:center; padding:9px 8px; color:#475569; font-size:11px;">${fmtTglKP(b.tgl)}</td>
+                                        <td style="padding:9px 12px; line-height:1.35;">${ketBayar}</td>
+                                        <td style="text-align:right; padding:9px 10px; color:#94a3b8;">-</td>
+                                        <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">Rp ${nf.format(b.nominal)}</td>
+                                        <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">${saldoDisplay}</td>
+                                    </tr>
+                                `;
+                            }
+                        }
+                    }
+                });
+            }
         } else if (event.type === 'STANDALONE_PAYMENT') {
             let b = event.payment;
-            runningSaldo -= b.nominal;
-            if (isDateSelected) {
-                periodBayar += b.nominal;
-                rowCount++;
-
-                let bg = rowCount % 2 === 0 ? "background:#ffffff;" : "background:#f8fafc;";
-                let linkBukti = b.bukti_url 
-                    ? `<a href="${b.bukti_url}" target="_blank" style="margin-left:6px; color:#2563eb; text-decoration:none; display:inline-flex; align-items:center; gap:2px; font-size:10px; font-weight:600;"><span class="material-symbols-outlined" style="font-size:13px;">receipt_long</span> Bukti</a>` 
-                    : '';
-
-                let labelBayar = b.metode === "Retur Barang" ? `Retur Barang` : `Pembayaran / Deposit (${escapeHtmlKP(b.metode || 'Cash')})`;
-                let colorBayar = b.metode === "Retur Barang" ? "#b45309" : "#0369a1";
-
-                let ketBayar = `
-                    <div style="font-weight:700; color:${colorBayar}; display:flex; align-items:center; flex-wrap:wrap;">
-                        <span>${labelBayar}</span>
-                        ${linkBukti}
-                    </div>
-                `;
-
-                if (b.keterangan && b.keterangan !== '-') {
-                    ketBayar += `<div style="font-size:10px; color:#64748b; margin-top:2px;">${escapeHtmlKP(b.keterangan)}</div>`;
+            let isPaymentInPeriod = (periode === 'ALL' || b.tgl.startsWith(periode));
+            if (isPaymentInPeriod) {
+                let isBeforeFirst = (isPartialDateFilter && firstSelectedDate && b.tgl < firstSelectedDate);
+                if (!isBeforeFirst) {
+                    runningSaldo -= b.nominal;
                 }
+                let isDateSelected = selectedDates.has(b.tgl);
+                if (isDateSelected) {
+                    periodBayar += b.nominal;
+                    rowCount++;
 
-                let saldoDisplay = runningSaldo < 0 ? `-Rp ${nf.format(Math.abs(runningSaldo))}` : `Rp ${nf.format(runningSaldo)}`;
-                if (isPortal) {
-                    rowsHtml += `
-                        <tr style="${bg} border-bottom:1px solid #e2e8f0; vertical-align: top;">
-                            <td style="text-align:center; padding:8px 6px; color:#475569; font-size:11px; white-space:nowrap;">${fmtTglKP(b.tgl)}</td>
-                            <td style="padding:8px 8px; line-height:1.35;">${ketBayar}</td>
-                            <td style="text-align:right; padding:8px 6px; font-weight:700; color:#15803d; font-size:11px; white-space:nowrap;">- Rp ${nf.format(b.nominal)}</td>
-                            <td style="text-align:right; padding:8px 6px; font-weight:700; color:#1e293b; font-size:11px; white-space:nowrap;">${saldoDisplay}</td>
-                        </tr>
+                    let bg = rowCount % 2 === 0 ? "background:#ffffff;" : "background:#f8fafc;";
+                    let linkBukti = b.bukti_url 
+                        ? `<a href="${b.bukti_url}" target="_blank" style="margin-left:6px; color:#2563eb; text-decoration:none; display:inline-flex; align-items:center; gap:2px; font-size:10px; font-weight:600;"><span class="material-symbols-outlined" style="font-size:13px;">receipt_long</span> Bukti</a>` 
+                        : '';
+
+                    let labelBayar = b.metode === "Retur Barang" ? `Retur Barang` : `Pembayaran / Deposit (${escapeHtmlKP(b.metode || 'Cash')})`;
+                    let colorBayar = b.metode === "Retur Barang" ? "#b45309" : "#0369a1";
+
+                    let ketBayar = `
+                        <div style="font-weight:700; color:${colorBayar}; display:flex; align-items:center; flex-wrap:wrap;">
+                            <span>${labelBayar}</span>
+                            ${linkBukti}
+                        </div>
                     `;
-                } else {
-                    rowsHtml += `
-                        <tr style="${bg} border-bottom:1px solid #e2e8f0; vertical-align: top;">
-                            <td style="text-align:center; padding:9px 8px; color:#475569; font-size:11px;">${fmtTglKP(b.tgl)}</td>
-                            <td style="padding:9px 12px; line-height:1.35;">${ketBayar}</td>
-                            <td style="text-align:right; padding:9px 10px; color:#94a3b8;">-</td>
-                            <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">Rp ${nf.format(b.nominal)}</td>
-                            <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">${saldoDisplay}</td>
-                        </tr>
-                    `;
+
+                    if (b.keterangan && b.keterangan !== '-') {
+                        ketBayar += `<div style="font-size:10px; color:#64748b; margin-top:2px;">${escapeHtmlKP(b.keterangan)}</div>`;
+                    }
+
+                    let saldoDisplay = runningSaldo < 0 ? `-Rp ${nf.format(Math.abs(runningSaldo))}` : `Rp ${nf.format(runningSaldo)}`;
+                    if (isPortal) {
+                        rowsHtml += `
+                            <tr style="${bg} border-bottom:1px solid #e2e8f0; vertical-align: top;">
+                                <td style="text-align:center; padding:8px 6px; color:#475569; font-size:11px; white-space:nowrap;">${fmtTglKP(b.tgl)}</td>
+                                <td style="padding:8px 8px; line-height:1.35;">${ketBayar}</td>
+                                <td style="text-align:right; padding:8px 6px; font-weight:700; color:#15803d; font-size:11px; white-space:nowrap;">- Rp ${nf.format(b.nominal)}</td>
+                                <td style="text-align:right; padding:8px 6px; font-weight:700; color:#1e293b; font-size:11px; white-space:nowrap;">${saldoDisplay}</td>
+                            </tr>
+                        `;
+                    } else {
+                        rowsHtml += `
+                            <tr style="${bg} border-bottom:1px solid #e2e8f0; vertical-align: top;">
+                                <td style="text-align:center; padding:9px 8px; color:#475569; font-size:11px;">${fmtTglKP(b.tgl)}</td>
+                                <td style="padding:9px 12px; line-height:1.35;">${ketBayar}</td>
+                                <td style="text-align:right; padding:9px 10px; color:#94a3b8;">-</td>
+                                <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">Rp ${nf.format(b.nominal)}</td>
+                                <td style="text-align:right; padding:9px 10px; font-weight:700; color:#1e293b;">${saldoDisplay}</td>
+                            </tr>
+                        `;
+                    }
                 }
             }
         }
