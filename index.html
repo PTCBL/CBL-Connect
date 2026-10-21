@@ -2369,32 +2369,45 @@
                 </div>
 
                 <div id="view-stok-laporan" class="stok-view hidden">
-                    <div class="form-row" style="margin-bottom:15px; gap:5px; background:#f5f5f5; padding:10px; border-radius:8px;">
+                    <div style="background:#e8f4fd; border:1px dashed #90caf9; padding:8px 12px; border-radius:8px; font-size:11px; color:#1565c0; margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+                        <span class="material-symbols-outlined" style="font-size:18px;">warehouse</span>
+                        <span><b>Laporan Bagi Hasil Kapling:</b> Akumulasi seluruh barang masuk berdasarkan penempatan blok/gudang.</span>
+                    </div>
+
+                    <div class="form-row" style="margin-bottom:15px; gap:8px; background:#f5f5f5; padding:10px; border-radius:8px; align-items:flex-end;">
                         <div style="flex:1.5;">
-                            <label style="font-size:10px; margin-bottom:2px;">Sisa Stok Bulan Masuk:</label>
-                            <select id="kapling_bulan" onchange="renderLapKapling()"
-                                style="padding:8px; font-size:12px; border:1px solid #DBE4C9; border-radius:6px; width:100%;">
+                            <label style="font-size:10px; margin-bottom:2px; font-weight:bold; color:#1565c0;">Bulan Barang Masuk:</label>
+                            <select id="kapling_bulan" onchange="renderLapKapling(true)"
+                                style="padding:8px; font-size:12px; border:1px solid #DBE4C9; border-radius:6px; width:100%; background:#fff;">
                                 <option value="01">Januari</option>
                                 <option value="02">Februari</option>
                                 <option value="03">Maret</option>
                                 <option value="04">April</option>
                                 <option value="05">Mei</option>
-                                <option value="06" selected>Juni</option>
+                                <option value="06">Juni</option>
                                 <option value="07">Juli</option>
                                 <option value="08">Agustus</option>
-                                <option value="09">September</option>
+                                <option value="09" selected>September</option>
                                 <option value="10">Oktober</option>
                                 <option value="11">November</option>
                                 <option value="12">Desember</option>
                             </select>
                         </div>
                         <div style="flex:1;">
-                            <label style="font-size:10px; margin-bottom:2px;">Tahun:</label>
-                            <select id="kapling_tahun" onchange="renderLapKapling()"
-                                style="padding:8px; font-size:12px; border:1px solid #DBE4C9; border-radius:6px; width:100%;">
+                            <label style="font-size:10px; margin-bottom:2px; font-weight:bold; color:#1565c0;">Tahun:</label>
+                            <select id="kapling_tahun" onchange="renderLapKapling(true)"
+                                style="padding:8px; font-size:12px; border:1px solid #DBE4C9; border-radius:6px; width:100%; background:#fff;">
+                                <option value="2024">2024</option>
                                 <option value="2025">2025</option>
                                 <option value="2026" selected>2026</option>
+                                <option value="2027">2027</option>
                             </select>
+                        </div>
+                        <div>
+                            <button onclick="renderLapKapling(true)" title="Segarkan Data Kapling"
+                                style="padding:8px 12px; background:#1565c0; color:#fff; border:none; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; height:35px; box-sizing:border-box;">
+                                <span class="material-symbols-outlined" style="font-size:16px;">refresh</span>
+                            </button>
                         </div>
                     </div>
                     <div id="list-kapling">
@@ -5005,8 +5018,13 @@
         // ==========================================
         let globalDataStok = [];
         let globalPakanListStok = [];
+        let cacheLapKapling = null;
+        let cacheLapKaplingKey = "";
+        let isFetchingLapKapling = false;
 
         function tarikDataStokPWA() {
+            cacheLapKapling = null;
+            cacheLapKaplingKey = "";
             document.getElementById('stok-loader').classList.remove('hidden');
             document.getElementById('list-radar-pakan').innerHTML = "";
             document.getElementById('list-peta-blok').innerHTML = "";
@@ -5402,50 +5420,200 @@
             renderListStokV5();
         }
 
-        function renderLapKapling() {
-            let bln = document.getElementById('kapling_bulan').value;
-            let thn = document.getElementById('kapling_tahun').value;
-            let gdg = document.querySelector('input[name="stok_gudang"]:checked').value;
+        function formatNamaBlok(rawBlok) {
+            if (!rawBlok || rawBlok.trim() === "" || rawBlok.trim().toLowerCase() === "tanpa blok") {
+                return "Tanpa Blok";
+            }
+            let trimmed = rawBlok.trim();
+            let parts = trimmed.split(/\s+/);
+            return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+        }
 
-            let filtered = globalDataStok.filter(s => {
-                let matchGudang = (gdg === "ALL" || s.gudang === gdg);
-                let matchPeriode = s.tglMasuk.startsWith(`${thn}-${bln}`);
-                return matchGudang && matchPeriode;
+        async function renderLapKapling(forceRefresh = false) {
+            let elBln = document.getElementById('kapling_bulan');
+            let elThn = document.getElementById('kapling_tahun');
+            let listContainer = document.getElementById('list-kapling');
+            if (!elBln || !elThn || !listContainer) return;
+
+            let bln = elBln.value;
+            let thn = elThn.value;
+            let gdgRadio = document.querySelector('input[name="stok_gudang"]:checked');
+            let gdg = gdgRadio ? gdgRadio.value : "ALL";
+
+            let rawPakan = (document.getElementById('filter-pakan')?.value || '').trim().toLowerCase();
+            let valBlok = document.getElementById('filter-blok')?.value || 'ALL';
+
+            let cacheKey = `${thn}-${bln}`;
+
+            // Tarik data riil transaksi_pakan jika belum ada di cache atau forceRefresh
+            if (forceRefresh || cacheLapKaplingKey !== cacheKey || !cacheLapKapling) {
+                if (isFetchingLapKapling) return;
+                isFetchingLapKapling = true;
+
+                listContainer.innerHTML = `
+                    <div style="text-align:center; padding:30px 10px; color:#1565c0; font-size:12px;">
+                        <span class="material-symbols-outlined" style="font-size:26px; animation:spin 1s linear infinite; display:inline-block; vertical-align:middle; margin-bottom:6px;">sync</span>
+                        <div>Menarik seluruh transaksi barang masuk periode <b>${bln}/${thn}</b>...</div>
+                    </div>`;
+
+                let startDate = `${thn}-${bln}-01`;
+                let lastDay = new Date(parseInt(thn), parseInt(bln), 0).getDate();
+                let endDate = `${thn}-${bln}-${String(lastDay).padStart(2, '0')}`;
+
+                try {
+                    let url = `${SUPA_URL}/rest/v1/transaksi_pakan?tanggal=gte.${startDate}&tanggal=lte.${endDate}&status=ilike.*masuk*&order=tanggal.asc,id.asc&select=id,tanggal,waktu_input,cabang,status,relasi,pakan,qty,satuan,catatan,blok`;
+                    let data = await fetchSupabaseAll(url);
+                    cacheLapKapling = data || [];
+                    cacheLapKaplingKey = cacheKey;
+                } catch (e) {
+                    listContainer.innerHTML = `
+                        <div style="text-align:center; padding:20px; color:#c62828; font-size:12px; background:#ffebee; border-radius:8px;">
+                            <span class="material-symbols-outlined" style="font-size:24px; display:block; margin-bottom:6px;">error</span>
+                            Gagal memuat barang masuk: ${e.message}
+                            <div style="margin-top:10px;">
+                                <button onclick="renderLapKapling(true)" style="padding:6px 14px; font-size:11px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer;">Coba Lagi</button>
+                            </div>
+                        </div>`;
+                    isFetchingLapKapling = false;
+                    return;
+                } finally {
+                    isFetchingLapKapling = false;
+                }
+            }
+
+            let dataTrx = cacheLapKapling || [];
+
+            let filtered = dataTrx.filter(s => {
+                let matchGudang = (gdg === "ALL" || (s.cabang && s.cabang.trim().toUpperCase() === gdg.toUpperCase()));
+                let matchPakan = (!rawPakan || (s.pakan && s.pakan.toLowerCase().includes(rawPakan)));
+                let blokNorm = formatNamaBlok(s.blok);
+                let matchBlok = (valBlok === "ALL" || blokNorm.toLowerCase() === valBlok.toLowerCase());
+                return matchGudang && matchPakan && matchBlok;
             });
 
             let groupedBlok = {};
+            let grandTotal = 0;
+
             filtered.forEach(s => {
-                if (!groupedBlok[s.blok]) groupedBlok[s.blok] = { total: 0, rincian: [] };
-                groupedBlok[s.blok].total += s.qty;
-                groupedBlok[s.blok].rincian.push(s);
+                let blokName = formatNamaBlok(s.blok);
+                if (!groupedBlok[blokName]) {
+                    groupedBlok[blokName] = {
+                        total: 0,
+                        countTrx: 0,
+                        pakanMap: {}
+                    };
+                }
+                let qtyNum = parseFloat(s.qty) || 0;
+                groupedBlok[blokName].total += qtyNum;
+                groupedBlok[blokName].countTrx += 1;
+                grandTotal += qtyNum;
+
+                let pakanName = s.pakan || 'Lainnya';
+                if (!groupedBlok[blokName].pakanMap[pakanName]) {
+                    groupedBlok[blokName].pakanMap[pakanName] = {
+                        pakan: pakanName,
+                        totalQty: 0,
+                        countTrx: 0,
+                        satuan: s.satuan || 'Kg',
+                        rincian: []
+                    };
+                }
+                groupedBlok[blokName].pakanMap[pakanName].totalQty += qtyNum;
+                groupedBlok[blokName].pakanMap[pakanName].countTrx += 1;
+                groupedBlok[blokName].pakanMap[pakanName].rincian.push({
+                    id: s.id,
+                    tanggal: s.tanggal,
+                    qty: qtyNum,
+                    relasi: s.relasi,
+                    catatan: s.catatan
+                });
             });
 
-            let html = ""; let nf = new Intl.NumberFormat('id-ID');
-            let sortedBlok = Object.keys(groupedBlok).sort();
+            let namaBulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+            let blnIdx = parseInt(bln) - 1;
+            let strBulan = (blnIdx >= 0 && blnIdx < 12) ? namaBulan[blnIdx] : bln;
+
+            let html = "";
+            let nf = new Intl.NumberFormat('id-ID');
+            let sortedBlok = Object.keys(groupedBlok).sort((a, b) => {
+                if (a.toLowerCase() === "tanpa blok") return 1;
+                if (b.toLowerCase() === "tanpa blok") return -1;
+                return a.localeCompare(b);
+            });
 
             if (sortedBlok.length === 0) {
-                html = `<div style="text-align:center; padding:20px; color:#888; font-size:12px;">Tidak ada sisa pakan dari barang masuk bulan ${bln}/${thn} di gudang terpilih.</div>`;
+                html = `
+                    <div style="text-align:center; padding:30px 15px; color:#888; font-size:12px; background:#fff; border-radius:8px; border:1px dashed #ccc;">
+                        <span class="material-symbols-outlined" style="font-size:32px; color:#aaa; display:block; margin-bottom:8px;">inventory_2</span>
+                        Tidak ada transaksi barang masuk pada <b>${strBulan} ${thn}</b> untuk gudang <b>${gdg === 'ALL' ? 'Semua Gudang' : gdg}</b>.
+                    </div>`;
             } else {
-                sortedBlok.forEach((blok) => {
+                html += `
+                <div style="background:linear-gradient(135deg, #e3f2fd, #bbdefb); border:1px solid #90caf9; border-radius:8px; padding:12px 14px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-size:10px; color:#1565c0; font-weight:bold; letter-spacing:0.5px; text-transform:uppercase;">TOTAL BARANG MASUK (${strBulan} ${thn})</div>
+                        <div style="font-size:11px; color:#455a64; margin-top:2px;">
+                            Gudang: <b>${gdg === 'ALL' ? 'Semua Gudang' : gdg}</b> • ${filtered.length} Transaksi • ${sortedBlok.length} Blok
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:18px; font-weight:bold; color:#0d47a1;">${nf.format(grandTotal)} <span style="font-size:11px; font-weight:normal;">Kg</span></div>
+                    </div>
+                </div>`;
+
+                sortedBlok.forEach((blok, bIdx) => {
                     let d = groupedBlok[blok];
-                    let rincianHtml = d.rincian.map(r => {
-                        let tglArr = r.tglMasuk.split('-');
-                        let tglStr = tglArr.length === 3 ? `${tglArr[2]}/${tglArr[1]}/${tglArr[0].substring(2)}` : r.tglMasuk;
-                        return `<div style="display:flex; justify-content:space-between; font-size:11px; color:#555; margin-bottom:4px; padding-bottom:4px; border-bottom:1px solid #eee;">
-                          <span>${r.pakan} (${tglStr})</span><span style="font-weight:bold; color:#8AA624;">${nf.format(r.qty)} Kg</span>
-                      </div>`;
+                    let listPakan = Object.values(d.pakanMap).sort((a, b) => b.totalQty - a.totalQty);
+
+                    let pakanRowsHtml = listPakan.map((p, pIdx) => {
+                        let safePakanId = `det_kap_${bIdx}_${pIdx}`;
+                        
+                        let detRows = p.rincian.map(r => {
+                            let tglArr = r.tanggal ? r.tanggal.split('-') : [];
+                            let tglStr = tglArr.length === 3 ? `${tglArr[2]}/${tglArr[1]}/${tglArr[0].substring(2)}` : r.tanggal;
+                            let relasiStr = r.relasi ? `(${r.relasi})` : '';
+                            return `
+                            <div style="display:flex; justify-content:space-between; font-size:10px; color:#64748b; padding:2px 0;">
+                                <span>• ${tglStr} ${relasiStr}</span>
+                                <span style="font-weight:600;">${nf.format(r.qty)} ${p.satuan}</span>
+                            </div>`;
+                        }).join('');
+
+                        return `
+                        <div style="margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #f1f5f9;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="let el=document.getElementById('${safePakanId}'); if(el) el.classList.toggle('hidden');">
+                                <div>
+                                    <strong style="font-size:13px; color:#1e293b;">${p.pakan}</strong>
+                                    <div style="font-size:10px; color:#64748b; margin-top:2px;">
+                                        <span style="background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px; font-weight:bold; font-size:9px;">${p.countTrx}x kiriman</span>
+                                        <span style="color:#94a3b8; font-size:9px; margin-left:4px;">(klik untuk rincian)</span>
+                                    </div>
+                                </div>
+                                <div style="text-align:right;">
+                                    <span style="font-weight:bold; color:#1565c0; font-size:14px;">${nf.format(p.totalQty)}</span>
+                                    <span style="font-size:10px; color:#64748b;">${p.satuan}</span>
+                                </div>
+                            </div>
+                            <div id="${safePakanId}" class="hidden" style="margin-top:6px; padding:6px 10px; background:#f8fafc; border-radius:6px; border-left:3px solid #38bdf8;">
+                                ${detRows}
+                            </div>
+                        </div>`;
                     }).join('');
 
-                    html += `<div class="rekap-card" style="border-left: 4px solid #4A90E2; padding: 0; overflow: hidden; margin-bottom: 12px;">
-                      <div style="background:#e3f2fd; padding:12px; display:flex; justify-content:space-between; align-items:center;">
-                          <div><strong style="font-size:14px; color:#1565c0;">${blok}</strong></div>
-                          <div style="font-size:14px; font-weight:bold; color:#1565c0;">${nf.format(d.total)} Kg</div>
-                      </div>
-                      <div style="padding:12px;">${rincianHtml}</div>
-                  </div>`;
+                    html += `
+                    <div class="rekap-card" style="border-left: 4px solid #1565c0; padding: 0; overflow: hidden; margin-bottom: 12px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                        <div style="background:#e3f2fd; padding:10px 14px; display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <strong style="font-size:14px; color:#1565c0;">${blok}</strong>
+                                <span style="font-size:10px; margin-left:6px; background:#fff; padding:2px 6px; border-radius:10px; font-weight:bold; color:#1976d2;">${listPakan.length} pakan • ${d.countTrx} kiriman</span>
+                            </div>
+                            <div style="font-size:14px; font-weight:bold; color:#1565c0;">${nf.format(d.total)} Kg</div>
+                        </div>
+                        <div style="padding:12px; background:#fff;">${pakanRowsHtml}</div>
+                    </div>`;
                 });
             }
-            document.getElementById('list-kapling').innerHTML = html;
+            listContainer.innerHTML = html;
         }
 
         function switchTabStok(tab) {
@@ -5453,6 +5621,9 @@
             document.querySelectorAll('.stok-view').forEach(v => v.classList.add('hidden'));
             document.getElementById('tab-stok-' + tab).classList.add('active');
             document.getElementById('view-stok-' + tab).classList.remove('hidden');
+            if (tab === 'laporan') {
+                renderLapKapling();
+            }
         }
 
         // ==========================================
