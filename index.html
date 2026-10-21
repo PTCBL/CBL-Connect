@@ -360,6 +360,28 @@
             border-top: 1px solid #DBE4C9;
         }
 
+        .driver-bottom-nav {
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            background: #0f172a !important;
+            box-shadow: 0 -2px 15px rgba(0, 0, 0, 0.25) !important;
+            display: flex !important;
+            justify-content: space-around !important;
+            padding: 10px 0 !important;
+            padding-bottom: env(safe-area-inset-bottom) !important;
+            z-index: 1000 !important;
+            border-top: 1px solid #1e293b;
+        }
+
+        .bottom-nav.hidden,
+        .driver-bottom-nav.hidden,
+        #main-nav.hidden,
+        #driver-nav.hidden {
+            display: none !important;
+        }
+
         .nav-item {
             display: flex;
             flex-direction: column;
@@ -989,7 +1011,7 @@
                 background: #f4f7f0;
             }
 
-            .bottom-nav {
+            #main-nav {
                 position: fixed !important;
                 top: 0 !important;
                 left: 0 !important;
@@ -1007,7 +1029,7 @@
                 padding-top: 25px !important;
             }
 
-            .bottom-nav::before {
+            #main-nav::before {
                 content: "CBL";
                 display: block;
                 text-align: center;
@@ -1019,6 +1041,25 @@
                 border-bottom: 1px dashed #DBE4C9;
                 width: 60%;
                 margin-left: 20%;
+            }
+
+            .driver-bottom-nav {
+                position: fixed !important;
+                bottom: 0 !important;
+                left: 50% !important;
+                transform: translateX(-50%) !important;
+                max-width: 650px !important;
+                width: 100% !important;
+                background: #0f172a !important;
+                border-radius: 16px 16px 0 0 !important;
+                z-index: 5000 !important;
+            }
+
+            #main-nav.hidden,
+            .bottom-nav.hidden,
+            .driver-bottom-nav.hidden,
+            #driver-nav.hidden {
+                display: none !important;
             }
 
             .nav-item {
@@ -3372,6 +3413,328 @@
             </div>
         </div>
 
+                <!-- ================= PORTAL DRIVER & KERNEK ================= -->
+        <div id="page-driver-portal" class="container hidden" style="max-width: 650px; margin: 0 auto; padding-bottom: 90px;">
+            <!-- Header Driver -->
+            <div style="background: linear-gradient(135deg, #1e40af, #2563eb); color: white; border-radius: 14px; padding: 18px; margin-bottom: 16px; box-shadow: 0 4px 15px rgba(37,99,235,0.25);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.85;">Portal Logistik Pengiriman</div>
+                        <h2 id="driver-portal-user-name" style="margin: 3px 0 0 0; font-size: 20px; font-weight: 800; color: #ffffff;">Halo, Driver</h2>
+                    </div>
+                    <span id="driver-portal-role-badge" style="background: rgba(255,255,255,0.2); backdrop-filter: blur(4px); font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.3);">
+                        Sopir
+                    </span>
+                </div>
+            </div>
+
+            <!-- TAB 1: ORDER KIRIM (driver-view-order) -->
+            <div id="driver-view-order" class="driver-tab-content">
+                <!-- Box Pilihan Armada & Kernek (1-Tap Pill / Chip Buttons) -->
+                <div id="driver-pill-selectors-box" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.03);">
+                    <!-- Pilihan Armada -->
+                    <div style="margin-bottom: 10px;">
+                        <span style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 6px;">Pilih Armada Hari Ini:</span>
+                        <div style="display:flex; gap: 8px;">
+                            <button type="button" class="btn-pill-armada" data-armada="D 8070 UE" onclick="selectArmadaPill('D 8070 UE')" style="flex:1; padding: 9px 8px; font-size: 11px; font-weight: 800; border-radius: 8px; border: 1px solid #1d4ed8; background: #2563eb; color: white; cursor: pointer; transition: all 0.2s; display:inline-flex; align-items:center; justify-content:center; gap:6px;">
+                                <span class="material-symbols-outlined" style="font-size:16px;">local_shipping</span> D 8070 UE
+                            </button>
+                            <button type="button" class="btn-pill-armada" data-armada="D 8142 UK" onclick="selectArmadaPill('D 8142 UK')" style="flex:1; padding: 9px 8px; font-size: 11px; font-weight: 800; border-radius: 8px; border: 1px solid #cbd5e1; background: #f1f5f9; color: #475569; cursor: pointer; transition: all 0.2s; display:inline-flex; align-items:center; justify-content:center; gap:6px;">
+                                <span class="material-symbols-outlined" style="font-size:16px;">local_shipping</span> D 8142 UK
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Pilihan Kernek / Sopir Pasangan -->
+                    <div id="driver-partner-selection-area">
+                        <span id="label-pilih-partner" style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 6px;">Pilih Kernek Pendamping:</span>
+                        <div id="driver-kernek-chips" style="display: flex; flex-wrap: wrap; gap: 4px;">
+                            <!-- Generated chips -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Box Trip Sedang Berjalan (Tampil saat sedang jalan antar pakan) -->
+                <div id="driver-active-trip-box" class="hidden"></div>
+
+                <!-- Antrean Kartu DO per-Konsumen -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+                    <h4 style="margin: 0; font-size: 13px; font-weight: 800; color: #1e293b;">Daftar DO Menunggu Diantar</h4>
+                    <button type="button" onclick="refreshAntreanDriver()" style="background: none; border: none; color: #2563eb; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 2px;">
+                        <span class="material-symbols-outlined" style="font-size: 14px;">refresh</span> Segarkan
+                    </button>
+                </div>
+                <div id="driver-order-cards-list"></div>
+            </div>
+
+            <!-- TAB 2: DOMPET SAYA (driver-view-dompet) -->
+            <div id="driver-view-dompet" class="driver-tab-content hidden">
+                <!-- Kartu Saldo Utama (Dompet Driver) -->
+                <div style="background: linear-gradient(135deg, #15803d, #16a34a); color: white; border-radius: 16px; padding: 18px 16px; margin-bottom: 16px; box-shadow: 0 4px 15px rgba(22,163,74,0.25);">
+                    <!-- Rincian Kecil di Bagian Atas: Upah Muat & Estimasi Upah Ngantar -->
+                    <div style="background: rgba(0, 0, 0, 0.15); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 11px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span style="opacity: 0.9; display: inline-flex; align-items: center; gap: 5px;">
+                                <span class="material-symbols-outlined" style="font-size: 14px;">fitness_center</span> Upah Muat Pakan (10 x kg):
+                            </span>
+                            <strong id="dompet-upah-muat" style="font-size: 12px; font-weight: 700;">Rp 0</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="opacity: 0.9; display: inline-flex; align-items: center; gap: 5px;">
+                                <span class="material-symbols-outlined" style="font-size: 14px;">local_shipping</span> Estimasi Upah ngantar:
+                            </span>
+                            <strong id="dompet-estimasi-ngantar" style="font-size: 12px; font-weight: 700;">Rp 0</strong>
+                        </div>
+                    </div>
+
+                    <!-- Total Upah Gede di Tengah -->
+                    <div style="text-align: center; padding: 4px 0 6px 0;">
+                        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; opacity: 0.9; font-weight: 700; margin-bottom: 4px;">
+                            Total Upah
+                        </div>
+                        <h2 id="dompet-total-upah" style="margin: 0; font-size: 32px; font-weight: 900; letter-spacing: -0.5px; color: #ffffff;">
+                            Rp 0
+                        </h2>
+                    </div>
+
+                    <!-- Hidden legacy IDs for fallback -->
+                    <span id="dompet-upah-otot" style="display:none;"></span>
+                    <span id="dompet-total-bersih" style="display:none;"></span>
+                </div>
+
+                <!-- Kartu Tabungan Jarak (Semi-Transparan) -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.03);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+                        <span style="font-size: 13px; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 6px;">
+                            <span class="material-symbols-outlined" style="color: #d97706; font-size: 18px;">savings</span> Rincian Tabungan Jarak
+                        </span>
+                        <span style="font-size: 10px; font-weight: 700; background: #fef3c7; color: #b45309; padding: 2px 8px; border-radius: 12px;">Periode Berjalan</span>
+                    </div>
+
+                    <div style="background: #f8fafc; border-radius: 8px; padding: 12px; font-size: 11px; color: #475569; margin-bottom: 10px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom: 5px;">
+                            <span>Total Kas Toples Bersama:</span>
+                            <strong id="dompet-pool-toples" style="color: #1e293b;">Rp 0</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom: 5px;">
+                            <span>Total Jarak Tempuh Anda:</span>
+                            <strong id="dompet-km-saya" style="color: #2563eb;">0 Km</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; border-top: 1px dashed #cbd5e1; padding-top: 6px; margin-top: 6px;">
+                            <span>Estimasi Bagian Jarak Anda:</span>
+                            <strong id="dompet-estimasi-jarak" style="color: #15803d; font-size: 13px;">Rp 0</strong>
+                        </div>
+                    </div>
+                    <small style="color: #64748b; font-size: 10px; display: block; line-height: 1.4;">
+                        *Tabungan jarak dicairkan bersamaan di akhir siklus periode mingguan/bulanan oleh admin kantor.
+                    </small>
+                </div>
+
+                <!-- Riwayat Pengantaran -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.03); margin-bottom: 15px;">
+                    <div style="background: #f8fafc; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-size: 12px; font-weight: 800; color: #1e293b;">
+                        Riwayat Pengantaran Hari Ini
+                    </div>
+                    <div style="max-height: 250px; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                            <thead style="background: #f1f5f9;">
+                                <tr>
+                                    <th style="padding: 8px 6px; text-align: left;">Konsumen</th>
+                                    <th style="padding: 8px 6px; text-align: right;">Muatan</th>
+                                    <th style="padding: 8px 6px; text-align: right;">Jarak</th>
+                                    <th style="padding: 8px 6px; text-align: center;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="driver-riwayat-tbody">
+                                <tr><td colspan="4" style="text-align:center; padding:20px; color:#94a3b8;">Memuat riwayat...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tombol Cetak Slip Klaim -->
+                <button type="button" onclick="cetakSlipKlaimDriver()" style="width: 100%; background: #ffffff; border: 1px solid #cbd5e1; color: #334155; padding: 11px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                    <span class="material-symbols-outlined" style="font-size: 16px;">print</span> Cetak Bukti Klaim Insentif
+                </button>
+            </div>
+
+            <!-- MODAL SELEBRASI DOPAMINE (+Rp MASUK KE DOMPET) -->
+            <div id="driver-celebration-modal" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:9999; display:flex; justify-content:center; align-items:center; padding:15px; box-sizing:border-box;">
+                <div style="background:#ffffff; border-radius:18px; max-width:380px; width:100%; padding:25px 20px; text-align:center; box-shadow:0 12px 30px rgba(0,0,0,0.25);">
+                    <div style="width:64px; height:64px; background:#dcfce7; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 12px auto;">
+                        <span class="material-symbols-outlined" style="font-size:38px; color:#16a34a;">celebration</span>
+                    </div>
+                    <h3 style="margin:0 0 6px 0; font-size:18px; font-weight:800; color:#1e293b;">Alhamdulillah! Pakan Terkirim!</h3>
+                    <p style="margin:0 0 14px 0; font-size:12px; color:#64748b;">Pengantaran ke <b id="celeb-nama-peternak" style="color:#1e3a8a;">-</b> telah selesai.</p>
+
+                    <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px; margin-bottom:16px;">
+                        <span style="font-size:10px; color:#64748b; text-transform:uppercase; font-weight:700;">Upah Muat Pakan (10 x kg) Ditambahkan</span>
+                        <div id="celeb-nominal-uang" style="font-size:24px; font-weight:800; color:#16a34a; margin-top:2px;">+Rp 0</div>
+                        <div id="celeb-km-poin" style="font-size:11px; color:#2563eb; margin-top:4px; font-weight:600;">+0 Km ditambahkan ke Tabungan Jarak</div>
+                    </div>
+
+                    <button type="button" onclick="tutupModalSelebrasi()" style="width:100%; background:#2563eb; color:white; border:none; padding:12px; border-radius:10px; font-size:13px; font-weight:800; cursor:pointer;">
+                        Lanjut Order Berikutnya 🚀
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= HALAMAN MONITORING TRIP & INSENTIF (SISI ADMIN) ================= -->
+        <div id="page-trip" class="container hidden">
+            <h2 style="display:flex; justify-content:center; align-items:center; gap:8px; color:#1e40af;">
+                <span class="material-symbols-outlined" style="font-size:28px; color:#2563eb;">local_shipping</span> Monitoring Pengiriman & Insentif
+            </h2>
+            <div class="sub-header" style="margin-bottom:15px;">Pantau Armada, Pengiriman Truk & Rekapitulasi Insentif Karyawan</div>
+
+            <!-- Tabs Admin -->
+            <div style="display:flex; gap:8px; margin-bottom:15px; border-bottom:2px solid #e2e8f0; padding-bottom:8px; overflow-x:auto;">
+                <button id="tab-adm-antrean" class="btn-tab-trip active" onclick="switchAdminTripTab('antrean')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 14px; font-weight:600; font-size:12px; border-radius:10px; border:none; cursor:pointer; background:#2563eb; color:white;">
+                    <span class="material-symbols-outlined" style="font-size:18px;">list_alt</span> Antrean DO & Muat Truk
+                </button>
+                <button id="tab-adm-monitor" class="btn-tab-trip" onclick="switchAdminTripTab('monitor')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 14px; font-weight:600; font-size:12px; border-radius:10px; border:none; cursor:pointer; background:#f1f5f9; color:#475569;">
+                    <span class="material-symbols-outlined" style="font-size:18px;">equalizer</span> Live Monitoring & Barometer
+                </button>
+                <button id="tab-adm-payroll" class="btn-tab-trip" onclick="switchAdminTripTab('payroll')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 14px; font-weight:600; font-size:12px; border-radius:10px; border:none; cursor:pointer; background:#f1f5f9; color:#475569;">
+                    <span class="material-symbols-outlined" style="font-size:18px;">payments</span> Rekapitulasi Gaji & Tutup Periode
+                </button>
+            </div>
+
+            <!-- TAB 1: ANTREAN DO & MUAT TRUK -->
+            <div id="view-adm-antrean" class="view-adm-content">
+                <div style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 2px 4px rgba(0,0,0,0.03);">
+                    <div style="background:#f8fafc; padding:12px 14px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <span style="font-size:13px; font-weight:800; color:#1e293b;">Daftar Pesanan Konsumen Menunggu Pengiriman</span>
+                            <div style="font-size:11px; color:#64748b;">Orderan besar dapat langsung diberangkatkan menggunakan Truk oleh Admin di sini.</div>
+                        </div>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; font-size:11px;">
+                            <thead style="background:#f1f5f9;">
+                                <tr>
+                                    <th style="padding:10px; text-align:left;">Konsumen / Relasi</th>
+                                    <th style="padding:10px; text-align:left;">Rincian Pakan</th>
+                                    <th style="padding:10px; text-align:right;">Sisa (Kg)</th>
+                                    <th style="padding:10px; text-align:left;">Alamat</th>
+                                    <th style="padding:10px; text-align:center;">Aksi Pengiriman</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-antrean-tbody">
+                                <tr><td colspan="5" style="text-align:center; padding:25px; color:#94a3b8;">Memuat data antrean DO...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: LIVE MONITORING & BAROMETER -->
+            <div id="view-adm-monitor" class="view-adm-content hidden">
+                <!-- Barometer 100% Stacked Bar -->
+                <div id="admin-barometer-container"></div>
+                <!-- Kartu Armada di Jalan -->
+                <h4 style="margin:15px 0 10px 0; font-size:13px; font-weight:800; color:#1e293b;">Armada Berangkat & Selesai Hari Ini</h4>
+                <div id="admin-monitoring-cards"></div>
+            </div>
+
+            <!-- TAB 3: REKAPITULASI GAJI & TUTUP PERIODE -->
+            <div id="view-adm-payroll" class="view-adm-content hidden">
+                <div style="background:#ffffff; padding:16px; border-radius:12px; border:1px solid #e2e8f0; margin-bottom:15px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                        <div>
+                            <h4 style="margin:0; font-size:14px; font-weight:800; color:#1e293b;">Rekapitulasi Upah & Insentif Karyawan</h4>
+                            <p style="margin:3px 0 0 0; font-size:11px; color:#64748b;">Otot Pick-Up (Rp 10/kg), Subsidi Toples Jarak (Rp 5/kg), & Muat Truk (Rp 15/kg)</p>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button type="button" onclick="tutupPeriodeDanCairkanToples()" style="background:#dc2626; color:white; border:none; padding:8px 14px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(220,38,38,0.25);">
+                                <span class="material-symbols-outlined" style="font-size:15px;">lock_reset</span> Cairkan & Tutup Periode
+                            </button>
+                            <button type="button" onclick="window.print()" style="background:#15803d; color:white; border:none; padding:8px 14px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(21,128,61,0.25);">
+                                <span class="material-symbols-outlined" style="font-size:15px;">print</span> Cetak Rekap
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; font-size:11px;">
+                            <thead style="background:#1e40af; color:white;">
+                                <tr>
+                                    <th style="padding:10px 8px; text-align:left;">Nama Karyawan</th>
+                                    <th style="padding:10px 6px; text-align:left;">Role</th>
+                                    <th style="padding:10px 8px; text-align:right;">Total Muat (Kg)</th>
+                                    <th style="padding:10px 8px; text-align:right;">Upah Otot</th>
+                                    <th style="padding:10px 8px; text-align:right;">Porsi Jarak</th>
+                                    <th style="padding:10px 8px; text-align:right;">Muat/Solar Truk</th>
+                                    <th style="padding:10px 8px; text-align:right; font-weight:800; background:#1e3a8a;">Total Bersih</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-payroll-tbody">
+                                <tr><td colspan="7" style="text-align:center; padding:25px; color:#94a3b8;">Memuat data insentif...</td></tr>
+                            </tbody>
+                            <tfoot style="background:#f1f5f9; font-weight:800; border-top:2px solid #cbd5e1;">
+                                <tr>
+                                    <td colspan="6" style="padding:10px 8px; text-align:right;">GRAND TOTAL PERIODE:</td>
+                                    <td id="admin-payroll-tfoot" style="padding:10px 8px; text-align:right; color:#15803d; font-size:13px;">Rp 0</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL FORM MUAT TRUK OLEH ADMIN -->
+            <div id="modal-muat-truk" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9999; display:flex; justify-content:center; align-items:center; padding:15px; box-sizing:border-box;">
+                <div style="background:#ffffff; border-radius:14px; max-width:480px; width:100%; max-height:90vh; overflow-y:auto; padding:20px; box-sizing:border-box; box-shadow:0 10px 25px rgba(0,0,0,0.2);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:10px; margin-bottom:14px;">
+                        <h3 style="margin:0; font-size:16px; font-weight:800; color:#1e293b; display:flex; align-items:center; gap:6px;">
+                            <span class="material-symbols-outlined" style="color:#ea580c;">local_shipping</span> Berangkatkan Muatan Truk
+                        </h3>
+                        <button type="button" onclick="tutupModalMuatTruk()" style="background:transparent; border:none; font-size:24px; cursor:pointer; color:#64748b;">&times;</button>
+                    </div>
+
+                    <div style="background:#fff7ed; padding:12px; border-radius:8px; border:1px solid #fed7aa; margin-bottom:14px; font-size:11px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                            <span style="color:#7c2d12;">Tujuan Konsumen:</span>
+                            <strong id="modal-truk-relasi" style="color:#9a3412;">-</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between;">
+                            <span style="color:#7c2d12;">Sisa Total Order:</span>
+                            <strong id="modal-truk-sisa" style="color:#9a3412;">0 Kg</strong>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:11px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Rincian Muatan Truk per Jenis Pakan (Kg) <span style="color:red;">*</span></label>
+                        <div id="modal-truk-items-container" style="margin-bottom:8px;"></div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px 12px;">
+                            <span style="font-size:11px; font-weight:700; color:#475569;">Total Dimuat ke Truk:</span>
+                            <strong style="font-size:14px; font-weight:800; color:#ea580c;"><span id="modal-truk-total-display">0</span> Kg</strong>
+                        </div>
+                        <input type="hidden" id="modal-truk-input-kg" value="0">
+                    </div>
+
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:11px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Pekerja Gudang yang Ikut Muat & Bongkar di Lokasi (Upah Bersih Rp 15/kg dibagi rata) <span style="color:red;">*</span></label>
+                        <div id="modal-truk-kru-list" style="max-height:150px; overflow-y:auto; border:1px solid #cbd5e1; border-radius:8px; padding:8px; background:#f8fafc; display:flex; flex-wrap:wrap; gap:4px;"></div>
+                    </div>
+
+                    <div style="background:#eff6ff; padding:10px; border-radius:8px; border:1px solid #bfdbfe; font-size:11px; color:#1e40af; margin-bottom:16px;">
+                        💡 Supir Truk otomatis mendapatkan uang jalan solar <b>Rp 100.000</b>.
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap:8px;">
+                        <button type="button" onclick="tutupModalMuatTruk()" style="padding:9px 16px; font-size:12px; font-weight:700; border:1px solid #cbd5e1; background:#f1f5f9; color:#475569; border-radius:8px; cursor:pointer;">Batal</button>
+                        <button type="button" id="btn-simpan-truk" onclick="simpanKeberangkatanTruk()" style="padding:9px 20px; font-size:12px; font-weight:800; border:none; background:#ea580c; color:white; border-radius:8px; cursor:pointer; box-shadow:0 2px 6px rgba(234,88,12,0.3);">
+                            Simpan & Berangkatkan Truk
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
         <div id="page-piutang" class="container hidden">
             <h2 style="display:flex; justify-content:center; align-items:center; gap:8px;">
                 <span class="material-symbols-outlined" style="font-size:26px;">receipt_long</span> Akun Piutang
@@ -3969,6 +4332,49 @@
             </div>
         </div>
 
+        <!-- MODAL PILIH PETUGAS MUAT (AMBIL MANDIRI DI GUDANG) -->
+        <div id="modal-muat-ambil-mandiri" class="hidden"
+            style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.65); z-index:9999; display:flex; justify-content:center; align-items:center; padding:15px; box-sizing:border-box; backdrop-filter: blur(2px);">
+            <div style="background:#fff; border-radius:16px; width:100%; max-width:380px; overflow:hidden; box-shadow:0 12px 30px rgba(0,0,0,0.25);">
+                <div style="background:linear-gradient(135deg, #ea580c, #c2410c); padding:18px 15px; text-align:center; color:white;">
+                    <div style="background:white; width:46px; height:46px; border-radius:50%; display:flex; justify-content:center; align-items:center; margin:0 auto 8px;">
+                        <span class="material-symbols-outlined" style="font-size:26px; color:#ea580c;">storefront</span>
+                    </div>
+                    <h3 style="margin:0; font-size:16px; font-weight:800;">Diambil Mandiri di Gudang</h3>
+                    <div style="font-size:11px; opacity:0.9; margin-top:2px;">Konsumen bawa armada sendiri</div>
+                </div>
+
+                <div style="padding:15px; background:#fff;">
+                    <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:10px; margin-bottom:12px; font-size:11px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                            <span style="color:#7c2d12;">Total Muatan:</span>
+                            <strong id="label-ambil-total-kg" style="color:#9a3412;">0 Kg</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between;">
+                            <span style="color:#7c2d12;">Tarif Insentif Muat:</span>
+                            <strong style="color:#15803d;">Rp 15 / Kg (<span id="label-ambil-total-upah">Rp 0</span>)</strong>
+                        </div>
+                    </div>
+
+                    <label style="font-size:11px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">
+                        Pilih Petugas yang Bantu Muat ke Kendaraan:
+                    </label>
+                    <div id="ambil-petugas-checkboxes" style="max-height:160px; overflow-y:auto; border:1px solid #cbd5e1; border-radius:8px; padding:8px; background:#f8fafc; display:flex; flex-wrap:wrap; gap:4px; margin-bottom:14px;">
+                        <!-- Generated by JS -->
+                    </div>
+
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                        <button type="button" class="btn-submit" onclick="konfirmasiMuatAmbilMandiri(true)" style="margin:0; background:#ea580c; padding:11px; font-size:13px; font-weight:800;">
+                            Simpan & Catat Insentif Muat
+                        </button>
+                        <button type="button" onclick="konfirmasiMuatAmbilMandiri(false)" style="margin:0; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:9px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer;">
+                            Lewati (Konsumen Muat Sendiri / Tanpa Upah)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="bottom-nav hidden" id="main-nav">
             <div class="nav-item active" id="nav-input" onclick="pindahMenu('input')">
                 <span class="material-symbols-outlined nav-icon">edit_document</span><span>Laporan</span>
@@ -3997,6 +4403,16 @@
             </div>
         </div>
 
+        <!-- BOTTOM NAV KHUSUS SUPIR & KERNEK -->
+        <div class="driver-bottom-nav hidden" id="driver-nav">
+            <div class="nav-item active" id="nav-driver-order" onclick="switchDriverPortalTab('order')" style="color:#38bdf8;">
+                <span class="material-symbols-outlined nav-icon">local_shipping</span><span>Order Kirim</span>
+            </div>
+            <div class="nav-item" id="nav-driver-dompet" onclick="switchDriverPortalTab('dompet')" style="color:#94a3b8;">
+                <span class="material-symbols-outlined nav-icon">account_balance_wallet</span><span>Dompet Saya</span>
+            </div>
+        </div>
+
         <!-- WADAH POP-UP SUB-MENU -->
         <div id="submenu-rekap" class="nav-submenu">
             <div id="sub-rekap-harian" class="submenu-item" onclick="pindahMenu('rekap')">
@@ -4007,6 +4423,9 @@
             </div>
             <div id="sub-rekap-panggul" class="submenu-item" onclick="pindahMenu('panggul')">
                 <span class="material-symbols-outlined" style="color:#1a5c40;">fitness_center</span> Upah Panggul
+            </div>
+            <div id="sub-rekap-trip" class="submenu-item" onclick="pindahMenu('trip')">
+                <span class="material-symbols-outlined" style="color:#2563eb;">local_shipping</span> Manajemen Trip & Insentif
             </div>
         </div>
 
@@ -4512,6 +4931,7 @@
         
         <script src="po_logic.js"></script>
         <script src="jurnal_logic.js"></script>
+        <script src="trip_logic.js"></script>
     <script>
         const APP_VERSION = "v5.9";
         if (localStorage.getItem('cbl_app_version') !== APP_VERSION) {
@@ -5413,6 +5833,58 @@ async function prosesAntreanBackground() {
             if (resPakan.ok) {
                 let payloads = payloadsToProcess;
                 await cekUpdateStatusPOLinked(payloads);
+
+                // 🔥 JIKA ADA AMBIL SENDIRI DI GUDANG: CATAT KE trip_pengiriman AGAR MASUK INSENTIF MUAT & BEBAS DARI ANTREAN SUPIR
+                for (let pl of payloads) {
+                    if (pl.isAmbilMandiri) {
+                        try {
+                            let totalKgAmbil = 0;
+                            let manifestItems = [];
+                            if (pl.items) {
+                                for (let pName in pl.items) {
+                                    let q = parseFloat(pl.items[pName]) || 0;
+                                    totalKgAmbil += q;
+                                    manifestItems.push({
+                                        relasi: pl.relasi || 'Umum',
+                                        pakan: pName,
+                                        qty: q
+                                    });
+                                }
+                            }
+                            let mapLoc = { '/pm': 'PM', '/spn': 'SPN', '/rph': 'RPH', '/kandang': 'PM', '/spn_kandang': 'SPN' };
+                            let cabangStr = mapLoc[pl.lokasi] || 'PM';
+
+                            let tripPayload = {
+                                tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
+                                cabang: cabangStr,
+                                armada: 'Ambil Mandiri',
+                                total_kg: totalKgAmbil,
+                                jarak_tempuh_km: 0,
+                                uang_jalan_sopir: 0,
+                                pekerja_muat_ids: pl.pekerjaMuatAmbilIds || [],
+                                status_trip: 'SELESAI',
+                                status_klaim: 'BELUM_KLAIM',
+                                catatan: pl.catatan || `Ambil Sendiri di Gudang - ${pl.relasi}`,
+                                manifest_items: manifestItems
+                            };
+
+                            await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman`, {
+                                method: 'POST',
+                                headers: {
+                                    'apikey': SUPA_ANON_KEY,
+                                    'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                                    'Content-Type': 'application/json',
+                                    'Prefer': 'return=minimal',
+                                    'x-pin-karyawan': currentLoggedPin
+                                },
+                                body: JSON.stringify(tripPayload)
+                            });
+                        } catch (errTrip) {
+                            console.error("Gagal catat trip ambil mandiri:", errTrip);
+                        }
+                    }
+                }
+
                 // 📡 Broadcast sinyal data baru ke seluruh perangkat online
                 if (typeof broadcastRealtimeUpdate === 'function') {
                     for (let pl of payloads) {
@@ -5538,7 +6010,6 @@ async function prosesAntreanBackground() {
 
         document.getElementById('login-screen').style.setProperty('display', 'none', 'important');
         document.getElementById('app-screen').classList.remove('hidden');
-        document.getElementById('main-nav').classList.remove('hidden');
 
         aturAksesMenu(user.role);
     } else {
@@ -5548,12 +6019,57 @@ async function prosesAntreanBackground() {
 
         // Fungsi baru untuk mengatur visibilitas menu berdasarkan Role dari Supabase
 function aturAksesMenu(role) {
+    // Navigasi Khusus Supir / Kernek vs Navigasi Kantor/Pabrik
+    let drvNav = document.getElementById('driver-nav');
+    let mainNav = document.getElementById('main-nav');
+
+    if (role === 'sopir' || role === 'kernek') {
+        if (mainNav) {
+            mainNav.classList.add('hidden');
+            mainNav.style.setProperty('display', 'none', 'important');
+        }
+        if (drvNav) {
+            drvNav.classList.remove('hidden');
+            drvNav.style.removeProperty('display');
+        }
+        document.querySelectorAll('.container').forEach(p => p.classList.add('hidden'));
+        let pageDriver = document.getElementById('page-driver-portal');
+        if (pageDriver) pageDriver.classList.remove('hidden');
+
+        // Update Header Driver Portal (Nama & Role Badge)
+        let elName = document.getElementById('driver-portal-user-name');
+        let elBadge = document.getElementById('driver-portal-role-badge');
+        if (elName) elName.innerText = `Halo, ${activeUser || 'Driver'}`;
+        if (elBadge) {
+            let roleDisplay = (role === 'kernek') ? 'Kernek' : (role === 'sopir' ? 'Sopir' : role);
+            elBadge.innerText = roleDisplay;
+        }
+
+        if (typeof initDriverPortal === 'function') {
+            initDriverPortal();
+        }
+        return;
+    } else {
+        if (mainNav) {
+            mainNav.classList.remove('hidden');
+            mainNav.style.removeProperty('display');
+        }
+        if (drvNav) {
+            drvNav.classList.add('hidden');
+            drvNav.style.setProperty('display', 'none', 'important');
+        }
+        let pageDriver = document.getElementById('page-driver-portal');
+        if (pageDriver) pageDriver.classList.add('hidden');
+    }
+
     // 1. Gembok semua menu khusus terlebih dahulu (Default State)
     document.getElementById('nav-rekap-group').classList.add('hidden');
     document.getElementById('nav-analytics').classList.add('hidden');
     document.getElementById('nav-piutang').classList.add('hidden');
     document.getElementById('sub-rekap-harian').classList.add('hidden');
     document.getElementById('sub-rekap-giling').classList.add('hidden');
+    if (document.getElementById('sub-rekap-panggul')) document.getElementById('sub-rekap-panggul').classList.add('hidden');
+    if (document.getElementById('sub-rekap-trip')) document.getElementById('sub-rekap-trip').classList.add('hidden');
 
     // 2. Buka gembok sesuai 'role' yang diterima dari database Supabase
     if (role === 'admin') {
@@ -5561,6 +6077,8 @@ function aturAksesMenu(role) {
         document.getElementById('nav-rekap-group').classList.remove('hidden');
         document.getElementById('sub-rekap-harian').classList.remove('hidden');
         document.getElementById('sub-rekap-giling').classList.remove('hidden');
+        if (document.getElementById('sub-rekap-panggul')) document.getElementById('sub-rekap-panggul').classList.remove('hidden');
+        if (document.getElementById('sub-rekap-trip')) document.getElementById('sub-rekap-trip').classList.remove('hidden');
         
         document.getElementById('nav-analytics').classList.remove('hidden');
         document.getElementById('nav-piutang').classList.remove('hidden');
@@ -5569,6 +6087,7 @@ function aturAksesMenu(role) {
         // Pak Agus: Hanya Rekap Harian
         document.getElementById('nav-rekap-group').classList.remove('hidden');
         document.getElementById('sub-rekap-harian').classList.remove('hidden');
+        if (document.getElementById('sub-rekap-panggul')) document.getElementById('sub-rekap-panggul').classList.remove('hidden');
     }
     else if (role === 'petugas SPN') {
         // Petugas SPN (Zulfi): Hanya Rekap Giling
@@ -5582,6 +6101,7 @@ function aturAksesMenu(role) {
         document.getElementById('sub-rekap-harian').classList.remove('hidden');
         document.getElementById('nav-piutang').classList.remove('hidden');
         document.getElementById('nav-analytics').classList.remove('hidden'); // Analisa dibuka
+        if (document.getElementById('sub-rekap-trip')) document.getElementById('sub-rekap-trip').classList.remove('hidden');
         
         // HIDE MENU INPUT DAN STOK
         document.getElementById('nav-input').classList.add('hidden');
@@ -5591,6 +6111,7 @@ function aturAksesMenu(role) {
         // Petugas Lapangan Lainnya
         document.getElementById('nav-rekap-group').classList.remove('hidden');
         document.getElementById('sub-rekap-harian').classList.remove('hidden');
+        if (document.getElementById('sub-rekap-trip')) document.getElementById('sub-rekap-trip').classList.remove('hidden');
     }
 
     // 3. Jalankan fungsi bawaan sistem setelah menu siap
@@ -5620,8 +6141,14 @@ function aturAksesMenu(role) {
                 return;
             }
             if (menu === 'rekap' && !navigator.onLine && rawMasterGlobal.length === 0) { alert("⚠️ Menu Dashboard membutuhkan koneksi internet untuk tarik data pertama kali."); return; }
-            document.querySelectorAll('.container').forEach(p => p.classList.add('hidden')); document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            document.getElementById('page-' + menu).classList.remove('hidden'); document.getElementById('nav-' + menu).classList.add('active'); tutupKeyboard();
+            document.querySelectorAll('.container').forEach(p => p.classList.add('hidden')); 
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            let targetPage = document.getElementById('page-' + menu);
+            if (targetPage) targetPage.classList.remove('hidden'); 
+            let targetNav = document.getElementById('nav-' + menu);
+            if (targetNav) targetNav.classList.add('active'); 
+            tutupKeyboard();
+
             if (menu === 'po') { document.getElementById('po-tanggal').valueAsDate = new Date(); muatDaftarPO('MENUNGGU'); }
             if (menu === 'rekap') tarikDataRekapDB(false);
             if (menu === 'analytics' && !cacheDataGlobal) tarikDataGlobal(false);
@@ -5629,19 +6156,33 @@ function aturAksesMenu(role) {
             if (menu === 'stok') tarikDataStokPWA();
             if (menu === 'jurnal') initTanggalJurnal();
             if (menu === 'giling') {
+                let rekapGroup = document.getElementById('nav-rekap-group');
+                if (rekapGroup) rekapGroup.classList.add('active');
                 let now = new Date(); document.getElementById('giling_end').valueAsDate = now;
                 let start = new Date(); start.setDate(now.getDate() - 6);
                 document.getElementById('giling_start').valueAsDate = start;
 
                 // TRIGGER TARIK DATA OTOMATIS (MODE SILENT)
                 tarikDataGiling(true);
-            } // <--- INI DIA KURUNG KURAWAL YANG TADI HILANG!
+            }
 
             if (menu === 'panggul') {
+                let rekapGroup = document.getElementById('nav-rekap-group');
+                if (rekapGroup) rekapGroup.classList.add('active');
                 let t = new Date();
                 document.getElementById('panggul_bulan').value = t.getMonth() + 1;
                 document.getElementById('panggul_tahun').value = t.getFullYear();
                 tarikDataPanggul(true);
+            }
+
+            if (menu === 'trip') {
+                let rekapGroup = document.getElementById('nav-rekap-group');
+                if (rekapGroup) rekapGroup.classList.add('active');
+                if (typeof initModulTripAdmin === 'function') {
+                    initModulTripAdmin();
+                } else if (typeof initModulTrip === 'function') {
+                    initModulTrip();
+                }
             }
         } // <--- Dan ini penutup akhir fungsi pindahMenu(menu)
 
@@ -9631,6 +10172,113 @@ function renderLiveStokDiInput() {
         }
         function prosesOngkirAmbil() {
             document.getElementById('modal-ongkir').classList.add('hidden');
+            bukaModalMuatAmbilMandiri();
+        }
+
+        async function bukaModalMuatAmbilMandiri() {
+            let grandTotalKg = 0;
+            let itemsDetail = [];
+            if (typeof currentItems !== 'undefined') {
+                currentItems.forEach(function (item, index) {
+                    let el = document.getElementById('qty-' + index);
+                    if (el) {
+                        let qty = parseFloat(el.getAttribute('data-total')) || 0;
+                        if (qty > 0) {
+                            grandTotalKg += qty;
+                            itemsDetail.push({ pakan: item.nama, qty: qty });
+                        }
+                    }
+                });
+            }
+
+            let nf = new Intl.NumberFormat('id-ID');
+            let totalUpah = grandTotalKg * 15; // Rp 15 / kg
+
+            let elKg = document.getElementById('label-ambil-total-kg');
+            let elUpah = document.getElementById('label-ambil-total-upah');
+            if (elKg) elKg.innerText = `${nf.format(grandTotalKg)} Kg`;
+            if (elUpah) elUpah.innerText = `Rp ${nf.format(totalUpah)}`;
+
+            let container = document.getElementById('ambil-petugas-checkboxes');
+            if (container) {
+                container.innerHTML = `<div style="padding:10px; color:#64748b; font-size:11px;">Memuat daftar petugas...</div>`;
+                let users = (window.tripState && window.tripState.cachedUsers && window.tripState.cachedUsers.length > 0)
+                    ? window.tripState.cachedUsers
+                    : await (async () => {
+                        try {
+                            let res = await fetch(`${SUPA_URL}/rest/v1/users_app?select=id,nama,role`, {
+                                headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+                            });
+                            return res.ok ? await res.json() : [];
+                        } catch (e) { return []; }
+                    })();
+
+                // Daftar khusus staf operasional muat gudang yang diminta
+                const DAFTAR_TARGET_AMBIL = [
+                    { label: 'Pak Agus', query: 'agus', fallbackId: 3, role: 'Petugas PM' },
+                    { label: 'Hilman', query: 'hilman', fallbackId: 6, role: 'Sopir' },
+                    { label: 'Adi', query: 'adi', fallbackId: 7, role: 'Sopir' },
+                    { label: 'Enggeng', query: 'enggeng', fallbackId: 8, role: 'Kernek' },
+                    { label: 'Mang Oboy', query: 'oboy', fallbackId: 10, role: 'Kernek' },
+                    { label: 'Eja', query: 'eja', fallbackId: 11, role: 'Petugas Kandang PM' },
+                    { label: 'Wildan', query: 'wildan', fallbackId: 1, role: 'Admin' }
+                ];
+
+                let listPetugas = DAFTAR_TARGET_AMBIL.map(t => {
+                    let matched = users.find(u => (u.nama || '').toLowerCase().includes(t.query));
+                    return {
+                        id: matched ? matched.id : t.fallbackId,
+                        nama: t.label,
+                        namaLengkap: matched ? matched.nama : t.label,
+                        role: matched ? (matched.role || t.role) : t.role
+                    };
+                });
+
+                // Default KOSONG (tidak auto centang staf tertentu)
+                container.innerHTML = listPetugas.map(u => {
+                    return `
+                        <label style="display:inline-flex; align-items:center; gap:6px; background:#ffffff; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; margin:2px; user-select:none;">
+                            <input type="checkbox" class="cb-ambil-petugas" value="${u.id}" data-nama="${u.nama}" style="accent-color:#ea580c; cursor:pointer; width:15px; height:15px;">
+                            <span>${u.nama} <small style="color:#64748b; font-size:9px;">(${u.role})</small></span>
+                        </label>
+                    `;
+                }).join('');
+            }
+
+            window.tempAmbilTotalKg = grandTotalKg;
+            window.tempAmbilItemsDetail = itemsDetail;
+            document.getElementById('modal-muat-ambil-mandiri').classList.remove('hidden');
+        }
+
+        function konfirmasiMuatAmbilMandiri(adaInsentif) {
+            document.getElementById('modal-muat-ambil-mandiri').classList.add('hidden');
+            let kruIds = [];
+            let kruNames = [];
+
+            if (adaInsentif) {
+                let cbs = document.querySelectorAll('.cb-ambil-petugas:checked');
+                cbs.forEach(c => {
+                    kruIds.push(parseInt(c.value));
+                    kruNames.push(c.dataset.nama);
+                });
+
+                if (kruIds.length === 0) {
+                    let lanjut = confirm("Anda belum memilih petugas yang bantu muat. Lanjutkan tanpa insentif muat?");
+                    if (!lanjut) {
+                        document.getElementById('modal-muat-ambil-mandiri').classList.remove('hidden');
+                        return;
+                    }
+                }
+            }
+
+            window.tempAmbilMandiriData = {
+                isAmbil: true,
+                kruIds: kruIds,
+                kruNames: kruNames,
+                totalKg: window.tempAmbilTotalKg || 0,
+                itemsDetail: window.tempAmbilItemsDetail || []
+            };
+
             kirimData(window.tempKirimMode, true);
         }
 
@@ -9687,6 +10335,17 @@ function renderLiveStokDiInput() {
                 uangBongkar: document.getElementById('uangBongkar') ? document.getElementById('uangBongkar').checked : false,
                 po_id: window.currentLinkedPOId
             };
+
+            if (window.tempAmbilMandiriData && window.tempAmbilMandiriData.isAmbil) {
+                payload.isAmbilMandiri = true;
+                payload.pekerjaMuatAmbilIds = window.tempAmbilMandiriData.kruIds || [];
+                payload.pekerjaMuatAmbilNames = window.tempAmbilMandiriData.kruNames || [];
+                payload.itemsDetailAmbil = window.tempAmbilMandiriData.itemsDetail || [];
+                
+                let kruStr = payload.pekerjaMuatAmbilNames.length > 0 ? ` (Bantu Muat: ${payload.pekerjaMuatAmbilNames.join(', ')})` : ' (Muat Sendiri)';
+                payload.catatan = `[AMBIL SENDIRI DI GUDANG${kruStr}] ` + (payload.catatan || '');
+                window.tempAmbilMandiriData = null; // reset
+            }
 
             if (!payload.relasi) { alert("Relasi kosong!"); return; }
 
