@@ -412,6 +412,16 @@ async function initDriverPortal() {
 
     // Deteksi jika supir/kernek memiliki trip aktif yang sedang berjalan
     await cekTripAktifDriver();
+
+    // Heartbeat auto-sync setiap 12 detik saat berada di portal driver
+    if (!window._driverPortalInterval) {
+        window._driverPortalInterval = setInterval(() => {
+            let portalEl = document.getElementById('page-driver-portal');
+            if (portalEl && !portalEl.classList.contains('hidden')) {
+                cekTripAktifDriver();
+            }
+        }, 12000);
+    }
 }
 
 // Render Tombol Pill Pilihan Armada & Partner (Sopir / Kernek)
@@ -877,6 +887,18 @@ async function mulaiAntarKonsumen(safeKey, namaRelasi) {
 
         alert(`🚀 Berangkat! Anda sedang menuju ke ${namaRelasi} (${totalKg} Kg: ${rincianPakanText.join(', ')}).`);
         
+        // Broadcast Realtime ke HP Partner (Sopir / Kernek) & Admin Monitor
+        if (typeof broadcastRealtimeUpdate === 'function') {
+            broadcastRealtimeUpdate({
+                tipe: 'TRIP_UPDATE',
+                armada: armada,
+                relasi: namaRelasi,
+                status: 'BERANGKAT',
+                petugas: activeUser,
+                timestamp: Date.now()
+            });
+        }
+
         // Beralih ke Tampilan Trip Sedang Berjalan
         tampilkanLayarTripBerjalan(activeTrip, namaRelasi, totalKg);
     } catch (e) {
@@ -1095,6 +1117,18 @@ async function konfirmasiSelesaiPengiriman(tripId, namaRelasi, qtyKg, kembaliKeG
 
         refreshAntreanDriver();
         loadDompetDriver();
+
+        // Broadcast Realtime ke HP partner dan admin
+        if (typeof broadcastRealtimeUpdate === 'function') {
+            broadcastRealtimeUpdate({
+                tipe: 'TRIP_UPDATE',
+                armada: trip.armada,
+                relasi: namaRelasi,
+                status: 'SELESAI',
+                petugas: activeUser,
+                timestamp: Date.now()
+            });
+        }
     } catch (e) {
         alert("Gagal konfirmasi selesai: " + e.message);
     } finally {
@@ -1176,6 +1210,34 @@ async function loadDompetDriver() {
     let elTotalBersih = document.getElementById('dompet-total-bersih');
     if (elTotalBersih) elTotalBersih.innerText = `Rp ${nf.format(myData.totalBersih)}`;
 
+    let kgOtot = myData.totalKgOtot || 0;
+
+    // Update Subteks Kg di Kartu Utama
+    let elSubMuatKg = document.getElementById('dompet-sub-muat-kg');
+    if (elSubMuatKg) elSubMuatKg.innerText = `(${nf.format(kgOtot)} Kg)`;
+
+    // Update Angka di Rincian Perhitungan Upah
+    let elRincianKgOtot = document.getElementById('dompet-rincian-kg-otot');
+    if (elRincianKgOtot) elRincianKgOtot.innerText = `${nf.format(kgOtot)} Kg`;
+
+    let elRincianRpOtot = document.getElementById('dompet-rincian-rp-otot');
+    if (elRincianRpOtot) elRincianRpOtot.innerText = `Rp ${nf.format(upahMuat)}`;
+
+    // Update Label Porsi Pembagian Jarak Sesuai Role Akun
+    let myRole = (meUser?.role || (typeof currentRole !== 'undefined' ? currentRole : '') || 'sopir').toLowerCase();
+    let isKernek = myRole.includes('kernek');
+    let porsiLabelEl = document.getElementById('label-estimasi-jarak-porsi');
+    if (porsiLabelEl) {
+        porsiLabelEl.innerText = isKernek 
+            ? "Estimasi Bagian Anda (Kernek: 40%):"
+            : "Estimasi Bagian Anda (Sopir: 60%):";
+    }
+
+    let porsiRuleEl = document.getElementById('dompet-aturan-porsi');
+    if (porsiRuleEl) {
+        porsiRuleEl.innerText = "Sopir 60% | Kernek 40% (20% jika 2 kernek)";
+    }
+
     // Update Tabungan Jarak (Semi-Transparan)
     let elPoolTotal = document.getElementById('dompet-pool-toples');
     if (elPoolTotal) elPoolTotal.innerText = `Rp ${nf.format(akumulasi.totalToplesJarak)}`;
@@ -1191,14 +1253,21 @@ async function loadDompetDriver() {
     if (tbodyRiwayat) {
         let myTrips = trips.filter(tr => tr.sopir_user_id === meUser.id || tr.kernek_1_user_id === meUser.id || tr.kernek_2_user_id === meUser.id || (tr.pekerja_muat_ids || []).includes(meUser.id));
         if (myTrips.length === 0) {
-            tbodyRiwayat.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:20px; color:#94a3b8; font-style:italic;">Belum ada pengantaran selesai hari ini.</td></tr>`;
+            tbodyRiwayat.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px; color:#94a3b8; font-style:italic;">Belum ada pengantaran selesai hari ini.</td></tr>`;
         } else {
             tbodyRiwayat.innerHTML = myTrips.map(tr => {
                 let rNama = tr.manifest_items?.[0]?.relasi || tr.catatan || 'Pengantaran';
+                let trKg = parseFloat(tr.total_kg) || 0;
+                let hasK2 = !!tr.kernek_2_user_id;
+                let k1Id = tr.kernek_1_user_id;
+                let nKru = hasK2 ? 3 : (k1Id ? 2 : 1);
+                let upahMuatPerKru = Math.floor((trKg * TARIF_ANGKAT_PICKUP) / nKru);
+
                 return `
                     <tr style="border-bottom:1px solid #f1f5f9; font-size:11px;">
                         <td style="padding:8px 6px; font-weight:700; color:#1e293b;">${rNama}</td>
-                        <td style="padding:8px 6px; text-align:right;">${nf.format(tr.total_kg)} Kg</td>
+                        <td style="padding:8px 6px; text-align:right;">${nf.format(trKg)} Kg</td>
+                        <td style="padding:8px 6px; text-align:right; font-weight:700; color:#15803d;">+Rp ${nf.format(upahMuatPerKru)}</td>
                         <td style="padding:8px 6px; text-align:right;">${tr.jarak_tempuh_km} Km</td>
                         <td style="padding:8px 6px; text-align:center;">
                             <span style="background:#dcfce7; color:#15803d; font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px;">Selesai</span>
@@ -1207,6 +1276,140 @@ async function loadDompetDriver() {
                 `;
             }).join('');
         }
+    }
+}
+
+// ====================================================================
+// 6B. CATAT BELI BENSIN / SOLAR ARMADA (INTEGRASI KE CASHFLOW UANG KELUAR)
+// ====================================================================
+
+function bukaModalCatatBBM() {
+    let modal = document.getElementById('modal-catat-bbm-driver');
+    if (!modal) return;
+
+    let armadaSel = document.getElementById('bbm-input-armada');
+    if (armadaSel && window.tripState.currentArmada) {
+        armadaSel.value = window.tripState.currentArmada;
+    }
+
+    let tglInput = document.getElementById('bbm-input-tanggal');
+    if (tglInput) {
+        tglInput.value = new Date().toISOString().split('T')[0];
+    }
+
+    let nom = document.getElementById('bbm-input-nominal');
+    if (nom) nom.value = '';
+    let lit = document.getElementById('bbm-input-liter');
+    if (lit) lit.value = '';
+    let km = document.getElementById('bbm-input-km');
+    if (km) km.value = '';
+    let prev = document.getElementById('bbm-foto-preview');
+    if (prev) prev.innerHTML = '';
+    let fileInp = document.getElementById('bbm-input-foto');
+    if (fileInp) {
+        fileInp.value = '';
+        fileInp.onchange = function(e) {
+            let f = e.target.files[0];
+            if (f && prev) {
+                let r = new FileReader();
+                r.onload = (evt) => {
+                    prev.innerHTML = `<img src="${evt.target.result}" style="width:100%; max-height:140px; object-fit:cover; border-radius:6px; border:1px solid #cbd5e1;">`;
+                };
+                r.readAsDataURL(f);
+            }
+        };
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function tutupModalCatatBBM() {
+    document.getElementById('modal-catat-bbm-driver')?.classList.add('hidden');
+}
+
+async function simpanBeliBBMDriver(e) {
+    if (e) e.preventDefault();
+
+    let armada = document.getElementById('bbm-input-armada')?.value || 'D 8070 UE';
+    let tanggal = document.getElementById('bbm-input-tanggal')?.value || new Date().toISOString().split('T')[0];
+    let metode = document.getElementById('bbm-input-metode')?.value || 'Cash';
+    let nominal = parseInt(document.getElementById('bbm-input-nominal')?.value) || 0;
+    let liter = parseFloat(document.getElementById('bbm-input-liter')?.value) || 0;
+    let kmOdo = parseInt(document.getElementById('bbm-input-km')?.value) || 0;
+    let fileInput = document.getElementById('bbm-input-foto');
+    let file = fileInput?.files?.[0];
+
+    if (nominal <= 0) {
+        return alert("Harap masukkan nominal biaya bensin yang valid!");
+    }
+
+    let btn = document.getElementById('btn-simpan-bbm');
+    let originalHtml = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerText = "Mengirim ke Cashflow..."; }
+
+    try {
+        let buktiUrl = "-";
+        if (file && typeof uploadGambarKeSupabase === 'function') {
+            btn.innerText = "Mengunggah foto struk...";
+            let reader = new FileReader();
+            let base64Promise = new Promise((resolve, reject) => {
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+            let dataUrl = await base64Promise;
+            let parts = dataUrl.split(',');
+            let mime = parts[0].match(/:(.*?);/)[1];
+            let base64 = parts[1];
+            let rawFilename = `bbm_${armada.replace(/\s+/g, '_')}_${tanggal}_${Date.now()}.jpg`;
+            buktiUrl = await uploadGambarKeSupabase(base64, mime, 'cashflow', rawFilename);
+        }
+
+        let descText = `Beli BBM ${armada}`;
+        if (liter > 0) descText += ` - ${liter} Liter`;
+        if (kmOdo > 0) descText += ` - Spido: ${kmOdo} KM`;
+        descText += ` (Oleh: ${activeUser || 'Driver'})`;
+
+        let payloadCF = {
+            tanggal: tanggal,
+            jenis: 'Keluar',
+            metode: metode,
+            kategori: 'BBM / Solar',
+            relasi: `SPBU (${armada})`,
+            nominal: nominal,
+            diskon: 0,
+            keterangan: descText,
+            bukti_url: buktiUrl,
+            petugas: activeUser || 'Driver'
+        };
+
+        let res = await fetch(`${SUPA_URL}/rest/v1/cashflow`, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPA_ANON_KEY,
+                'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify(payloadCF)
+        });
+
+        if (!res.ok) {
+            let err = await res.json();
+            throw new Error(err.message || "Gagal mencatat pengeluaran");
+        }
+
+        // Broadcast Realtime ke Kasir / Admin Kantor
+        if (typeof broadcastRealtimeUpdate === 'function') {
+            broadcastRealtimeUpdate(payloadCF);
+        }
+
+        tutupModalCatatBBM();
+        alert(`⛽ Berhasil! Pengeluaran bensin Rp ${new Intl.NumberFormat('id-ID').format(nominal)} untuk armada ${armada} telah tercatat di Laporan Uang Keluar.`);
+    } catch (err) {
+        alert("Gagal mencatat bensin: " + err.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = originalHtml; }
     }
 }
 
@@ -1677,7 +1880,7 @@ async function tutupPeriodeDanCairkanToples() {
 }
 
 function switchAdminTripTab(tab) {
-    const tabs = ['antrean', 'monitor', 'payroll'];
+    const tabs = ['antrean', 'monitor', 'payroll', 'bbm'];
     tabs.forEach(t => {
         let btn = document.getElementById(`tab-adm-${t}`);
         let view = document.getElementById(`view-adm-${t}`);
@@ -1698,6 +1901,108 @@ function switchAdminTripTab(tab) {
         loadMonitoringArmadaAdmin();
     } else if (tab === 'payroll') {
         renderRekapPayrollAdmin();
+    } else if (tab === 'bbm') {
+        loadLogBBMAdmin();
+    }
+}
+
+// ====================================================================
+// 8. LOG PENGISIAN BBM & ODOMETER (SISI ADMIN)
+// ====================================================================
+
+async function loadLogBBMAdmin() {
+    let tbody = document.getElementById('admin-bbm-tbody');
+    let summaryBox = document.getElementById('admin-bbm-summary');
+    if (!tbody) return;
+
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat riwayat pengisian BBM...</td></tr>`;
+
+    try {
+        let res = await fetch(`${SUPA_URL}/rest/v1/cashflow?kategori=eq.BBM / Solar&order=tanggal.desc,created_at.desc&limit=50`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        });
+        
+        if (!res.ok) throw new Error("Gagal mengambil data BBM");
+        let logs = await res.json();
+        let nf = new Intl.NumberFormat('id-ID');
+
+        if (logs.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada data pengisian BBM tercatat.</td></tr>`;
+            if (summaryBox) summaryBox.innerHTML = '';
+            return;
+        }
+
+        let totalBiaya = 0;
+        let lastOdoMap = {
+            'D 8070 UE': '-',
+            'D 8142 UK': '-',
+            'Truk': '-'
+        };
+
+        logs.forEach(item => {
+            totalBiaya += (parseFloat(item.nominal) || 0);
+            let ket = item.keterangan || '';
+            let odoMatch = ket.match(/Spido:\s*([0-9]+)\s*KM/i);
+            let armadaName = (item.relasi || '').replace('SPBU (', '').replace(')', '').trim();
+            if (!armadaName || armadaName === 'SPBU') {
+                if (ket.includes('D 8070 UE')) armadaName = 'D 8070 UE';
+                else if (ket.includes('D 8142 UK')) armadaName = 'D 8142 UK';
+                else if (ket.includes('Truk')) armadaName = 'Truk';
+            }
+            if (odoMatch && lastOdoMap[armadaName] === '-') {
+                lastOdoMap[armadaName] = `${nf.format(odoMatch[1])} KM`;
+            }
+        });
+
+        if (summaryBox) {
+            summaryBox.innerHTML = `
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:15px;">
+                    <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px;">
+                        <span style="font-size:11px; color:#1e40af; font-weight:700;">Total Biaya BBM Tercatat</span>
+                        <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#1d4ed8;">Rp ${nf.format(totalBiaya)}</h3>
+                    </div>
+                    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px;">
+                        <span style="font-size:11px; color:#15803d; font-weight:700;">KM Odometer Terakhir D 8070 UE</span>
+                        <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#16a34a;">${lastOdoMap['D 8070 UE']}</h3>
+                    </div>
+                    <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:10px; padding:12px;">
+                        <span style="font-size:11px; color:#c2410c; font-weight:700;">KM Odometer Terakhir D 8142 UK</span>
+                        <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#ea580c;">${lastOdoMap['D 8142 UK']}</h3>
+                    </div>
+                </div>
+            `;
+        }
+
+        tbody.innerHTML = logs.map(item => {
+            let ket = item.keterangan || '-';
+            let litMatch = ket.match(/([0-9.]+)\s*Liter/i);
+            let odoMatch = ket.match(/Spido:\s*([0-9]+)\s*KM/i);
+            let literStr = litMatch ? `${litMatch[1]} L` : '-';
+            let odoStr = odoMatch ? `${nf.format(odoMatch[1])} KM` : '-';
+
+            let fotoLink = (item.bukti_url && item.bukti_url !== '-')
+                ? `<a href="${item.bukti_url}" target="_blank" style="background:#eff6ff; color:#2563eb; padding:4px 8px; border-radius:6px; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:3px;">
+                     <span class="material-symbols-outlined" style="font-size:14px;">receipt</span> Struk SPBU
+                   </a>`
+                : `<span style="color:#94a3b8; font-size:10px;">Tanpa Struk</span>`;
+
+            return `
+                <tr style="border-bottom:1px solid #e2e8f0; font-size:11px;">
+                    <td style="padding:10px 8px; font-weight:700; color:#1e293b;">${item.tanggal || '-'}</td>
+                    <td style="padding:10px 8px; font-weight:800; color:#2563eb;">${item.relasi || 'BBM'}</td>
+                    <td style="padding:10px 8px; text-align:right; font-weight:700; color:#475569;">${odoStr}</td>
+                    <td style="padding:10px 8px; text-align:right; color:#475569;">${literStr}</td>
+                    <td style="padding:10px 8px; text-align:right; font-weight:800; color:#15803d;">Rp ${nf.format(item.nominal)}</td>
+                    <td style="padding:10px 8px; text-align:center;">
+                        <span style="background:#f1f5f9; color:#475569; padding:2px 6px; border-radius:4px; font-weight:600;">${item.metode || 'Cash'}</span>
+                    </td>
+                    <td style="padding:10px 8px; color:#475569;">${item.petugas || '-'}</td>
+                    <td style="padding:10px 8px; text-align:center;">${fotoLink}</td>
+                </tr>
+            `;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:25px; color:#dc2626;">Gagal memuat log BBM: ${e.message}</td></tr>`;
     }
 }
 
@@ -1721,6 +2026,9 @@ window.pindahDriverTab = pindahDriverTab;
 window.switchDriverPortalTab = switchDriverPortalTab;
 window.cetakSlipKlaimDriver = cetakSlipKlaimDriver;
 window.refreshAntreanDriver = refreshAntreanDriver;
+window.bukaModalCatatBBM = bukaModalCatatBBM;
+window.tutupModalCatatBBM = tutupModalCatatBBM;
+window.simpanBeliBBMDriver = simpanBeliBBMDriver;
 
 // Admin Window Exports
 window.initModulTripAdmin = initModulTripAdmin;
@@ -1733,5 +2041,6 @@ window.setBawaNolTrukItem = setBawaNolTrukItem;
 window.simpanKeberangkatanTruk = simpanKeberangkatanTruk;
 window.tutupPeriodeDanCairkanToples = tutupPeriodeDanCairkanToples;
 window.kunciTitikKandangPeternak = autoLockTitikKandang;
+window.loadLogBBMAdmin = loadLogBBMAdmin;
 
 
