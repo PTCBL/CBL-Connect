@@ -6,6 +6,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sistem Pakan CBL</title>
+    <meta name="theme-color" content="#1a5c40">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Pakan CBL">
     <link rel="apple-touch-icon"
         href="https://raw.githubusercontent.com/wildansyif/pakan-cbl/2e732398572a6ac7d3512559c4344d40ab0902f9/Logo%20CBL.png">
     <link rel="manifest" href="manifest.json">
@@ -365,14 +370,49 @@
             bottom: 0 !important;
             left: 0 !important;
             right: 0 !important;
-            background: #0f172a !important;
-            box-shadow: 0 -2px 15px rgba(0, 0, 0, 0.25) !important;
+            background: #ffffff !important;
+            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08) !important;
             display: flex !important;
             justify-content: space-around !important;
-            padding: 10px 0 !important;
-            padding-bottom: env(safe-area-inset-bottom) !important;
+            padding: 8px 14px !important;
+            padding-bottom: max(10px, env(safe-area-inset-bottom)) !important;
             z-index: 1000 !important;
-            border-top: 1px solid #1e293b;
+            border-top: 1px solid #e2e8f0 !important;
+            gap: 12px !important;
+        }
+
+        .driver-nav-btn {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border-radius: 12px;
+            border: 1px solid transparent;
+            background: #f8fafc;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .driver-nav-btn .material-symbols-outlined {
+            font-size: 20px;
+            color: #64748b;
+            transition: all 0.2s ease;
+        }
+
+        .driver-nav-btn.active {
+            background: #2563eb !important;
+            color: #ffffff !important;
+            border-color: #1d4ed8 !important;
+            box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
+        }
+
+        .driver-nav-btn.active .material-symbols-outlined {
+            color: #ffffff !important;
         }
 
         .bottom-nav.hidden,
@@ -1050,8 +1090,10 @@
                 transform: translateX(-50%) !important;
                 max-width: 650px !important;
                 width: 100% !important;
-                background: #0f172a !important;
+                background: #ffffff !important;
                 border-radius: 16px 16px 0 0 !important;
+                border: 1px solid #e2e8f0 !important;
+                box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08) !important;
                 z-index: 5000 !important;
             }
 
@@ -1638,12 +1680,122 @@
             <!-- Tombol Masuk -->
             <button class="login-btn" onclick="cekLogin()">M A S U K</button>
 
+            <!-- Tombol Download / Pasang Aplikasi PWA -->
+            <div id="pwa-install-login-container" style="margin-top: 14px; display: none;">
+                <button type="button" id="btn-install-pwa-login" onclick="triggerPwaInstall()" style="background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: #166534; border: 1.5px solid #166534; padding: 8px 14px; border-radius: 20px; font-size: 11px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; transition: all 0.2s;">
+                    <span class="material-symbols-outlined" style="font-size: 18px; color: #166534;">install_mobile</span>
+                    <span>Download / Pasang Aplikasi</span>
+                </button>
+                <div style="font-size: 10px; color: #ffffff; margin-top: 4px; text-shadow: 0 1px 3px rgba(0,0,0,0.7); font-weight: 600;">
+                    📲 Pasang di HP (Buka Cepat Tanpa Browser)
+                </div>
+            </div>
+
             <!-- Keterangan Footer Kecil -->
             <div class="login-footer">Aplikasi Internal PT Cita Benggala Lestari</div>
         </div>
     </div>
 
+    <!-- MODAL PANDUAN CARA PASANG / DOWNLOAD APLIKASI PWA (BISA DIAKSES DARI LOGIN MAUPUN SETELAH LOGIN) -->
+    <div id="modal-panduan-install-pwa" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.75); backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px); z-index:999999; display:flex; justify-content:center; align-items:center; padding:16px; box-sizing:border-box;">
+        <div style="background:#ffffff; border-radius:18px; width:100%; max-width:420px; box-shadow:0 20px 45px rgba(0,0,0,0.3); overflow:hidden; font-family:'Poppins', sans-serif;">
+            <!-- Header Modal -->
+            <div style="background: linear-gradient(135deg, #15803d, #166534); padding: 16px 20px; color: white; display: flex; justify-content: space-between; align-items: center;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="material-symbols-outlined" style="font-size:24px; color:#86efac;">install_mobile</span>
+                    <div>
+                        <h3 style="margin:0; font-size:15px; font-weight:800;">Pasang Aplikasi di HP</h3>
+                        <div style="font-size:10px; opacity:0.9;">Buka Pakan CBL langsung tanpa lewat browser</div>
+                    </div>
+                </div>
+                <button type="button" onclick="tutupModalPanduanInstall()" style="background:rgba(255,255,255,0.2); border:none; color:white; width:28px; height:28px; border-radius:50%; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center;">✕</button>
+            </div>
+
+            <!-- Tab Pemilih Perangkat (Android vs iPhone) -->
+            <div style="display:flex; background:#f8fafc; border-bottom:1px solid #e2e8f0; padding:8px 12px; gap:8px;">
+                <button type="button" id="btn-pwa-tab-android" onclick="switchPwaGuideTab('android')" style="flex:1; padding:7px 10px; font-size:11px; font-weight:800; border-radius:8px; border:1px solid #166534; background:#166534; color:#ffffff; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px;">
+                    <span>🤖 Android / Chrome</span>
+                </button>
+                <button type="button" id="btn-pwa-tab-ios" onclick="switchPwaGuideTab('ios')" style="flex:1; padding:7px 10px; font-size:11px; font-weight:800; border-radius:8px; border:1px solid #cbd5e1; background:#f1f5f9; color:#475569; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px;">
+                    <span>🍏 iPhone / Safari</span>
+                </button>
+            </div>
+
+            <!-- Konten Petunjuk -->
+            <div style="padding: 16px 20px; max-height: 70vh; overflow-y: auto;">
+                <!-- Petunjuk Android (Chrome) -->
+                <div id="pwa-guide-android">
+                    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:10px; margin-bottom:12px; font-size:11px; color:#166534;">
+                        <b>Langkah Mudah di HP Android:</b>
+                    </div>
+                    <ol style="margin:0; padding-left:18px; font-size:12px; color:#334155; line-height:1.7;">
+                        <li style="margin-bottom:8px;">
+                            Buka tautan ini melalui aplikasi <b>Google Chrome</b> di HP.
+                        </li>
+                        <li style="margin-bottom:8px;">
+                            Ketuk tombol <b>Titik Tiga (⋮)</b> di pojok kanan atas browser Chrome.
+                        </li>
+                        <li style="margin-bottom:8px;">
+                            Pilih menu <b style="color:#15803d;">"Instal Aplikasi"</b> atau <b>"Tambahkan ke Layar Utama"</b> <span class="material-symbols-outlined" style="font-size:15px; vertical-align:middle; background:#e2e8f0; padding:2px 4px; border-radius:4px; color:#15803d;">install_mobile</span>.
+                        </li>
+                        <li style="margin-bottom:8px;">
+                            Ketuk tombol <b>"Instal"</b> pada konfirmasi yang muncul.
+                        </li>
+                    </ol>
+                    <div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px; padding:8px 10px; font-size:11px; color:#64748b; margin-top:10px;">
+                        💡 <i>Setelah terpasang, ikon <b>Pakan CBL</b> akan muncul di layar menu HP Anda seperti aplikasi biasa.</i>
+                    </div>
+                </div>
+
+                <!-- Petunjuk iPhone (Safari) -->
+                <div id="pwa-guide-ios" style="display:none;">
+                    <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:10px; margin-bottom:12px; font-size:11px; color:#1e40af;">
+                        <b>Langkah Mudah di iPhone (Safari):</b>
+                    </div>
+                    <ol style="margin:0; padding-left:18px; font-size:12px; color:#334155; line-height:1.7;">
+                        <li style="margin-bottom:8px;">
+                            Pastikan membuka link ini lewat browser resmi <b>Safari</b> di iPhone.
+                        </li>
+                        <li style="margin-bottom:8px;">
+                            Ketuk tombol <b>Bagikan (Share)</b> <span class="material-symbols-outlined" style="font-size:15px; vertical-align:middle; background:#e2e8f0; padding:2px 4px; border-radius:4px; color:#2563eb;">ios_share</span> di bilah bawah layar Safari.
+                        </li>
+                        <li style="margin-bottom:8px;">
+                            Gulir ke bawah, lalu ketuk menu <b style="color:#0f766e;">"Tambah ke Layar Utama" (Add to Home Screen)</b> <span class="material-symbols-outlined" style="font-size:15px; vertical-align:middle; background:#e2e8f0; padding:2px 4px; border-radius:4px;">add_box</span>.
+                        </li>
+                        <li style="margin-bottom:8px;">
+                            Ketuk <b>"Tambah" (Add)</b> di pojok kanan atas.
+                        </li>
+                    </ol>
+                    <div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px; padding:8px 10px; font-size:11px; color:#64748b; margin-top:10px;">
+                        💡 <i>Aplikasi akan langsung muncul di home screen iPhone Anda dan tidak perlu buka Safari lagi.</i>
+                    </div>
+                </div>
+
+                <!-- Tombol Tutup -->
+                <button type="button" onclick="tutupModalPanduanInstall()" style="width:100%; margin-top:16px; background:#166534; color:white; border:none; padding:10px 14px; border-radius:10px; font-size:12px; font-weight:800; cursor:pointer;">
+                    Saya Mengerti
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div id="app-screen" class="hidden">
+        <!-- BANNER PROMOSI DOWNLOAD PWA DI LAYAR UTAMA (HANYA MUNCUL JIKA DIBUKA DI BROWSER) -->
+        <div id="pwa-top-banner" class="hidden" style="background: linear-gradient(135deg, #1e293b, #0f172a); color: #ffffff; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #10b981; font-family: 'Poppins', sans-serif; position: sticky; top: 0; z-index: 9990;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <img src="https://raw.githubusercontent.com/wildansyif/pakan-cbl/2e732398572a6ac7d3512559c4344d40ab0902f9/Logo%20CBL.png" style="width:24px; height:24px; border-radius:4px; background:#fff; padding:1px;">
+                <div>
+                    <div style="font-size:11px; font-weight:800; color:#ffffff;">Pasang Aplikasi Pakan CBL</div>
+                    <div style="font-size:9px; color:#94a3b8;">Buka langsung dari layar HP tanpa buka browser</div>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+                <button type="button" onclick="triggerPwaInstall()" style="background:#10b981; color:#ffffff; border:none; padding:5px 12px; border-radius:12px; font-size:10px; font-weight:800; cursor:pointer; display:inline-flex; align-items:center; gap:3px; box-shadow:0 2px 4px rgba(16,185,129,0.3);">
+                    <span class="material-symbols-outlined" style="font-size:13px;">download</span> Download
+                </button>
+                <button type="button" onclick="dismissPwaBanner()" style="background:none; border:none; color:#94a3b8; font-size:16px; cursor:pointer; padding:0 4px;" title="Tutup">✕</button>
+            </div>
+        </div>
 <!-- MODAL RADAR STOK (TARGET KELUAR) -->
     <!-- MODAL PENGATURAN CETAK E-STATEMENT -->
     <div id="modal-pengaturan-cetak-es" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; display:flex; justify-content:center; align-items:center; padding:15px; box-sizing:border-box;">
@@ -3430,19 +3582,67 @@
 
             <!-- TAB 1: ORDER KIRIM (driver-view-order) -->
             <div id="driver-view-order" class="driver-tab-content">
+                <!-- BANNER DOWNLOAD APLIKASI DI PORTAL DRIVER -->
+                <div id="pwa-driver-banner" class="hidden" style="background: linear-gradient(135deg, #065f46, #059669); color: white; border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 3px 8px rgba(5,150,105,0.25);">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="material-symbols-outlined" style="font-size:24px; color:#a7f3d0;">install_mobile</span>
+                        <div>
+                            <div style="font-size:12px; font-weight:800;">Download Aplikasi Driver</div>
+                            <div style="font-size:10px; color:#d1fae5;">Agar cepat dibuka & tidak lewat browser terus</div>
+                        </div>
+                    </div>
+                    <button type="button" onclick="triggerPwaInstall()" style="background:#ffffff; color:#065f46; border:none; padding:6px 12px; border-radius:16px; font-size:11px; font-weight:800; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.15); display:inline-flex; align-items:center; gap:4px;">
+                        <span class="material-symbols-outlined" style="font-size:14px;">download</span> Pasang
+                    </button>
+                </div>
+
                 <!-- Box Pilihan Armada & Kernek (1-Tap Pill / Chip Buttons) -->
                 <div id="driver-pill-selectors-box" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.03);">
-                    <!-- Pilihan Armada -->
-                    <div style="margin-bottom: 10px;">
-                        <span style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 6px;">Pilih Armada Hari Ini:</span>
-                        <div style="display:flex; gap: 8px;">
-                            <button type="button" class="btn-pill-armada" data-armada="D 8070 UE" onclick="selectArmadaPill('D 8070 UE')" style="flex:1; padding: 9px 8px; font-size: 11px; font-weight: 800; border-radius: 8px; border: 1px solid #1d4ed8; background: #2563eb; color: white; cursor: pointer; transition: all 0.2s; display:inline-flex; align-items:center; justify-content:center; gap:6px;">
-                                <span class="material-symbols-outlined" style="font-size:16px;">local_shipping</span> D 8070 UE
-                            </button>
-                            <button type="button" class="btn-pill-armada" data-armada="D 8142 UK" onclick="selectArmadaPill('D 8142 UK')" style="flex:1; padding: 9px 8px; font-size: 11px; font-weight: 800; border-radius: 8px; border: 1px solid #cbd5e1; background: #f1f5f9; color: #475569; cursor: pointer; transition: all 0.2s; display:inline-flex; align-items:center; justify-content:center; gap:6px;">
-                                <span class="material-symbols-outlined" style="font-size:16px;">local_shipping</span> D 8142 UK
-                            </button>
+                    <!-- Informasi Armada Bertugas -->
+                    <div id="driver-armada-info-box" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span class="material-symbols-outlined" style="font-size:22px; color:#2563eb;">local_shipping</span>
+                            <div>
+                                <div style="font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Armada Bertugas</div>
+                                <div id="driver-portal-armada-name" style="font-size:13px; font-weight:800; color:#1e293b;">D 8070 UE (Grand Max Pick-up)</div>
+                            </div>
                         </div>
+                        <span id="driver-portal-armada-tag" style="background:#eff6ff; color:#1d4ed8; font-size:10px; font-weight:800; padding:3px 8px; border-radius:12px; border:1px solid #bfdbfe;">Tetap</span>
+                    </div>
+
+                    <!-- Ringkasan Kinerja Bulanan (Dengan Filter Bulan Ini & Bulan Lalu) -->
+                    <div style="background:#f1f5f9; border-radius:10px; padding:10px 12px; margin-bottom:12px; border:1px solid #e2e8f0;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <span style="font-size:11px; font-weight:800; color:#1e293b; display:flex; align-items:center; gap:4px;">
+                                <span class="material-symbols-outlined" style="font-size:15px; color:#16a34a;">monitoring</span> Kinerja Bulanan
+                            </span>
+                            <div style="display:flex; align-items:center; gap:4px;">
+                                <button type="button" id="btn-stat-bulan-ini" onclick="switchFilterBulanDriver('ini')" style="background:#2563eb; color:#ffffff; border:1px solid #2563eb; font-size:10px; font-weight:700; padding:2px 8px; border-radius:12px; cursor:pointer;">Bulan Ini</button>
+                                <button type="button" id="btn-stat-bulan-lalu" onclick="switchFilterBulanDriver('lalu')" style="background:#ffffff; color:#475569; border:1px solid #cbd5e1; font-size:10px; font-weight:700; padding:2px 8px; border-radius:12px; cursor:pointer;">Bulan Lalu</button>
+                            </div>
+                        </div>
+                        <div style="font-size:10px; color:#64748b; margin-bottom:8px; font-weight:600;">
+                            Periode: <span id="driver-stat-bulan" style="color:#1e3a8a; font-weight:800;">-</span>
+                        </div>
+                        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; text-align:center;">
+                            <div style="background:#ffffff; border-radius:8px; padding:7px 4px; border:1px solid #e2e8f0; box-shadow:0 1px 2px rgba(0,0,0,0.02);">
+                                <div style="font-size:8.5px; color:#64748b; font-weight:700; text-transform:uppercase; line-height:1.1;">Total RIT</div>
+                                <div id="driver-stat-rit" style="font-size:12px; font-weight:900; color:#1e3a8a; margin-top:3px;">0 Rit</div>
+                            </div>
+                            <div style="background:#ffffff; border-radius:8px; padding:7px 4px; border:1px solid #e2e8f0; box-shadow:0 1px 2px rgba(0,0,0,0.02);">
+                                <div style="font-size:8.5px; color:#64748b; font-weight:700; text-transform:uppercase; line-height:1.1;">Total KM</div>
+                                <div id="driver-stat-km" style="font-size:12px; font-weight:900; color:#0f766e; margin-top:3px;">0 Km</div>
+                            </div>
+                            <div style="background:#ffffff; border-radius:8px; padding:7px 4px; border:1px solid #e2e8f0; box-shadow:0 1px 2px rgba(0,0,0,0.02);">
+                                <div style="font-size:8.5px; color:#15803d; font-weight:700; text-transform:uppercase; line-height:1.1;">Total Bongkar</div>
+                                <div id="driver-stat-bongkar" style="font-size:12px; font-weight:900; color:#15803d; margin-top:3px;">0 Kg</div>
+                            </div>
+                            <div style="background:#ffffff; border-radius:8px; padding:7px 4px; border:1px solid #e2e8f0; box-shadow:0 1px 2px rgba(0,0,0,0.02);">
+                                <div style="font-size:8.5px; color:#b45309; font-weight:700; text-transform:uppercase; line-height:1.1;">Total Muat</div>
+                                <div id="driver-stat-muat" style="font-size:12px; font-weight:900; color:#b45309; margin-top:3px;">0 Kg</div>
+                            </div>
+                        </div>
+                        <span id="driver-stat-kg" style="display:none;"></span>
                     </div>
 
                     <!-- Pilihan Kernek / Sopir Pasangan -->
@@ -3453,10 +3653,15 @@
                         </div>
                     </div>
 
-                    <!-- Tombol Cepat Catat Bensin di Tab Order -->
-                    <button type="button" onclick="bukaModalCatatBBM()" style="width: 100%; margin-top: 10px; background: #f8fafc; border: 1px dashed #cbd5e1; color: #334155; padding: 8px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
-                        <span class="material-symbols-outlined" style="font-size: 16px; color: #d97706;">local_gas_station</span> Catat Isi Bensin / Solar Armada
-                    </button>
+                    <!-- Tombol Cepat Catat Bensin & Log Armada di Tab Order -->
+                    <div style="display:flex; gap:6px; margin-top:10px;">
+                        <button type="button" onclick="bukaModalCatatBBM()" style="flex:1; background: #f8fafc; border: 1px dashed #cbd5e1; color: #334155; padding: 8px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                            <span class="material-symbols-outlined" style="font-size: 16px; color: #d97706;">local_gas_station</span> Laporan Bensin
+                        </button>
+                        <button type="button" id="btn-driver-log-armada-top" onclick="switchDriverPortalTab('armada')" style="flex:1; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; padding: 8px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                            <span class="material-symbols-outlined" style="font-size: 16px; color: #2563eb;">directions_car</span> Log Armada Saya
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Box Trip Sedang Berjalan (Tampil saat sedang jalan antar pakan) -->
@@ -3474,130 +3679,270 @@
 
             <!-- TAB 2: DOMPET SAYA (driver-view-dompet) -->
             <div id="driver-view-dompet" class="driver-tab-content hidden">
-                <!-- Kartu Saldo Utama (Dompet Driver) -->
-                <div style="background: linear-gradient(135deg, #15803d, #16a34a); color: white; border-radius: 16px; padding: 18px 16px; margin-bottom: 16px; box-shadow: 0 4px 15px rgba(22,163,74,0.25);">
-                    <!-- Rincian Kecil di Bagian Atas: Upah Muat & Estimasi Upah Ngantar -->
-                    <div style="background: rgba(0, 0, 0, 0.15); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 11px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                            <span style="opacity: 0.9; display: inline-flex; align-items: center; gap: 5px;">
-                                <span class="material-symbols-outlined" style="font-size: 14px;">fitness_center</span> Upah Muat Pakan (10 x kg):
-                            </span>
-                            <strong style="font-size: 12px; font-weight: 700; text-align:right;">
-                                <span id="dompet-upah-muat">Rp 0</span>
-                                <span id="dompet-sub-muat-kg" style="font-size: 10px; opacity: 0.85; font-weight: normal; margin-left: 4px;">(0 Kg)</span>
-                            </strong>
+                <!-- Kartu Saldo Utama (Dompet Driver: Saldo Berjalan Belum Dicairkan) -->
+                <div style="background: linear-gradient(135deg, #15803d, #16a34a); color: white; border-radius: 16px; padding: 20px 16px; margin-bottom: 16px; box-shadow: 0 4px 15px rgba(22,163,74,0.25);">
+                    <div style="text-align: center;">
+                        <div style="display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,0.18); backdrop-filter:blur(4px); padding:4px 12px; border-radius:20px; font-size:11px; text-transform:uppercase; letter-spacing:0.8px; font-weight:700; margin-bottom:8px; border:1px solid rgba(255,255,255,0.25);">
+                            <span class="material-symbols-outlined" style="font-size: 15px;">account_balance_wallet</span> Total Saldo Belum Dicairkan
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="opacity: 0.9; display: inline-flex; align-items: center; gap: 5px;">
-                                <span class="material-symbols-outlined" style="font-size: 14px;">local_shipping</span> Estimasi Upah ngantar:
-                            </span>
-                            <strong id="dompet-estimasi-ngantar" style="font-size: 12px; font-weight: 700;">Rp 0</strong>
-                        </div>
-                    </div>
-
-                    <!-- Total Upah Gede di Tengah -->
-                    <div style="text-align: center; padding: 4px 0 6px 0;">
-                        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; opacity: 0.9; font-weight: 700; margin-bottom: 4px;">
-                            Total Upah
-                        </div>
-                        <h2 id="dompet-total-upah" style="margin: 0; font-size: 32px; font-weight: 900; letter-spacing: -0.5px; color: #ffffff;">
+                        <h2 id="dompet-total-upah" style="margin: 0; font-size: 34px; font-weight: 900; letter-spacing: -0.5px; color: #ffffff;">
                             Rp 0
                         </h2>
+                        <div style="margin-top:6px; font-size:11px; opacity:0.9; display:flex; align-items:center; justify-content:center; gap:4px;">
+                            <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#86efac;"></span>
+                            <span>Saldo Berjalan (Akumulasi Sebelum Dicairkan)</span>
+                        </div>
                     </div>
 
                     <!-- Hidden legacy IDs for fallback -->
+                    <span id="dompet-upah-muat" style="display:none;"></span>
+                    <span id="dompet-sub-muat-kg" style="display:none;"></span>
+                    <span id="dompet-estimasi-ngantar" style="display:none;"></span>
                     <span id="dompet-upah-otot" style="display:none;"></span>
                     <span id="dompet-total-bersih" style="display:none;"></span>
                 </div>
 
-                <!-- Kartu Rincian Insentif & Tabungan Jarak -->
+                <!-- Kartu Rincian Insentif Flat 15/Kg (Saldo Belum Dicairkan) -->
                 <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.03);">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
                         <span style="font-size: 13px; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 6px;">
-                            <span class="material-symbols-outlined" style="color: #d97706; font-size: 18px;">receipt_long</span> Rincian Perhitungan Upah
+                            <span class="material-symbols-outlined" style="color: #16a34a; font-size: 18px;">receipt_long</span> Rincian Upah Belum Dicairkan
                         </span>
-                        <span style="font-size: 10px; font-weight: 700; background: #fef3c7; color: #b45309; padding: 2px 8px; border-radius: 12px;">Periode Berjalan</span>
+                        <span style="font-size: 10px; font-weight: 700; background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 12px;">Flat Rp 15 / Kg</span>
                     </div>
 
-                    <!-- 1. Rincian Upah Muat Pakan (Otot) -->
+                    <!-- Rincian Upah Muat & Kirim Pakan Flat -->
                     <div style="background: #f8fafc; border-radius: 8px; padding: 10px 12px; font-size: 11px; color: #475569; margin-bottom: 10px; border-left: 3px solid #16a34a;">
                         <div style="font-weight: 800; color: #15803d; margin-bottom: 6px; display:flex; align-items:center; gap:4px;">
-                            <span class="material-symbols-outlined" style="font-size: 14px;">fitness_center</span> 1. Upah Muat Pakan (10 x kg)
+                            <span class="material-symbols-outlined" style="font-size: 14px;">payments</span> Rincian Aktivitas Fisik & Upah Muat
                         </div>
                         <div style="display:flex; justify-content:space-between; margin-bottom: 4px;">
-                            <span>Total Pakan Anda Angkat:</span>
+                            <span>Pakan Dimuat di Gudang (Bantu Muat):</span>
+                            <strong id="dompet-rincian-kg-muat" style="color: #b45309;">0 Kg</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom: 4px;">
+                            <span>Pakan Diantar ke Peternak (Pick-Up):</span>
+                            <strong id="dompet-rincian-kg-antar" style="color: #1e3a8a;">0 Kg</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom: 4px;">
+                            <span>Total Pakan Fisik Ditangani:</span>
                             <strong id="dompet-rincian-kg-otot" style="color: #1e293b;">0 Kg</strong>
                         </div>
                         <div style="display:flex; justify-content:space-between; margin-bottom: 4px;">
-                            <span>Tarif Angkat Beban:</span>
-                            <span style="color: #64748b;">Rp 10 / Kg</span>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; border-top: 1px dashed #cbd5e1; padding-top: 5px; margin-top: 4px;">
-                            <span>Subtotal Upah Muat:</span>
-                            <strong id="dompet-rincian-rp-otot" style="color: #15803d; font-size: 12px;">Rp 0</strong>
-                        </div>
-                    </div>
-
-                    <!-- 2. Rincian Tabungan Subsidi Jarak -->
-                    <div style="background: #f8fafc; border-radius: 8px; padding: 10px 12px; font-size: 11px; color: #475569; margin-bottom: 10px; border-left: 3px solid #d97706;">
-                        <div style="font-weight: 800; color: #b45309; margin-bottom: 6px; display:flex; align-items:center; gap:4px;">
-                            <span class="material-symbols-outlined" style="font-size: 14px;">savings</span> 2. Tabungan Subsidi Jarak (Toples Bersama)
+                            <span>Tarif Upah Muat:</span>
+                            <span style="color: #16a34a; font-weight:700;">Rp 15 / Kg (dibagi rata kru)</span>
                         </div>
                         <div style="display:flex; justify-content:space-between; margin-bottom: 4px;">
-                            <span>Total Kas Toples Bersama:</span>
-                            <strong id="dompet-pool-toples" style="color: #1e293b;">Rp 0</strong>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom: 4px;">
-                            <span>Total Jarak Tempuh Anda:</span>
+                            <span>Total Jarak Rute Jalan:</span>
                             <strong id="dompet-km-saya" style="color: #2563eb;">0 Km</strong>
                         </div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom: 4px;">
-                            <span>Aturan Porsi Pembagian:</span>
-                            <span id="dompet-aturan-porsi" style="color: #475569; font-weight: 700;">Sopir 60% | Kernek 40%</span>
-                        </div>
                         <div style="display:flex; justify-content:space-between; border-top: 1px dashed #cbd5e1; padding-top: 5px; margin-top: 4px;">
-                            <span id="label-estimasi-jarak-porsi">Estimasi Bagian Anda:</span>
-                            <strong id="dompet-estimasi-jarak" style="color: #15803d; font-size: 12px;">Rp 0</strong>
+                            <span>Total Saldo Bersih Belum Cair:</span>
+                            <strong id="dompet-rincian-rp-otot" style="color: #15803d; font-size: 13px;">Rp 0</strong>
                         </div>
                     </div>
 
+                    <!-- Hidden legacy IDs for backwards compatibility -->
+                    <span id="dompet-pool-toples" style="display:none;"></span>
+                    <span id="dompet-aturan-porsi" style="display:none;"></span>
+                    <span id="label-estimasi-jarak-porsi" style="display:none;"></span>
+                    <span id="dompet-estimasi-jarak" style="display:none;"></span>
+
                     <small style="color: #64748b; font-size: 10px; display: block; line-height: 1.4;">
-                        *Upah muat langsung didapat dari kg pakan diangkat. Tabungan jarak dihitung proporsional km dan dicairkan akhir periode.
+                        *Insentif pakan dihitung flat Rp 15/kg dan langsung dibagi rata antar kru yang bertugas di trip tersebut setiap pengantaran selesai. Saldo ini terus bertambah sampai dicairkan kantor.
                     </small>
                 </div>
 
                 <!-- Tombol Catat Bensin di Tab Dompet -->
                 <button type="button" onclick="bukaModalCatatBBM()" style="width: 100%; margin-bottom: 12px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; padding: 11px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 1px 3px rgba(37,99,235,0.08);">
-                    <span class="material-symbols-outlined" style="font-size: 18px; color: #2563eb;">local_gas_station</span> Catat Pengeluaran Bensin / Solar
+                    <span class="material-symbols-outlined" style="font-size: 18px; color: #2563eb;">local_gas_station</span> Laporan Isi Bensin
                 </button>
 
-                <!-- Riwayat Pengantaran -->
+                <!-- Riwayat Pengantaran & Mutasi Upah (Kartu Piutang Driver) -->
                 <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.03); margin-bottom: 15px;">
-                    <div style="background: #f8fafc; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-size: 12px; font-weight: 800; color: #1e293b;">
-                        Riwayat Pengantaran Hari Ini
+                    <!-- Header Kartu Riwayat + Filter Periode -->
+                    <div style="background: #f8fafc; padding: 12px 14px; border-bottom: 1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                        <div>
+                            <div style="font-size: 12px; font-weight: 800; color: #1e293b; display:flex; align-items:center; gap:5px;">
+                                <span class="material-symbols-outlined" style="font-size:16px; color:#0f766e;">receipt_long</span>
+                                <span>Buku Mutasi & Riwayat Upah</span>
+                            </div>
+                            <div style="font-size: 10px; color: #64748b; margin-top:2px;">
+                                Periode: <b id="dompet-periode-label" style="color:#0f766e;">-</b>
+                            </div>
+                        </div>
+
+                        <!-- Filter Toggle Pills [Mingguan] - [Bulanan] - [Tahunan] -->
+                        <div style="display:flex; align-items:center; gap:4px;">
+                            <button type="button" id="btn-dompet-mingguan" onclick="switchFilterDompetDriver('mingguan')" style="background:#ffffff; color:#475569; border:1px solid #cbd5e1; font-size:10px; font-weight:700; padding:4px 8px; border-radius:12px; cursor:pointer;">Mingguan</button>
+                            <button type="button" id="btn-dompet-bulanan" onclick="switchFilterDompetDriver('bulanan')" style="background:#0f766e; color:#ffffff; border:1px solid #0f766e; font-size:10px; font-weight:700; padding:4px 8px; border-radius:12px; cursor:pointer;">Bulanan</button>
+                            <button type="button" id="btn-dompet-tahunan" onclick="switchFilterDompetDriver('tahunan')" style="background:#ffffff; color:#475569; border:1px solid #cbd5e1; font-size:10px; font-weight:700; padding:4px 8px; border-radius:12px; cursor:pointer;">Tahunan</button>
+                        </div>
                     </div>
-                    <div style="max-height: 250px; overflow-y: auto;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
-                            <thead style="background: #f1f5f9;">
-                                <tr>
-                                    <th style="padding: 8px 6px; text-align: left;">Konsumen</th>
-                                    <th style="padding: 8px 6px; text-align: right;">Muatan</th>
-                                    <th style="padding: 8px 6px; text-align: right;">+Upah Muat</th>
-                                    <th style="padding: 8px 6px; text-align: right;">Jarak</th>
-                                    <th style="padding: 8px 6px; text-align: center;">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="driver-riwayat-tbody">
-                                <tr><td colspan="5" style="text-align:center; padding:20px; color:#94a3b8;">Memuat riwayat...</td></tr>
-                            </tbody>
-                        </table>
+
+                    <!-- Ringkasan Rekening Mutasi Periode Ini -->
+                    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px; padding:10px 12px; background:#f1f5f9; border-bottom:1px solid #e2e8f0; text-align:center;">
+                        <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:6px 4px;">
+                            <div style="font-size:9px; color:#64748b; font-weight:700; text-transform:uppercase;">Total Upah</div>
+                            <div id="dompet-hist-total" style="font-size:12px; font-weight:900; color:#1e293b; margin-top:2px;">Rp 0</div>
+                        </div>
+                        <div style="background:#ffffff; border:1px solid #bbf7d0; border-radius:8px; padding:6px 4px;">
+                            <div style="font-size:9px; color:#15803d; font-weight:700; text-transform:uppercase;">Sudah Cair</div>
+                            <div id="dompet-hist-cair" style="font-size:12px; font-weight:900; color:#15803d; margin-top:2px;">Rp 0</div>
+                        </div>
+                        <div style="background:#ffffff; border:1px solid #fde68a; border-radius:8px; padding:6px 4px;">
+                            <div style="font-size:9px; color:#b45309; font-weight:700; text-transform:uppercase;">Belum Cair</div>
+                            <div id="dompet-hist-pending" style="font-size:12px; font-weight:900; color:#b45309; margin-top:2px;">Rp 0</div>
+                        </div>
                     </div>
+
+                    <!-- List Mutasi Upah (Konsep Rekening M-Banking / Bank Jago Style) -->
+                    <div id="driver-riwayat-container" style="max-height: 380px; overflow-y: auto;">
+                        <div id="driver-riwayat-list" style="background:#ffffff;">
+                            <div style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat riwayat transaksi...</div>
+                        </div>
+                    </div>
+                    <!-- Hidden legacy tbody for backwards compatibility -->
+                    <table style="display:none;"><tbody id="driver-riwayat-tbody"></tbody></table>
                 </div>
 
                 <!-- Tombol Cetak Slip Klaim -->
-                <button type="button" onclick="cetakSlipKlaimDriver()" style="width: 100%; background: #ffffff; border: 1px solid #cbd5e1; color: #334155; padding: 11px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <button type="button" id="btn-cetak-slip-klaim" onclick="cetakSlipKlaimDriver()" style="width: 100%; background: #ffffff; border: 1px solid #cbd5e1; color: #334155; padding: 11px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                     <span class="material-symbols-outlined" style="font-size: 16px;">print</span> Cetak Bukti Klaim Insentif
                 </button>
+            </div>
+
+            <!-- MODAL RINCIAN TRANSAKSI PENGANTARAN / MUTASI DRIVER (M-BANKING STYLE) -->
+            <div id="modal-rincian-mutasi-driver" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.6); backdrop-filter:blur(4px); display:flex; align-items:flex-end; justify-content:center; z-index:99999; transition:all 0.3s ease;">
+                <div style="background:#ffffff; width:100%; max-width:480px; border-radius:20px 20px 0 0; padding:20px 18px max(24px, env(safe-area-inset-bottom)) 18px; box-shadow:0 -5px 25px rgba(0,0,0,0.15); max-height:85vh; overflow-y:auto; animation:slideUp 0.25s ease;">
+                    <!-- Drag handle -->
+                    <div style="width:40px; height:4px; background:#cbd5e1; border-radius:2px; margin:0 auto 14px auto;"></div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                        <div style="font-size:15px; font-weight:800; color:#1e293b; display:flex; align-items:center; gap:6px;">
+                            <span class="material-symbols-outlined" style="color:#16a34a; font-size:20px;">receipt_long</span> Rincian Transaksi
+                        </div>
+                        <button type="button" onclick="tutupModalRincianMutasi()" style="background:#f1f5f9; border:none; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#64748b;">
+                            <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+                        </button>
+                    </div>
+
+                    <!-- Nominal Besar & Status -->
+                    <div style="text-align:center; padding:16px; background:#f8fafc; border-radius:14px; margin-bottom:14px; border:1px solid #e2e8f0;">
+                        <div style="font-size:11px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Bagian Upah Bersih Anda</div>
+                        <div id="mutasi-modal-nominal" style="font-size:28px; font-weight:900; color:#15803d; margin:6px 0;">+Rp 0</div>
+                        <div id="mutasi-modal-status-badge" style="display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:800; padding:3px 10px; border-radius:20px; background:#fef3c7; color:#b45309; border:1px solid #fde68a;">
+                            Belum Cair
+                        </div>
+                    </div>
+
+                    <!-- Detail Rincian Key-Value -->
+                    <div style="border:1px solid #e2e8f0; border-radius:12px; padding:12px 14px; font-size:12px; color:#334155; margin-bottom:16px;">
+                        <div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid #f1f5f9;">
+                            <span style="color:#64748b;">Tanggal & Waktu</span>
+                            <strong id="mutasi-modal-tgl" style="text-align:right;">-</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid #f1f5f9;">
+                            <span style="color:#64748b;">Aktivitas</span>
+                            <span id="mutasi-modal-aktivitas" style="font-weight:700;">-</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid #f1f5f9;">
+                            <span style="color:#64748b;">Relasi / Tujuan</span>
+                            <strong id="mutasi-modal-relasi" style="text-align:right; max-width:220px;">-</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid #f1f5f9;">
+                            <span style="color:#64748b;">Total Muatan Trip</span>
+                            <strong id="mutasi-modal-total-kg" style="color:#1e293b;">0 Kg</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid #f1f5f9;">
+                            <span style="color:#64748b;">Kru Bertugas</span>
+                            <strong id="mutasi-modal-kru" style="color:#1e3a8a; text-align:right;">-</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid #f1f5f9;">
+                            <span style="color:#64748b;">Porsi Fisik Saya</span>
+                            <strong id="mutasi-modal-porsi-kg" style="color:#0f766e;">0 Kg</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid #f1f5f9;">
+                            <span style="color:#64748b;">Tarif Insentif</span>
+                            <strong style="color:#15803d;">Rp 15 / Kg (Bagi Rata)</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid #f1f5f9;">
+                            <span style="color:#64748b;">Jarak Rute Tempuh</span>
+                            <strong id="mutasi-modal-jarak">0 Km</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; padding:7px 0;">
+                            <span style="color:#64748b;">Catatan</span>
+                            <span id="mutasi-modal-catatan" style="text-align:right; max-width:220px; color:#64748b;">-</span>
+                        </div>
+                    </div>
+
+                    <button type="button" onclick="tutupModalRincianMutasi()" style="width:100%; background:#f1f5f9; color:#475569; font-weight:800; border:none; padding:12px; border-radius:10px; font-size:13px; cursor:pointer;">
+                        Tutup
+                    </button>
+                </div>
+            </div>
+
+            <!-- TAB 3: LOG & PERAWATAN ARMADA SAYA (driver-view-armada) -->
+            <div id="driver-view-armada" class="driver-tab-content hidden">
+                <!-- Header Kartu Armada Saya -->
+                <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:14px; padding:16px; margin-bottom:14px; box-shadow:0 2px 6px rgba(0,0,0,0.04);">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                        <div>
+                            <span style="background:#eff6ff; color:#1d4ed8; font-size:10px; font-weight:800; padding:2px 8px; border-radius:12px; display:inline-flex; align-items:center; gap:3px;">
+                                <span class="material-symbols-outlined" style="font-size:13px;">local_shipping</span> ARMADA SAYA
+                            </span>
+                            <h3 id="driver-armada-title" style="margin:4px 0 0 0; font-size:17px; font-weight:800; color:#1e293b;">D 8070 UE</h3>
+                            <div id="driver-armada-subtitle" style="font-size:11px; color:#64748b; margin-top:2px;">Supir Penanggung Jawab: <b style="color:#1e3a8a;">-</b></div>
+                        </div>
+                        <button type="button" onclick="loadArmadaDriver()" style="background:#f8fafc; border:1px solid #cbd5e1; color:#334155; padding:6px 10px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:3px;">
+                            <span class="material-symbols-outlined" style="font-size:14px;">refresh</span> Segarkan
+                        </button>
+                    </div>
+
+                    <!-- Indikator Cepat Armada (Odometer, Total Biaya, Total Rit) -->
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; background:#f8fafc; padding:10px; border-radius:10px; border:1px solid #f1f5f9; margin-bottom:12px;">
+                        <div>
+                            <div style="font-size:9px; color:#64748b; font-weight:700;">ODOMETER</div>
+                            <div id="driver-armada-odo" style="font-size:13px; font-weight:800; color:#15803d;">- KM</div>
+                        </div>
+                        <div>
+                            <div style="font-size:9px; color:#64748b; font-weight:700;">TOTAL BIAYA</div>
+                            <div id="driver-armada-biaya" style="font-size:13px; font-weight:800; color:#1e3a8a;">Rp 0</div>
+                        </div>
+                        <div>
+                            <div style="font-size:9px; color:#64748b; font-weight:700;">TOTAL RIT</div>
+                            <div id="driver-armada-rit" style="font-size:13px; font-weight:800; color:#0f766e;">0 Rit</div>
+                        </div>
+                    </div>
+
+                    <!-- Tombol Lapor Bensin & Operasional -->
+                    <button type="button" onclick="bukaModalCatatBBM()" style="width:100%; background:#2563eb; color:white; border:none; padding:11px; border-radius:10px; font-size:12px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 3px 8px rgba(37,99,235,0.25);">
+                        <span class="material-symbols-outlined" style="font-size:18px;">add_circle</span> + Catat Bensin / Servis / Ban
+                    </button>
+                </div>
+
+                <!-- Sub-tab Tampilan Supir: Biaya & Servis vs Riwayat Antar -->
+                <div style="display:flex; gap:6px; margin-bottom:12px;">
+                    <button type="button" id="btn-tab-supir-servis" onclick="switchDriverArmadaSubTab('servis')" style="flex:1; padding:8px 10px; font-size:11px; font-weight:800; border-radius:8px; border:1px solid #2563eb; background:#2563eb; color:white; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                        <span class="material-symbols-outlined" style="font-size:15px;">build</span> Catatan Servis & BBM
+                    </button>
+                    <button type="button" id="btn-tab-supir-rit" onclick="switchDriverArmadaSubTab('rit')" style="flex:1; padding:8px 10px; font-size:11px; font-weight:700; border-radius:8px; border:1px solid #cbd5e1; background:#ffffff; color:#475569; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                        <span class="material-symbols-outlined" style="font-size:15px;">route</span> Riwayat Pengantaran
+                    </button>
+                </div>
+
+                <!-- List Catatan Servis & BBM Armada Ini -->
+                <div id="driver-armada-view-servis" style="margin-bottom:16px;">
+                    <div id="driver-armada-servis-list">
+                        <div style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat catatan perawatan mobil...</div>
+                    </div>
+                </div>
+
+                <!-- List Riwayat Perjalanan Armada Ini -->
+                <div id="driver-armada-view-rit" class="hidden" style="margin-bottom:16px;">
+                    <div id="driver-armada-rit-list">
+                        <div style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat riwayat pengantaran mobil...</div>
+                    </div>
+                </div>
             </div>
 
             <!-- MODAL SELEBRASI DOPAMINE (+Rp MASUK KE DOMPET) -->
@@ -3610,9 +3955,9 @@
                     <p style="margin:0 0 14px 0; font-size:12px; color:#64748b;">Pengantaran ke <b id="celeb-nama-peternak" style="color:#1e3a8a;">-</b> telah selesai.</p>
 
                     <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px; margin-bottom:16px;">
-                        <span style="font-size:10px; color:#64748b; text-transform:uppercase; font-weight:700;">Upah Muat Pakan (10 x kg) Ditambahkan</span>
+                        <span style="font-size:10px; color:#64748b; text-transform:uppercase; font-weight:700;">Upah Kirim Pakan (Rp 15/kg) Ditambahkan</span>
                         <div id="celeb-nominal-uang" style="font-size:24px; font-weight:800; color:#16a34a; margin-top:2px;">+Rp 0</div>
-                        <div id="celeb-km-poin" style="font-size:11px; color:#2563eb; margin-top:4px; font-weight:600;">+0 Km ditambahkan ke Tabungan Jarak</div>
+                        <div id="celeb-km-poin" style="font-size:11px; color:#2563eb; margin-top:4px; font-weight:600;">+0 Km rute jalan tercatat</div>
                     </div>
 
                     <button type="button" onclick="tutupModalSelebrasi()" style="width:100%; background:#2563eb; color:white; border:none; padding:12px; border-radius:10px; font-size:13px; font-weight:800; cursor:pointer;">
@@ -3621,13 +3966,13 @@
                 </div>
             </div>
 
-            <!-- MODAL CATAT ISI BENSIN / SOLAR (UANG KELUAR) -->
+            <!-- MODAL LAPORAN ISI BENSIN & OPERASIONAL (UANG KELUAR) -->
             <div id="modal-catat-bbm-driver" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:9999; display:flex; justify-content:center; align-items:center; padding:15px; box-sizing:border-box;">
                 <div style="background:#ffffff; border-radius:16px; max-width:400px; width:100%; padding:20px; box-shadow:0 12px 30px rgba(0,0,0,0.25); max-height:90vh; overflow-y:auto;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
                         <div style="display:flex; align-items:center; gap:6px; font-size:15px; font-weight:800; color:#1e293b;">
                             <span class="material-symbols-outlined" style="color:#d97706; font-size:22px;">local_gas_station</span>
-                            Catat Isi Bensin / Solar
+                            Laporan Isi Bensin & Operasional
                         </div>
                         <button type="button" onclick="tutupModalCatatBBM()" style="background:none; border:none; color:#64748b; cursor:pointer;">
                             <span class="material-symbols-outlined">close</span>
@@ -3635,14 +3980,38 @@
                     </div>
 
                     <form onsubmit="simpanBeliBBMDriver(event)">
+                        <!-- Jenis Laporan Operasional -->
+                        <div style="margin-bottom:12px;">
+                            <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Jenis Laporan:</label>
+                            <div style="display:flex; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:0 10px;">
+                                <span id="bbm-kategori-icon" class="material-symbols-outlined" style="color:#2563eb; font-size:20px; margin-right:8px;">local_gas_station</span>
+                                <select id="bbm-input-kategori" onchange="toggleKategoriOperasionalForm()" style="flex:1; padding:9px 0; border:none; background:transparent; font-size:12px; font-weight:700; color:#1e293b; outline:none; cursor:pointer;">
+                                    <option value="BBM / Solar">Isi Bensin / Solar</option>
+                                    <option value="Ban / Isi Angin">Ban (Tambal / Isi Angin / Ganti Ban)</option>
+                                    <option value="Servis / Ganti Oli">Servis Rutin / Ganti Oli</option>
+                                    <option value="Cuci Mobil">Cuci Armada</option>
+                                    <option value="Operasional Lainnya">Perbaikan / Pengeluaran Lain</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <!-- Pilih Armada -->
                         <div style="margin-bottom:12px;">
-                            <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Pilih Armada:</label>
-                            <select id="bbm-input-armada" style="width:100%; padding:9px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:12px; font-weight:700; background:#f8fafc;">
-                                <option value="D 8070 UE">D 8070 UE (Grand Max Pick-up)</option>
-                                <option value="D 8142 UK">D 8142 UK (Pick-up Putih)</option>
-                                <option value="Truk">Truk Ekspedisi</option>
-                            </select>
+                            <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Pilih Armada & Supir Tetap:</label>
+                            <div style="display:flex; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:0 10px;">
+                                <span class="material-symbols-outlined" style="color:#0f766e; font-size:20px; margin-right:8px;">directions_car</span>
+                                <select id="bbm-input-armada" style="flex:1; padding:9px 0; border:none; background:transparent; font-size:12px; font-weight:700; color:#1e293b; outline:none; cursor:pointer;">
+                                    <option value="D 8070 UE">D 8070 UE (Supir: Hilman)</option>
+                                    <option value="D 8142 UK">D 8142 UK (Supir: Adi)</option>
+                                    <option value="Truk">Truk Ekspedisi</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Rincian Catatan (Khusus non-BBM) -->
+                        <div id="bbm-row-detail" style="margin-bottom:12px; display:none;">
+                            <label style="font-size:11px; font-weight:700; color:#1e293b; display:block; margin-bottom:4px;">Keterangan / Rincian Pekerjaan:</label>
+                            <input type="text" id="bbm-input-detail" placeholder="Misal: Tambal ban belakang kiri, isi angin 4 roda, ganti oli mesin" style="width:100%; padding:9px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:11px; box-sizing:border-box;">
                         </div>
 
                         <!-- Tanggal & Metode Bayar -->
@@ -3662,7 +4031,7 @@
 
                         <!-- Nominal Biaya (Rp) -->
                         <div style="margin-bottom:12px;">
-                            <label style="font-size:11px; font-weight:700; color:#1e293b; display:block; margin-bottom:4px;">
+                            <label id="bbm-label-nominal" style="font-size:11px; font-weight:700; color:#1e293b; display:block; margin-bottom:4px;">
                                 Nominal Biaya Bensin (Rp) <span style="color:#dc2626;">*Wajib</span>:
                             </label>
                             <input type="number" id="bbm-input-nominal" required placeholder="Contoh: 150000" min="1000" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #94a3b8; font-size:16px; font-weight:800; color:#1e3a8a; box-sizing:border-box;">
@@ -3670,7 +4039,7 @@
 
                         <!-- Liter & Kilometer Odometer -->
                         <div style="display:flex; gap:10px; margin-bottom:12px;">
-                            <div style="flex:1;">
+                            <div id="bbm-col-liter" style="flex:1;">
                                 <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Jumlah Liter (Opsional):</label>
                                 <input type="number" step="0.01" id="bbm-input-liter" placeholder="Misal: 22.5" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:11px; box-sizing:border-box;">
                             </div>
@@ -3680,17 +4049,17 @@
                             </div>
                         </div>
 
-                        <!-- Foto Struk SPBU -->
+                        <!-- Foto Struk SPBU / Nota Bengkel -->
                         <div style="margin-bottom:14px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px; padding:10px;">
                             <label style="font-size:11px; font-weight:700; color:#334155; display:flex; align-items:center; gap:4px; margin-bottom:6px;">
-                                <span class="material-symbols-outlined" style="font-size:15px; color:#2563eb;">photo_camera</span> Foto Struk SPBU (Opsional):
+                                <span class="material-symbols-outlined" style="font-size:15px; color:#2563eb;">photo_camera</span> Foto Struk SPBU / Nota (Opsional):
                             </label>
                             <input type="file" id="bbm-input-foto" accept="image/*" capture="environment" style="width:100%; font-size:11px;">
                             <div id="bbm-foto-preview" style="margin-top:6px;"></div>
                         </div>
 
                         <div style="font-size:10px; color:#64748b; margin-bottom:14px; line-height:1.4;">
-                            *Pengeluaran bensin otomatis masuk ke <b>Laporan Uang Keluar (Cashflow Kantor)</b> dan tersinkron ke rekap kasir.
+                            *Pengeluaran otomatis masuk ke <b>Laporan Uang Keluar (Cashflow Kantor)</b> dan tersinkron ke rekap kasir.
                         </div>
 
                         <button type="submit" id="btn-simpan-bbm" style="width:100%; background:linear-gradient(135deg, #d97706, #b45309); color:white; border:none; padding:12px; border-radius:10px; font-size:13px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 3px 8px rgba(217,119,6,0.25);">
@@ -3720,7 +4089,7 @@
                     <span class="material-symbols-outlined" style="font-size:18px;">payments</span> Rekapitulasi Gaji & Tutup Periode
                 </button>
                 <button id="tab-adm-bbm" class="btn-tab-trip" onclick="switchAdminTripTab('bbm')" style="flex:1; min-width:140px; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 14px; font-weight:600; font-size:12px; border-radius:10px; border:none; cursor:pointer; background:#f1f5f9; color:#475569;">
-                    <span class="material-symbols-outlined" style="font-size:18px;">local_gas_station</span> Log Pengisian BBM
+                    <span class="material-symbols-outlined" style="font-size:18px;">local_shipping</span> Log & Perawatan Armada
                 </button>
             </div>
 
@@ -3767,7 +4136,7 @@
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                         <div>
                             <h4 style="margin:0; font-size:14px; font-weight:800; color:#1e293b;">Rekapitulasi Upah & Insentif Karyawan</h4>
-                            <p style="margin:3px 0 0 0; font-size:11px; color:#64748b;">Otot Pick-Up (Rp 10/kg), Subsidi Toples Jarak (Rp 5/kg), & Muat Truk (Rp 15/kg)</p>
+                            <p style="margin:3px 0 0 0; font-size:11px; color:#64748b;">Insentif Kirim Pick-Up Flat Rp 15/kg (dibagi rata kru trip) & Kru Muat Truk/Mandiri Rp 15/kg</p>
                         </div>
                         <div style="display:flex; gap:8px;">
                             <button type="button" onclick="tutupPeriodeDanCairkanToples()" style="background:#dc2626; color:white; border:none; padding:8px 14px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(220,38,38,0.25);">
@@ -3787,10 +4156,10 @@
                                 <tr>
                                     <th style="padding:10px 8px; text-align:left;">Nama Karyawan</th>
                                     <th style="padding:10px 6px; text-align:left;">Role</th>
-                                    <th style="padding:10px 8px; text-align:right;">Total Muat (Kg)</th>
-                                    <th style="padding:10px 8px; text-align:right;">Upah Otot</th>
-                                    <th style="padding:10px 8px; text-align:right;">Porsi Jarak</th>
-                                    <th style="padding:10px 8px; text-align:right;">Muat/Solar Truk</th>
+                                    <th style="padding:10px 8px; text-align:right;">Dimuat (Kg)</th>
+                                    <th style="padding:10px 8px; text-align:right;">Diantar (Kg)</th>
+                                    <th style="padding:10px 8px; text-align:right;">Upah Muat (15/kg)</th>
+                                    <th style="padding:10px 8px; text-align:right;">Solar Truk</th>
                                     <th style="padding:10px 8px; text-align:right; font-weight:800; background:#1e3a8a;">Total Bersih</th>
                                 </tr>
                             </thead>
@@ -3808,44 +4177,98 @@
                 </div>
             </div>
 
-            <!-- TAB 4: LOG BBM & ODOMETER ARMADA (SISI ADMIN) -->
+            <!-- TAB 4: LOG & PERAWATAN ARMADA (SISI ADMIN) -->
             <div id="view-adm-bbm" class="view-adm-content hidden">
                 <div style="background:#ffffff; padding:16px; border-radius:12px; border:1px solid #e2e8f0; margin-bottom:15px; box-shadow:0 2px 4px rgba(0,0,0,0.03);">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                         <div>
-                            <h4 style="margin:0; font-size:14px; font-weight:800; color:#1e293b;">Riwayat Pengisian BBM & Odometer Armada</h4>
-                            <p style="margin:3px 0 0 0; font-size:11px; color:#64748b;">Pantau konsumsi bahan bakar, posisi KM spidometer terakhir, dan struk SPBU.</p>
+                            <h4 style="margin:0; font-size:14px; font-weight:800; color:#1e293b; display:flex; align-items:center; gap:6px;">
+                                <span class="material-symbols-outlined" style="color:#2563eb;">local_shipping</span> Log & Perawatan Armada CBL
+                            </h4>
+                            <p style="margin:3px 0 0 0; font-size:11px; color:#64748b;">Tracking riwayat perjalanan (kemana aja), pengisian BBM, tambal ban/isi angin, dan servis berkala.</p>
                         </div>
                         <div style="display:flex; gap:8px;">
                             <button type="button" onclick="loadLogBBMAdmin()" style="background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; padding:8px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px;">
                                 <span class="material-symbols-outlined" style="font-size:15px;">refresh</span> Segarkan
                             </button>
                             <button type="button" onclick="bukaModalCatatBBM()" style="background:#d97706; color:white; border:none; padding:8px 14px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(217,119,6,0.25);">
-                                <span class="material-symbols-outlined" style="font-size:16px;">add</span> Catat Isi Bensin
+                                <span class="material-symbols-outlined" style="font-size:16px;">add</span> + Laporan Operasional / Servis
                             </button>
                         </div>
                     </div>
+
+                    <!-- Filter Pill Armada -->
+                    <div style="display:flex; gap:6px; margin-top:12px; padding-top:12px; border-top:1px dashed #e2e8f0; overflow-x:auto;">
+                        <button type="button" class="btn-filter-armada active" data-armada="all" onclick="filterLogArmada('all')" style="padding:6px 14px; font-size:11px; font-weight:700; border-radius:20px; border:1px solid #2563eb; background:#eff6ff; color:#1d4ed8; cursor:pointer;">
+                            Semua Armada
+                        </button>
+                        <button type="button" class="btn-filter-armada" data-armada="D 8070 UE" onclick="filterLogArmada('D 8070 UE')" style="padding:6px 14px; font-size:11px; font-weight:700; border-radius:20px; border:1px solid #cbd5e1; background:#ffffff; color:#475569; cursor:pointer;">
+                            D 8070 UE
+                        </button>
+                        <button type="button" class="btn-filter-armada" data-armada="D 8142 UK" onclick="filterLogArmada('D 8142 UK')" style="padding:6px 14px; font-size:11px; font-weight:700; border-radius:20px; border:1px solid #cbd5e1; background:#ffffff; color:#475569; cursor:pointer;">
+                            D 8142 UK
+                        </button>
+                        <button type="button" class="btn-filter-armada" data-armada="Truk" onclick="filterLogArmada('Truk')" style="padding:6px 14px; font-size:11px; font-weight:700; border-radius:20px; border:1px solid #cbd5e1; background:#ffffff; color:#475569; cursor:pointer;">
+                            Truk
+                        </button>
+                    </div>
                 </div>
 
+                <!-- KPI Summary Box -->
                 <div id="admin-bbm-summary"></div>
 
-                <div style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 2px 4px rgba(0,0,0,0.03);">
+                <!-- Sub-tab Navigasi Antara Biaya/Servis vs Riwayat Perjalanan -->
+                <div style="display:flex; gap:8px; margin-bottom:12px;">
+                    <button type="button" id="subtab-btn-biaya" onclick="switchSubTabArmada('biaya')" style="flex:1; padding:9px 12px; font-size:12px; font-weight:800; border-radius:8px; border:1px solid #2563eb; background:#2563eb; color:white; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+                        <span class="material-symbols-outlined" style="font-size:17px;">handyman</span> Catatan Servis, Bensin & Perawatan
+                    </button>
+                    <button type="button" id="subtab-btn-rute" onclick="switchSubTabArmada('rute')" style="flex:1; padding:9px 12px; font-size:12px; font-weight:700; border-radius:8px; border:1px solid #cbd5e1; background:#f8fafc; color:#475569; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+                        <span class="material-symbols-outlined" style="font-size:17px;">route</span> Riwayat Perjalanan (Tracking Kemana Aja)
+                    </button>
+                </div>
+
+                <!-- Subview 1: Tabel Catatan Biaya, BBM & Servis -->
+                <div id="subview-armada-biaya" style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 2px 4px rgba(0,0,0,0.03);">
                     <div style="overflow-x:auto;">
                         <table style="width:100%; border-collapse:collapse; font-size:11px;">
                             <thead style="background:#1e40af; color:white;">
                                 <tr>
                                     <th style="padding:10px 8px; text-align:left;">Tanggal</th>
                                     <th style="padding:10px 8px; text-align:left;">Armada</th>
+                                    <th style="padding:10px 8px; text-align:left;">Kategori</th>
+                                    <th style="padding:10px 8px; text-align:left;">Keterangan / Rincian</th>
                                     <th style="padding:10px 8px; text-align:right;">Odometer (KM)</th>
-                                    <th style="padding:10px 8px; text-align:right;">Liter</th>
                                     <th style="padding:10px 8px; text-align:right;">Biaya (Rp)</th>
                                     <th style="padding:10px 8px; text-align:center;">Metode</th>
                                     <th style="padding:10px 8px; text-align:left;">Petugas</th>
-                                    <th style="padding:10px 8px; text-align:center;">Struk SPBU</th>
+                                    <th style="padding:10px 8px; text-align:center;">Struk / Nota</th>
                                 </tr>
                             </thead>
                             <tbody id="admin-bbm-tbody">
-                                <tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8;">Memuat data riwayat BBM...</td></tr>
+                                <tr><td colspan="9" style="text-align:center; padding:25px; color:#94a3b8;">Memuat data catatan biaya armada...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Subview 2: Tabel Riwayat Perjalanan (Tracking Kemana Aja) -->
+                <div id="subview-armada-rute" class="hidden" style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 2px 4px rgba(0,0,0,0.03);">
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; font-size:11px;">
+                            <thead style="background:#0f766e; color:white;">
+                                <tr>
+                                    <th style="padding:10px 8px; text-align:left;">Waktu & Tanggal</th>
+                                    <th style="padding:10px 8px; text-align:left;">Armada</th>
+                                    <th style="padding:10px 8px; text-align:left;">Tujuan (Konsumen / Kandang)</th>
+                                    <th style="padding:10px 8px; text-align:left;">Muatan Pakan</th>
+                                    <th style="padding:10px 8px; text-align:right;">Total Beban</th>
+                                    <th style="padding:10px 8px; text-align:left;">Kru (Supir & Kernek)</th>
+                                    <th style="padding:10px 8px; text-align:right;">Jarak PP</th>
+                                    <th style="padding:10px 8px; text-align:center;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-armada-rute-tbody">
+                                <tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8;">Memuat riwayat perjalanan armada...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -4547,6 +4970,11 @@
             <div class="nav-item active" id="nav-input" onclick="pindahMenu('input')">
                 <span class="material-symbols-outlined nav-icon">edit_document</span><span>Laporan</span>
             </div>
+
+            <!-- MENU ORDER (MONITOR PENGIRIMAN BELUM TERKIRIM) PERSIS DI BAWAH LAPORAN -->
+            <div class="nav-item hidden" id="nav-order-monitor" onclick="pindahMenu('order-monitor')">
+                <span class="material-symbols-outlined nav-icon">local_shipping</span><span>Order</span>
+            </div>
             
             <!-- TOMBOL GABUNGAN REKAP -->
             <div class="nav-item" id="nav-rekap-group" onclick="toggleSubMenu(event)">
@@ -4573,12 +5001,18 @@
 
         <!-- BOTTOM NAV KHUSUS SUPIR & KERNEK -->
         <div class="driver-bottom-nav hidden" id="driver-nav">
-            <div class="nav-item active" id="nav-driver-order" onclick="switchDriverPortalTab('order')" style="color:#38bdf8;">
-                <span class="material-symbols-outlined nav-icon">local_shipping</span><span>Order Kirim</span>
-            </div>
-            <div class="nav-item" id="nav-driver-dompet" onclick="switchDriverPortalTab('dompet')" style="color:#94a3b8;">
-                <span class="material-symbols-outlined nav-icon">account_balance_wallet</span><span>Dompet Saya</span>
-            </div>
+            <button type="button" class="driver-nav-btn active" id="nav-driver-order" onclick="switchDriverPortalTab('order')">
+                <span class="material-symbols-outlined">local_shipping</span>
+                <span>Order Kirim</span>
+            </button>
+            <button type="button" class="driver-nav-btn" id="nav-driver-armada" onclick="switchDriverPortalTab('armada')">
+                <span class="material-symbols-outlined">directions_car</span>
+                <span>Log Armada</span>
+            </button>
+            <button type="button" class="driver-nav-btn" id="nav-driver-dompet" onclick="switchDriverPortalTab('dompet')">
+                <span class="material-symbols-outlined">account_balance_wallet</span>
+                <span>Dompet Saya</span>
+            </button>
         </div>
 
         <!-- WADAH POP-UP SUB-MENU -->
@@ -4596,7 +5030,7 @@
                 <span class="material-symbols-outlined" style="color:#2563eb;">local_shipping</span> Manajemen Trip & Insentif
             </div>
             <div id="sub-rekap-bbm" class="submenu-item" onclick="pindahMenu('trip-bbm')">
-                <span class="material-symbols-outlined" style="color:#d97706;">local_gas_station</span> Log Pengisian BBM
+                <span class="material-symbols-outlined" style="color:#d97706;">local_shipping</span> Log & Perawatan Armada
             </div>
         </div>
 
@@ -6138,6 +6572,117 @@ async function prosesAntreanBackground() {
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
         window.addEventListener('online', updateStatusKoneksi); window.addEventListener('offline', updateStatusKoneksi);
 
+        // ==========================================
+        // PWA INSTALLATION HANDLER & DOWNLOAD HELPER
+        // ==========================================
+        let deferredPwaPrompt = null;
+
+        function isPwaInstalled() {
+            return window.matchMedia('(display-mode: standalone)').matches ||
+                   window.navigator.standalone === true ||
+                   document.referrer.includes('android-app://');
+        }
+
+        function updatePwaInstallVisibility() {
+            let installed = isPwaInstalled();
+            let loginBox = document.getElementById('pwa-install-login-container');
+            let topBanner = document.getElementById('pwa-top-banner');
+            let driverBanner = document.getElementById('pwa-driver-banner');
+
+            if (installed) {
+                if (loginBox) loginBox.style.display = 'none';
+                if (topBanner) topBanner.classList.add('hidden');
+                if (driverBanner) driverBanner.classList.add('hidden');
+            } else {
+                if (loginBox) loginBox.style.display = 'block';
+                if (driverBanner) driverBanner.classList.remove('hidden');
+                if (topBanner && !sessionStorage.getItem('pwa_banner_dismissed')) {
+                    topBanner.classList.remove('hidden');
+                }
+            }
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPwaPrompt = e;
+            console.log('PWA: beforeinstallprompt siap digunakan');
+            updatePwaInstallVisibility();
+        });
+
+        window.addEventListener('appinstalled', () => {
+            deferredPwaPrompt = null;
+            updatePwaInstallVisibility();
+            alert("🎉 Aplikasi Pakan CBL berhasil dipasang di layar utama HP Anda!");
+        });
+
+        async function triggerPwaInstall() {
+            if (deferredPwaPrompt) {
+                try {
+                    deferredPwaPrompt.prompt();
+                    let choice = await deferredPwaPrompt.userChoice;
+                    if (choice && choice.outcome === 'accepted') {
+                        console.log('PWA install diterima oleh user');
+                        updatePwaInstallVisibility();
+                    }
+                } catch (err) {
+                    console.warn('PWA prompt error:', err);
+                    bukaModalPanduanInstall();
+                }
+                deferredPwaPrompt = null;
+            } else {
+                bukaModalPanduanInstall();
+            }
+        }
+
+        function switchPwaGuideTab(tab) {
+            let btnAndroid = document.getElementById('btn-pwa-tab-android');
+            let btnIos = document.getElementById('btn-pwa-tab-ios');
+            let guideAndroid = document.getElementById('pwa-guide-android');
+            let guideIos = document.getElementById('pwa-guide-ios');
+
+            if (tab === 'ios') {
+                if (btnIos) { btnIos.style.background = '#2563eb'; btnIos.style.color = '#fff'; btnIos.style.borderColor = '#2563eb'; }
+                if (btnAndroid) { btnAndroid.style.background = '#f1f5f9'; btnAndroid.style.color = '#475569'; btnAndroid.style.borderColor = '#cbd5e1'; }
+                if (guideIos) guideIos.style.display = 'block';
+                if (guideAndroid) guideAndroid.style.display = 'none';
+            } else {
+                if (btnAndroid) { btnAndroid.style.background = '#166534'; btnAndroid.style.color = '#fff'; btnAndroid.style.borderColor = '#166534'; }
+                if (btnIos) { btnIos.style.background = '#f1f5f9'; btnIos.style.color = '#475569'; btnIos.style.borderColor = '#cbd5e1'; }
+                if (guideAndroid) guideAndroid.style.display = 'block';
+                if (guideIos) guideIos.style.display = 'none';
+            }
+        }
+
+        function bukaModalPanduanInstall() {
+            let modal = document.getElementById('modal-panduan-install-pwa');
+            if (!modal) return;
+            let isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            switchPwaGuideTab(isIos ? 'ios' : 'android');
+            modal.classList.remove('hidden');
+        }
+
+        function tutupModalPanduanInstall() {
+            document.getElementById('modal-panduan-install-pwa')?.classList.add('hidden');
+        }
+
+        function dismissPwaBanner() {
+            document.getElementById('pwa-top-banner')?.classList.add('hidden');
+            sessionStorage.setItem('pwa_banner_dismissed', 'true');
+        }
+
+        // Jalankan pengecekan status PWA saat halaman selesai dimuat
+        document.addEventListener('DOMContentLoaded', updatePwaInstallVisibility);
+        window.addEventListener('load', updatePwaInstallVisibility);
+
+        // Ekspor fungsi PWA ke scope window
+        window.triggerPwaInstall = triggerPwaInstall;
+        window.bukaModalPanduanInstall = bukaModalPanduanInstall;
+        window.tutupModalPanduanInstall = tutupModalPanduanInstall;
+        window.switchPwaGuideTab = switchPwaGuideTab;
+        window.dismissPwaBanner = dismissPwaBanner;
+        window.isPwaInstalled = isPwaInstalled;
+        window.updatePwaInstallVisibility = updatePwaInstallVisibility;
+
         document.addEventListener("visibilitychange", () => {
             if (document.visibilityState === "visible") {
                 if (!document.getElementById('page-piutang').classList.contains('hidden')) tarikDataPiutang();
@@ -6183,6 +6728,9 @@ async function prosesAntreanBackground() {
         document.getElementById('app-screen').classList.remove('hidden');
 
         aturAksesMenu(user.role);
+        if (typeof updatePwaInstallVisibility === 'function') {
+            updatePwaInstallVisibility();
+        }
     } else {
         document.getElementById('login-error').style.display = 'block';
     }
@@ -6241,6 +6789,12 @@ function aturAksesMenu(role) {
     document.getElementById('sub-rekap-giling').classList.add('hidden');
     if (document.getElementById('sub-rekap-panggul')) document.getElementById('sub-rekap-panggul').classList.add('hidden');
     if (document.getElementById('sub-rekap-trip')) document.getElementById('sub-rekap-trip').classList.add('hidden');
+    if (document.getElementById('sub-rekap-bbm')) document.getElementById('sub-rekap-bbm').classList.add('hidden');
+    if (document.getElementById('nav-order-monitor')) document.getElementById('nav-order-monitor').classList.add('hidden');
+    if (document.getElementById('nav-jurnal')) document.getElementById('nav-jurnal').classList.remove('hidden');
+
+    let rLower = (role || '').toLowerCase();
+    let isAgus = (rLower === 'petugas pm') || (typeof activeUser !== 'undefined' && (activeUser || '').toLowerCase().includes('agus'));
 
     // 2. Buka gembok sesuai 'role' yang diterima dari database Supabase
     if (role === 'admin') {
@@ -6250,15 +6804,21 @@ function aturAksesMenu(role) {
         document.getElementById('sub-rekap-giling').classList.remove('hidden');
         if (document.getElementById('sub-rekap-panggul')) document.getElementById('sub-rekap-panggul').classList.remove('hidden');
         if (document.getElementById('sub-rekap-trip')) document.getElementById('sub-rekap-trip').classList.remove('hidden');
+        if (document.getElementById('sub-rekap-bbm')) document.getElementById('sub-rekap-bbm').classList.remove('hidden');
         
         document.getElementById('nav-analytics').classList.remove('hidden');
         document.getElementById('nav-piutang').classList.remove('hidden');
+        if (document.getElementById('nav-jurnal')) document.getElementById('nav-jurnal').classList.remove('hidden');
     }
-    else if (role === 'petugas PM') {
-        // Pak Agus: Hanya Rekap Harian
+    else if (isAgus) {
+        // Pak Agus: Sembunyikan Menu Jurnal & Log Perawatan Kendaraan, Munculkan Menu Order (Monitor Pengiriman Belum Terkirim)
         document.getElementById('nav-rekap-group').classList.remove('hidden');
         document.getElementById('sub-rekap-harian').classList.remove('hidden');
         if (document.getElementById('sub-rekap-panggul')) document.getElementById('sub-rekap-panggul').classList.remove('hidden');
+        if (document.getElementById('sub-rekap-trip')) document.getElementById('sub-rekap-trip').classList.add('hidden');
+        if (document.getElementById('sub-rekap-bbm')) document.getElementById('sub-rekap-bbm').classList.add('hidden');
+        if (document.getElementById('nav-jurnal')) document.getElementById('nav-jurnal').classList.add('hidden');
+        if (document.getElementById('nav-order-monitor')) document.getElementById('nav-order-monitor').classList.remove('hidden');
     }
     else if (role === 'petugas SPN') {
         // Petugas SPN (Zulfi): Hanya Rekap Giling
@@ -6350,7 +6910,54 @@ function aturAksesMenu(role) {
                 tarikDataPanggul(true);
             }
 
+            let isAgus = (typeof currentRole !== 'undefined' && currentRole.toLowerCase() === 'petugas pm') || (typeof activeUser !== 'undefined' && (activeUser || '').toLowerCase().includes('agus'));
+            if ((menu === 'jurnal' || menu === 'trip-bbm') && isAgus) {
+                alert("Akses Ditolak: Anda tidak memiliki akses ke menu ini.");
+                return;
+            }
+
+            if (menu === 'order-monitor') {
+                document.querySelectorAll('.container').forEach(p => p.classList.add('hidden')); 
+                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+                let targetPage = document.getElementById('page-trip');
+                if (targetPage) targetPage.classList.remove('hidden'); 
+                let targetNav = document.getElementById('nav-order-monitor');
+                if (targetNav) targetNav.classList.add('active'); 
+                tutupKeyboard();
+
+                let tabMonitor = document.getElementById('tab-adm-monitor');
+                let tabPayroll = document.getElementById('tab-adm-payroll');
+                let tabBbm = document.getElementById('tab-adm-bbm');
+                if (isAgus) {
+                    if (tabMonitor) tabMonitor.style.display = 'none';
+                    if (tabPayroll) tabPayroll.style.display = 'none';
+                    if (tabBbm) tabBbm.style.display = 'none';
+                } else {
+                    if (tabMonitor) tabMonitor.style.display = '';
+                    if (tabPayroll) tabPayroll.style.display = '';
+                    if (tabBbm) tabBbm.style.display = '';
+                }
+
+                if (typeof initModulTripAdmin === 'function') {
+                    initModulTripAdmin().then(() => {
+                        if (typeof switchAdminTripTab === 'function') {
+                            switchAdminTripTab('antrean');
+                        }
+                    });
+                } else if (typeof switchAdminTripTab === 'function') {
+                    switchAdminTripTab('antrean');
+                }
+                return;
+            }
+
             if (menu === 'trip' || menu === 'trip-bbm') {
+                let tabMonitor = document.getElementById('tab-adm-monitor');
+                let tabPayroll = document.getElementById('tab-adm-payroll');
+                let tabBbm = document.getElementById('tab-adm-bbm');
+                if (tabMonitor) tabMonitor.style.display = '';
+                if (tabPayroll) tabPayroll.style.display = '';
+                if (tabBbm) tabBbm.style.display = '';
+
                 let rekapGroup = document.getElementById('nav-rekap-group');
                 if (rekapGroup) rekapGroup.classList.add('active');
                 if (typeof initModulTripAdmin === 'function') {
