@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pakan-cbl-v9';
+const CACHE_NAME = 'pakan-cbl-v16';
 const urlsToCache = [
   './',
   './index.html',

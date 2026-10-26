@@ -4133,16 +4133,25 @@
             <!-- TAB 3: REKAPITULASI GAJI & TUTUP PERIODE -->
             <div id="view-adm-payroll" class="view-adm-content hidden">
                 <div style="background:#ffffff; padding:16px; border-radius:12px; border:1px solid #e2e8f0; margin-bottom:15px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
                         <div>
-                            <h4 style="margin:0; font-size:14px; font-weight:800; color:#1e293b;">Rekapitulasi Upah & Insentif Karyawan</h4>
-                            <p style="margin:3px 0 0 0; font-size:11px; color:#64748b;">Insentif Kirim Pick-Up Flat Rp 15/kg (dibagi rata kru trip) & Kru Muat Truk/Mandiri Rp 15/kg</p>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <h4 style="margin:0; font-size:15px; font-weight:800; color:#1e293b;">Rekapitulasi Upah & Insentif Karyawan</h4>
+                                <span id="admin-payroll-badge-periode" style="background:#eff6ff; color:#1d4ed8; font-size:11px; font-weight:700; padding:2px 8px; border-radius:12px; border:1px solid #bfdbfe;">Periode: Bulan Ini</span>
+                            </div>
+                            <p style="margin:4px 0 0 0; font-size:11px; color:#64748b;">Insentif Kirim Pick-Up Flat Rp 15/kg (dibagi rata kru trip) & Kru Muat Truk/Mandiri Rp 15/kg</p>
                         </div>
-                        <div style="display:flex; gap:8px;">
-                            <button type="button" onclick="tutupPeriodeDanCairkanToples()" style="background:#dc2626; color:white; border:none; padding:8px 14px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(220,38,38,0.25);">
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <!-- Filter Pill: Mingguan | Bulanan | Tahunan -->
+                            <div style="display:inline-flex; background:#f1f5f9; padding:3px; border-radius:8px; border:1px solid #cbd5e1;">
+                                <button type="button" id="btn-adm-pay-mingguan" onclick="setAdminPayrollFilter('mingguan')" style="padding:6px 12px; border:none; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; background:transparent; color:#64748b;">Mingguan</button>
+                                <button type="button" id="btn-adm-pay-bulanan" onclick="setAdminPayrollFilter('bulanan')" style="padding:6px 12px; border:none; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; background:#2563eb; color:#ffffff;">Bulanan</button>
+                                <button type="button" id="btn-adm-pay-tahunan" onclick="setAdminPayrollFilter('tahunan')" style="padding:6px 12px; border:none; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; background:transparent; color:#64748b;">Tahunan</button>
+                            </div>
+                            <button type="button" onclick="tutupPeriodeDanCairkanToples()" style="background:#dc2626; color:white; border:none; padding:7px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(220,38,38,0.25);">
                                 <span class="material-symbols-outlined" style="font-size:15px;">lock_reset</span> Cairkan & Tutup Periode
                             </button>
-                            <button type="button" onclick="window.print()" style="background:#15803d; color:white; border:none; padding:8px 14px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(21,128,61,0.25);">
+                            <button type="button" onclick="window.print()" style="background:#15803d; color:white; border:none; padding:7px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(21,128,61,0.25);">
                                 <span class="material-symbols-outlined" style="font-size:15px;">print</span> Cetak Rekap
                             </button>
                         </div>
@@ -4161,15 +4170,17 @@
                                     <th style="padding:10px 8px; text-align:right;">Upah Muat (15/kg)</th>
                                     <th style="padding:10px 8px; text-align:right;">Solar Truk</th>
                                     <th style="padding:10px 8px; text-align:right; font-weight:800; background:#1e3a8a;">Total Bersih</th>
+                                    <th style="padding:10px 8px; text-align:center; width:130px; background:#1e3a8a;">Aksi Cetak</th>
                                 </tr>
                             </thead>
                             <tbody id="admin-payroll-tbody">
-                                <tr><td colspan="7" style="text-align:center; padding:25px; color:#94a3b8;">Memuat data insentif...</td></tr>
+                                <tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8;">Memuat data insentif...</td></tr>
                             </tbody>
                             <tfoot style="background:#f1f5f9; font-weight:800; border-top:2px solid #cbd5e1;">
                                 <tr>
                                     <td colspan="6" style="padding:10px 8px; text-align:right;">GRAND TOTAL PERIODE:</td>
                                     <td id="admin-payroll-tfoot" style="padding:10px 8px; text-align:right; color:#15803d; font-size:13px;">Rp 0</td>
+                                    <td></td>
                                 </tr>
                             </tfoot>
                         </table>

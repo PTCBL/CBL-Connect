@@ -321,6 +321,9 @@ function hitungAkumulasiInsentifPeriode(trips = [], users = []) {
     let totalKmSemuaPickup = 0;
 
     trips.forEach(tr => {
+        // Hanya hitung upah / insentif jika trip sudah SELESAI
+        if (tr.status_trip && tr.status_trip !== 'SELESAI') return;
+
         let isTruk = (tr.armada === 'Truk');
         let isAmbilMandiri = (tr.armada === 'Ambil Mandiri');
         let kg = parseFloat(tr.total_kg) || 0;
@@ -2334,8 +2337,8 @@ function switchDriverArmadaSubTab(subtab) {
 
 
 // Cetak Slip Klaim Upah Supir / Kernek (Kartu Piutang & Pengajuan Kasir)
-function cetakSlipKlaimDriver() {
-    let meUser = (window.tripState.cachedUsers || []).find(u => u.nama === activeUser);
+function cetakSlipKlaimDriver(targetUserParam = null, customTripsParam = null, customFilterLabel = null) {
+    let meUser = targetUserParam || (window.tripState.cachedUsers || []).find(u => u.nama === activeUser);
     if (!meUser) {
         alert("Sesi kru/driver tidak ditemukan.");
         return;
@@ -2343,14 +2346,16 @@ function cetakSlipKlaimDriver() {
 
     let unclaimedTrips = window.tripState.cachedUnclaimedTrips || [];
     let periodTrips = window.tripState.cachedPeriodTrips || [];
-    let filterLabel = window.tripState.currentFilterLabel || 'Bulan Ini';
+    let filterLabel = customFilterLabel || window.tripState.currentFilterLabel || 'Bulan Ini';
 
-    // Prioritaskan mencetak daftar trip yang belum dicairkan jika ada, atau daftar mutasi periode jika semua sudah cair
-    let tripsToPrint = (unclaimedTrips.length > 0) ? unclaimedTrips : periodTrips;
-    let isPengajuanKlaim = (unclaimedTrips.length > 0);
+    // Prioritaskan mencetak daftar trip yang diberikan secara spesifik, atau yang belum dicairkan jika ada, atau daftar mutasi periode jika semua sudah cair
+    let rawTrips = customTripsParam || ((unclaimedTrips.length > 0) ? unclaimedTrips : periodTrips);
+    let tripsToPrint = (rawTrips || []).filter(tr => tr.status_trip === 'SELESAI');
+    let hasBelumCair = tripsToPrint.some(tr => !tr.status_klaim || tr.status_klaim !== 'SUDAH_CAIR');
+    let isPengajuanKlaim = hasBelumCair;
 
-    if (tripsToPrint.length === 0) {
-        alert("Tidak ada data pengantaran untuk dicetak.");
+    if (!tripsToPrint || tripsToPrint.length === 0) {
+        alert(`Tidak ada data pengantaran untuk ${meUser.nama} pada periode ${filterLabel}.`);
         return;
     }
 
@@ -2362,63 +2367,71 @@ function cetakSlipKlaimDriver() {
         day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
     });
 
+    let totalGrossKg = 0;
     let totalUpahPrint = 0;
     let totalKgPrint = 0;
+    let relasiSummary = {};
 
-    let rowsHtml = tripsToPrint.map((tr, idx) => {
+    tripsToPrint.forEach(tr => {
         let isMandiri = (tr.armada === 'Ambil Mandiri');
         let isTruk = (tr.armada === 'Truk');
         let rNama = tr.manifest_items?.[0]?.relasi || tr.catatan || 'Pengantaran';
         let trKg = parseFloat(tr.total_kg) || 0;
-
-        let kruNames = [];
-        let nKru = 1;
-        if (isMandiri || isTruk) {
-            let pekerjaIds = Array.isArray(tr.pekerja_muat_ids) ? tr.pekerja_muat_ids : [];
-            nKru = pekerjaIds.length || 1;
-            kruNames = pekerjaIds.map(id => userDict[id] || `User #${id}`);
-        } else {
-            let sopirNama = userDict[tr.sopir_user_id] || 'Sopir';
-            let k1Nama = userDict[tr.kernek_1_user_id];
-            let k2Nama = userDict[tr.kernek_2_user_id];
-            kruNames = [sopirNama, k1Nama, k2Nama].filter(Boolean);
-            nKru = kruNames.length || 1;
-        }
-        let kruText = kruNames.join(' & ') || 'Kru';
+        totalGrossKg += trKg;
 
         let { upah: upahSaya, porsiKg } = hitungUpahSayaDiTrip(tr, meUser.id);
         totalUpahPrint += upahSaya;
         totalKgPrint += porsiKg;
 
-        let isCair = (tr.status_klaim === 'SUDAH_CAIR');
-        let statusBadge = isCair 
-            ? '<span style="color:#15803d; font-weight:700;">SUDAH CAIR</span>' 
-            : '<span style="color:#b45309; font-weight:700;">BELUM DICAIRKAN</span>';
+        if (!relasiSummary[rNama]) {
+            relasiSummary[rNama] = { rit: 0, grossKg: 0, upah: 0 };
+        }
+        relasiSummary[rNama].rit += 1;
+        relasiSummary[rNama].grossKg += trKg;
+        relasiSummary[rNama].upah += upahSaya;
+    });
 
-        let tglStr = tr.tanggal ? tr.tanggal.split('-').reverse().join('/') : '-';
+    let avgKgPerRit = tripsToPrint.length > 0 ? Math.round(totalGrossKg / tripsToPrint.length) : 0;
 
+    let armadaStandar = '-';
+    let userNamaLower = (meUser.nama || '').toLowerCase();
+    let userRoleLower = (meUser.role || '').toLowerCase();
+    if (userRoleLower.includes('sopir') || userRoleLower.includes('supir')) {
+        if (userNamaLower.includes('hilman')) {
+            armadaStandar = 'D 8070 UE (Grand Max)';
+        } else if (userNamaLower.includes('adi')) {
+            armadaStandar = 'D 8142 UK (Pick-up Putih)';
+        } else if (meUser.armada_default) {
+            armadaStandar = meUser.armada_default;
+        }
+    } else if (userRoleLower.includes('kernek')) {
+        armadaStandar = 'Fleksibel (Sesuai Sopir)';
+    }
+
+    let safeUserNama = (meUser.nama || 'Driver').replace(/[^a-zA-Z0-9]/g, '_');
+    let safeFilter = (filterLabel || 'Klaim').replace(/[^a-zA-Z0-9]/g, '_');
+    let namaFilePdf = `Slip_Klaim_Upah_${safeUserNama}_${safeFilter}.pdf`;
+
+    let baseUrl = window.location.href.split('?')[0];
+    let verificationUrl = `${baseUrl}?klaim_kru=${encodeURIComponent(meUser.nama)}&periode=${encodeURIComponent(filterLabel)}`;
+
+    let relasiKeys = Object.keys(relasiSummary);
+    let relasiRowsHtml = relasiKeys.map((rName, idx) => {
+        let it = relasiSummary[rName];
         return `
-            <tr>
-                <td style="border:1px solid #cbd5e1; padding:6px 8px; text-align:center;">${idx + 1}</td>
-                <td style="border:1px solid #cbd5e1; padding:6px 8px; text-align:center;">${tglStr}</td>
-                <td style="border:1px solid #cbd5e1; padding:6px 8px;">
-                    <strong>${rNama}</strong>
-                    <div style="font-size:10px; color:#64748b;">${isMandiri || isTruk ? 'Bantu Muat Truk' : 'Antar Pick-Up'}</div>
-                </td>
-                <td style="border:1px solid #cbd5e1; padding:6px 8px; text-align:right;">
-                    ${nf.format(trKg)} Kg
-                    <div style="font-size:10px; color:#64748b;">(Porsi: ${nf.format(porsiKg)} Kg)</div>
-                </td>
-                <td style="border:1px solid #cbd5e1; padding:6px 8px; text-align:center; font-size:10px;">${kruText} (${nKru})</td>
-                <td style="border:1px solid #cbd5e1; padding:6px 8px; text-align:right; font-weight:bold; color:#15803d;">Rp ${nf.format(upahSaya)}</td>
-                <td style="border:1px solid #cbd5e1; padding:6px 8px; text-align:center; font-size:10px;">${statusBadge}</td>
+            <tr style="font-size:11px;">
+                <td style="border:1px solid #cbd5e1; padding:6px 8px; text-align:center; color:#64748b;">${idx + 1}</td>
+                <td style="border:1px solid #cbd5e1; padding:6px 8px; font-weight:600; color:#0f172a;">${rName}</td>
+                <td style="border:1px solid #cbd5e1; padding:6px 8px; text-align:center; font-weight:700; color:#0f172a;">${it.rit} Rit</td>
+                <td style="border:1px solid #cbd5e1; padding:6px 8px; text-align:right; color:#0f172a;">${nf.format(it.grossKg)} Kg</td>
+                <td style="border:1px solid #cbd5e1; padding:6px 8px; text-align:right; font-weight:700; color:#0f172a;">Rp ${nf.format(it.upah)}</td>
             </tr>
         `;
     }).join('');
 
     let docTitle = isPengajuanKlaim 
         ? "FORM PENGAJUAN KLAIM UPAH INSENTIF" 
-        : `KARTU PIUTANG & MUTASI UPAH (${filterLabel.toUpperCase()})`;
+        : `BUKTI PENCAIRAN & MUTASI INSENTIF (${filterLabel.toUpperCase()})`;
 
     let printWindow = window.open('', '_blank', 'width=900,height=950');
     if (!printWindow) {
@@ -2431,7 +2444,8 @@ function cetakSlipKlaimDriver() {
         <html>
         <head>
             <meta charset="utf-8">
-            <title>${docTitle} - ${meUser.nama}</title>
+            <title>${docTitle} - PT CBL - ${meUser.nama}</title>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
             <style>
                 body {
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
@@ -2439,6 +2453,11 @@ function cetakSlipKlaimDriver() {
                     color: #0f172a;
                     background: #fff;
                     margin: 0;
+                }
+                #printable-area {
+                    max-width: 800px;
+                    margin: 0 auto;
+                    background: #ffffff;
                 }
                 .header {
                     border-bottom: 2px solid #0f172a;
@@ -2451,7 +2470,7 @@ function cetakSlipKlaimDriver() {
                 .company-name {
                     font-size: 18px;
                     font-weight: 800;
-                    color: #166534;
+                    color: #0f172a;
                     letter-spacing: 0.5px;
                 }
                 .company-sub {
@@ -2459,26 +2478,33 @@ function cetakSlipKlaimDriver() {
                     color: #64748b;
                     margin-top: 2px;
                 }
+                .form-title {
+                    font-size: 14px;
+                    font-weight: 800;
+                    color: #0f172a;
+                    margin-top: 8px;
+                    letter-spacing: 0.3px;
+                }
                 .badge-doc {
                     font-size: 11px;
                     font-weight: 700;
-                    padding: 4px 10px;
-                    background: #dcfce7;
-                    color: #15803d;
-                    border: 1px solid #86efac;
+                    padding: 6px 12px;
+                    background: #ffffff;
+                    color: #000000;
+                    border: 1.5px solid #000000;
                     border-radius: 6px;
                     text-align: right;
                 }
                 .info-grid {
                     display: grid;
                     grid-template-columns: 1fr 1fr;
-                    gap: 12px;
+                    gap: 10px;
                     background: #f8fafc;
-                    border: 1px solid #e2e8f0;
+                    border: 1px solid #cbd5e1;
                     border-radius: 8px;
-                    padding: 12px 16px;
-                    margin-bottom: 16px;
-                    font-size: 12px;
+                    padding: 10px 14px;
+                    margin-bottom: 14px;
+                    font-size: 11px;
                 }
                 .info-item {
                     display: flex;
@@ -2489,123 +2515,559 @@ function cetakSlipKlaimDriver() {
                     width: 100%;
                     border-collapse: collapse;
                     font-size: 11px;
-                    margin-bottom: 20px;
                 }
                 .table-slip th {
-                    background: #f1f5f9;
+                    background: #f8fafc;
                     border: 1px solid #cbd5e1;
-                    padding: 8px;
+                    padding: 6px 8px;
                     font-weight: 700;
                     color: #334155;
+                    font-size: 10px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.3px;
+                }
+                .table-slip td {
+                    color: #0f172a;
                 }
                 .total-card {
-                    background: #f0fdf4;
-                    border: 1.5px dashed #22c55e;
+                    background: #1e3a8a !important;
+                    border: none !important;
                     border-radius: 8px;
-                    padding: 14px 18px;
+                    padding: 12px 18px;
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
-                    margin-bottom: 28px;
+                    color: #ffffff !important;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
                 }
                 .signatures {
                     display: grid;
                     grid-template-columns: 1fr 1fr 1fr;
-                    gap: 20px;
-                    margin-top: 30px;
+                    gap: 16px;
                     text-align: center;
                     font-size: 11px;
+                    page-break-inside: avoid;
                 }
                 .sig-box {
-                    padding-top: 55px;
+                    padding-top: 45px;
                     border-top: 1px solid #334155;
                     font-weight: bold;
                 }
                 @media print {
                     body { padding: 0; }
-                    .no-print { display: none; }
+                    .no-print { display: none !important; }
+                    .total-card {
+                        background: #1e3a8a !important;
+                        color: #ffffff !important;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
                 }
             </style>
         </head>
         <body>
-            <div class="no-print" style="margin-bottom:15px; display:flex; justify-content:flex-end; gap:8px;">
-                <button onclick="window.print()" style="padding:8px 16px; background:#16a34a; color:white; border:none; border-radius:6px; font-weight:bold; cursor:pointer;">🖨️ Cetak Bukti / Simpan PDF</button>
-                <button onclick="window.close()" style="padding:8px 16px; background:#94a3b8; color:white; border:none; border-radius:6px; cursor:pointer;">Tutup</button>
+            <div class="no-print" style="margin-bottom:15px; display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+                <button onclick="kirimWhatsAppKlaim()" style="padding:8px 14px; background:#15803d; color:white; border:none; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
+                    📲 Kirim Ringkasan ke WhatsApp
+                </button>
+                <button id="btn-download-pdf" onclick="unduhPdfKlaim()" style="padding:8px 14px; background:#0284c7; color:white; border:none; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
+                    📥 Download File PDF (1 Lembar)
+                </button>
+                <button onclick="window.print()" style="padding:8px 14px; background:#1e3a8a; color:white; border:none; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
+                    🖨️ Cetak Dokumen
+                </button>
+                <button onclick="window.close()" style="padding:8px 14px; background:#64748b; color:white; border:none; border-radius:6px; font-size:12px; cursor:pointer;">
+                    Tutup
+                </button>
             </div>
 
-            <div class="header">
-                <div>
-                    <div class="company-name">PT CBL CONNECT - LOGISTIK PENGIRIMAN PAKAN</div>
-                    <div class="company-sub">Sistem Kartu Piutang & Manajemen Insentif Kru Lapangan</div>
-                    <div style="font-size:14px; font-weight:bold; margin-top:6px; color:#0f172a;">${docTitle}</div>
+            <div id="printable-area">
+                <div class="header">
+                    <div>
+                        <div class="company-name">PT CBL - LOGISTIK PENGIRIMAN PAKAN</div>
+                        <div class="company-sub">Sistem Kartu Piutang & Manajemen Insentif Kru Lapangan</div>
+                        <div class="form-title">${docTitle}</div>
+                    </div>
+                    <div class="badge-doc">
+                        ${isPengajuanKlaim ? 'STATUS: PENGAJUAN KLAIM' : 'STATUS: SUDAH DICAIRKAN (LUNAS)'}<br>
+                        <span style="font-size:10px; font-weight:normal; color:#475569;">Waktu Cetak: ${tglCetak}</span>
+                    </div>
                 </div>
-                <div class="badge-doc">
-                    ${isPengajuanKlaim ? 'STATUS: PENGAJUAN KLAIM' : 'STATUS: MUTASI PIUTANG'}<br>
-                    <span style="font-size:10px; font-weight:normal; color:#475569;">Waktu Cetak: ${tglCetak}</span>
+
+                <div class="info-grid">
+                    <div>
+                        <div class="info-item"><span style="color:#64748b;">Nama Petugas:</span> <strong>${meUser.nama}</strong></div>
+                        <div class="info-item"><span style="color:#64748b;">Role / Jabatan:</span> <strong style="text-transform:capitalize;">${meUser.role}</strong></div>
+                        <div class="info-item"><span style="color:#64748b;">Armada Standar:</span> <strong>${armadaStandar}</strong></div>
+                    </div>
+                    <div>
+                        <div class="info-item"><span style="color:#64748b;">Tarif Per Kg:</span> <strong>Rp 15 / Kg (Bagi Rata Kru)</strong></div>
+                        <div class="info-item"><span style="color:#64748b;">Jumlah Pengantaran:</span> <strong>${tripsToPrint.length} Rit</strong></div>
+                        <div class="info-item"><span style="color:#64748b;">Periode Pengajuan:</span> <strong>${filterLabel}</strong></div>
+                    </div>
+                </div>
+
+                <!-- 1. Indikator Kinerja & Muatan -->
+                <table class="table-slip" style="margin-bottom:12px;">
+                    <thead>
+                        <tr style="background:#f8fafc; font-size:10px;">
+                            <th style="text-align:left; padding:6px 10px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">Indikator Kinerja Pengantaran</th>
+                            <th style="text-align:center; padding:6px 10px; width:130px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">Jumlah / Volume</th>
+                            <th style="text-align:right; padding:6px 10px; width:180px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">Keterangan & Rata-rata</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="font-size:11px;">
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; font-weight:600; color:#0f172a;">Total Ritase Pengiriman Selesai</td>
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; text-align:center; font-weight:700; color:#0f172a;">${tripsToPrint.length} Rit</td>
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; text-align:right; font-size:10.5px; color:#475569;">Rata-rata: ${nf.format(avgKgPerRit)} Kg / Rit</td>
+                        </tr>
+                        <tr style="font-size:11px;">
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; font-weight:600; color:#0f172a;">Total Muatan Fisik Bruto Diangkut</td>
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; text-align:center; font-weight:700; color:#0f172a;">${nf.format(totalGrossKg)} Kg</td>
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; text-align:right; font-size:10.5px; color:#475569;">Tonase kotor seluruh armada</td>
+                        </tr>
+                        <tr style="font-size:11px;">
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; font-weight:600; color:#0f172a;">Porsi Beban Fisik Ditangani Petugas</td>
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; text-align:center; font-weight:700; color:#0f172a;">${nf.format(totalKgPrint)} Kg</td>
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; text-align:right; font-size:10.5px; color:#475569;">Dibagi rata kru aktif per trip</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- 2. Ringkasan per Relasi Konsumen -->
+                <div style="font-size:11px; font-weight:700; color:#0f172a; margin:10px 0 5px 0;">Rekapitulasi Ritase per Relasi Tujuan:</div>
+                <table class="table-slip" style="margin-bottom:14px;">
+                    <thead>
+                        <tr style="background:#f8fafc; font-size:10px;">
+                            <th style="text-align:center; padding:6px 8px; width:30px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">No</th>
+                            <th style="text-align:left; padding:6px 8px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">Relasi / Konsumen Tujuan</th>
+                            <th style="text-align:center; padding:6px 8px; width:70px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">Ritase</th>
+                            <th style="text-align:right; padding:6px 8px; width:110px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">Tonase Diangkut</th>
+                            <th style="text-align:right; padding:6px 8px; width:120px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">Bagian Upah</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${relasiRowsHtml}
+                    </tbody>
+                </table>
+
+                <!-- 3. QR Code & Audit Digital Link (Centerpiece) -->
+                <div style="background:#f8fafc; border:1.5px solid #0f172a; border-radius:8px; padding:10px 14px; margin-bottom:14px; display:flex; align-items:center; gap:14px; page-break-inside:avoid;">
+                    <div style="flex-shrink:0; background:#ffffff; padding:5px; border:1px solid #cbd5e1; border-radius:6px; display:flex; align-items:center; justify-content:center;">
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=110x110&margin=0&data=${encodeURIComponent(verificationUrl)}" 
+                             alt="QR Code Verifikasi" 
+                             width="88" height="88" 
+                             style="display:block; width:88px; height:88px;" />
+                    </div>
+                    <div style="flex:1; min-width:0;">
+                        <div style="display:inline-flex; align-items:center; gap:4px; background:#0f172a; color:#ffffff; font-size:9.5px; font-weight:800; padding:2px 7px; border-radius:4px; margin-bottom:4px; letter-spacing:0.5px;">
+                            SCAN UNTUK AUDIT DETAIL (${tripsToPrint.length} RIT)
+                        </div>
+                        <div style="font-size:12px; font-weight:800; color:#0f172a; margin-bottom:2px;">Verifikasi Rincian Lengkap Digital</div>
+                        <div style="font-size:10px; color:#64748b; line-height:1.45; margin-bottom:5px;">
+                            Scan QR Code di samping menggunakan kamera HP untuk mengaudit rincian lengkap ke-<b>${tripsToPrint.length} rit pengantaran</b> (jam berangkat/tiba, GPS kandang, jenis pakan, dan kru pendamping).
+                        </div>
+                        <div style="font-size:9.5px; color:#2563eb; font-weight:700; word-break:break-all;">
+                            🔗 ${verificationUrl}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Kotak Total Biru Tua -->
+                <div class="total-card" style="margin-bottom:18px;">
+                    <div>
+                        <div style="font-size:10px; color:#bfdbfe; font-weight:700; letter-spacing:0.5px;">TOTAL ESTIMASI BEBAN FISIK DITANGANI:</div>
+                        <div style="font-size:17px; font-weight:800; color:#ffffff; margin-top:2px;">${nf.format(totalKgPrint)} Kg</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:10px; color:#bfdbfe; font-weight:700; letter-spacing:0.5px;">TOTAL UPAH BERSIH KLAIM:</div>
+                        <div style="font-size:22px; font-weight:900; color:#ffffff; margin-top:2px;">Rp ${nf.format(totalUpahPrint)}</div>
+                    </div>
+                </div>
+
+                <!-- 5. Tanda Tangan Tiga Pihak -->
+                <div class="signatures">
+                    <div>
+                        <p style="margin-bottom:45px;">Petugas Pengaju,</p>
+                        <div class="sig-box">${meUser.nama}<br><span style="font-weight:normal; font-size:10px; color:#64748b;">(${meUser.role})</span></div>
+                    </div>
+                    <div>
+                        <p style="margin-bottom:45px;">Koordinator Lapangan,</p>
+                        <div class="sig-box">Pak Agus<br><span style="font-weight:normal; font-size:10px; color:#64748b;">Koordinator Armada & Logistik</span></div>
+                    </div>
+                    <div>
+                        <p style="margin-bottom:45px;">Disetujui Oleh,</p>
+                        <div class="sig-box">Wildan<br><span style="font-weight:normal; font-size:10px; color:#64748b;">Admin Pusat & Keuangan</span></div>
+                    </div>
                 </div>
             </div>
 
-            <div class="info-grid">
-                <div>
-                    <div class="info-item"><span style="color:#64748b;">Nama Petugas:</span> <strong>${meUser.nama}</strong></div>
-                    <div class="info-item"><span style="color:#64748b;">Role / Jabatan:</span> <strong style="text-transform:capitalize;">${meUser.role}</strong></div>
-                    <div class="info-item"><span style="color:#64748b;">Armada Standar:</span> <strong>${meUser.armada_default || '-'}</strong></div>
-                </div>
-                <div>
-                    <div class="info-item"><span style="color:#64748b;">Tarif Per Kg:</span> <strong>Rp 15 / Kg (Bagi Rata Kru)</strong></div>
-                    <div class="info-item"><span style="color:#64748b;">Jumlah Pengantaran:</span> <strong>${tripsToPrint.length} Rit</strong></div>
-                    <div class="info-item"><span style="color:#64748b;">Periode Tampilan:</span> <strong>${filterLabel}</strong></div>
-                </div>
-            </div>
+            <script>
+                var pesanWA = "*FORM PENGAJUAN KLAIM UPAH INSENTIF*\\n"
+                    + "PT CBL - Logistik Pengiriman Pakan\\n\\n"
+                    + "Petugas: *${meUser.nama}* (${meUser.role})\\n"
+                    + "Periode Pengajuan: ${filterLabel}\\n"
+                    + "Jumlah Pengantaran: *${tripsToPrint.length} Rit*\\n"
+                    + "Total Muatan Diangkut: ${nf.format(totalGrossKg)} Kg\\n"
+                    + "Porsi Beban Fisik: ${nf.format(totalKgPrint)} Kg\\n"
+                    + "Total Upah Bersih: *Rp ${nf.format(totalUpahPrint)}*\\n\\n"
+                    + "🔍 *Verifikasi & Rincian Lengkap (${tripsToPrint.length} Rit):*\\n"
+                    + "${verificationUrl}\\n\\n"
+                    + "Dokumen fisik ringkasan eksekutif telah ditandatangani. Mohon untuk diperiksa dan diproses pencairannya. Terima kasih.";
 
-            <table class="table-slip">
-                <thead>
-                    <tr>
-                        <th style="width:30px;">No</th>
-                        <th style="width:75px;">Tanggal</th>
-                        <th>Aktivitas & Relasi Tujuan</th>
-                        <th style="width:110px;">Muatan (Kg)</th>
-                        <th style="width:130px;">Kru Bertugas</th>
-                        <th style="width:110px;">Bagian Upah</th>
-                        <th style="width:110px;">Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rowsHtml}
-                </tbody>
-            </table>
+                function kirimWhatsAppKlaim() {
+                    var waUrl = "https://api.whatsapp.com/send?text=" + encodeURIComponent(pesanWA);
+                    window.open(waUrl, '_blank');
+                }
 
-            <div class="total-card">
-                <div>
-                    <div style="font-size:11px; color:#166534; font-weight:600;">TOTAL ESTIMASI BEBAN FISIK DITANGANI:</div>
-                    <div style="font-size:16px; font-weight:800; color:#15803d;">${nf.format(totalKgPrint)} Kg</div>
-                </div>
-                <div style="text-align:right;">
-                    <div style="font-size:11px; color:#166534; font-weight:600;">TOTAL UPAH BERSIH KLAIM:</div>
-                    <div style="font-size:22px; font-weight:900; color:#15803d;">Rp ${nf.format(totalUpahPrint)}</div>
-                </div>
-            </div>
+                async function unduhPdfKlaim() {
+                    var btn = document.getElementById('btn-download-pdf');
+                    var oriText = btn.innerHTML;
+                    btn.innerHTML = '⏳ Mengunduh PDF...';
+                    btn.disabled = true;
 
-            <div class="signatures">
-                <div>
-                    <p style="margin-bottom:50px;">Petugas Pengaju,</p>
-                    <div class="sig-box">${meUser.nama}<br><span style="font-weight:normal; font-size:10px; color:#64748b;">(${meUser.role})</span></div>
-                </div>
-                <div>
-                    <p style="margin-bottom:50px;">Kasir / Keuangan,</p>
-                    <div class="sig-box">( ........................................ )<br><span style="font-weight:normal; font-size:10px; color:#64748b;">Verifikasi Pencairan</span></div>
-                </div>
-                <div>
-                    <p style="margin-bottom:50px;">Koordinator Logistik,</p>
-                    <div class="sig-box">Pak Agus<br><span style="font-weight:normal; font-size:10px; color:#64748b;">Koordinator Armada & Logistik</span></div>
-                </div>
-            </div>
+                    var docEl = document.getElementById('printable-area');
+                    var namaFile = "${namaFilePdf}";
+                    var opt = {
+                        margin: [0.3, 0.3, 0.3, 0.3],
+                        filename: namaFile,
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+                        pagebreak: { mode: 'css', avoid: ['table', '.total-card', '.signatures'] },
+                        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+                    };
+
+                    try {
+                        await html2pdf().set(opt).from(docEl).save();
+                    } catch (err) {
+                        console.error(err);
+                        alert("Gagal mengunduh otomatis, membuka dialog cetak...");
+                        window.print();
+                    } finally {
+                        btn.innerHTML = oriText;
+                        btn.disabled = false;
+                    }
+                }
+            </script>
         </body>
         </html>
     `);
     printWindow.document.close();
     printWindow.focus();
 }
+
+// ====================================================================
+// MODAL AUDIT VERIFIKASI DIGITAL KLAIM UPAH (DIBUKA SAAT SCAN QR CODE ATAU KLIK LINK WA)
+// ====================================================================
+async function bukaModalAuditKlaimPublik(kruNama, periodeLabel) {
+    let existing = document.getElementById('screen-audit-klaim-digital');
+    if (existing) existing.remove();
+
+    let screen = document.createElement('div');
+    screen.id = 'screen-audit-klaim-digital';
+    screen.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:#f8fafc; z-index:9999999; display:flex; flex-direction:column; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
+    screen.innerHTML = `
+        <!-- Top Navbar -->
+        <header style="background:linear-gradient(135deg, #1e3a8a, #1d4ed8); color:white; padding:14px 18px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 2px 10px rgba(0,0,0,0.12); flex-shrink:0;">
+            <div>
+                <div style="display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,0.18); padding:2px 8px; border-radius:12px; font-size:10px; font-weight:800; letter-spacing:0.5px; margin-bottom:3px;">
+                    <span class="material-symbols-outlined" style="font-size:13px; color:#86efac;">verified</span> VERIFIKASI DIGITAL PT CBL
+                </div>
+                <h3 style="margin:0; font-size:16px; font-weight:800; letter-spacing:0.3px;">Audit Rincian Klaim Upah Insentif</h3>
+                <div style="font-size:11.5px; opacity:0.9; margin-top:2px;">Petugas: <b>${kruNama}</b> | Periode: <b>${periodeLabel}</b></div>
+            </div>
+            <button type="button" onclick="tutupLayarAuditKlaimPublik()" style="background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.3); color:white; padding:8px 14px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                <span>Selesai</span> ✕
+            </button>
+        </header>
+
+        <!-- Main Content Area -->
+        <main style="flex:1; overflow-y:auto; padding:16px; max-width:760px; width:100%; margin:0 auto; box-sizing:border-box;">
+            <div style="margin-bottom:12px;">
+                <input type="text" id="cari-audit-card-input" placeholder="🔍 Cari nama konsumen atau tanggal..." 
+                       oninput="filterCardsAuditKlaim(this.value)" 
+                       style="width:100%; box-sizing:border-box; padding:10px 14px; border:1px solid #cbd5e1; border-radius:10px; font-size:13px; background:#ffffff;">
+            </div>
+
+            <div id="audit-cards-container">
+                <div style="text-align:center; padding:40px 20px; color:#64748b;">
+                    <span class="material-symbols-outlined icon-spin" style="font-size:36px; color:#2563eb;">sync</span>
+                    <div style="margin-top:10px; font-size:13px; font-weight:700;">Mengambil seluruh rincian riwayat pengantaran & muat...</div>
+                </div>
+            </div>
+        </main>
+
+        <footer style="background:#ffffff; border-top:1px solid #e2e8f0; padding:10px 18px; text-align:center; font-size:11px; color:#64748b; flex-shrink:0;">
+            Sistem Kartu Piutang & Insentif Kru CBL • Verifikasi Dokumen Digital
+        </footer>
+    `;
+    document.body.appendChild(screen);
+
+    try {
+        let users = [];
+        if (window.tripState && Array.isArray(window.tripState.cachedUsers) && window.tripState.cachedUsers.length > 0) {
+            users = window.tripState.cachedUsers;
+        } else {
+            let resUsers = await fetch(`${SUPA_URL}/rest/v1/users_app?select=id,nama,role`, {
+                headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+            });
+            if (resUsers.ok) {
+                let data = await resUsers.json();
+                if (Array.isArray(data)) users = data;
+            }
+        }
+
+        if (!Array.isArray(users) || users.length === 0) {
+            throw new Error("Gagal mengambil data kru dari server.");
+        }
+
+        let targetUser = users.find(u => u.nama && u.nama.toLowerCase().trim() === kruNama.toLowerCase().trim())
+            || users.find(u => u.nama && u.nama.toLowerCase().includes(kruNama.toLowerCase())) 
+            || users.find(u => u.nama && kruNama.toLowerCase().includes(u.nama.toLowerCase()));
+        if (!targetUser) throw new Error(`Petugas "${kruNama}" tidak ditemukan di database.`);
+
+        let uDict = {};
+        users.forEach(u => { uDict[u.id] = u.nama; });
+
+        // Query seluruh trip SELESAI tanpa rest or filter agar pekerja_muat_ids (Hilman) ikut terambil
+        let resTrips = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?status_trip=eq.SELESAI&order=tanggal.desc,waktu_berangkat.desc&limit=300`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        });
+        if (!resTrips.ok) throw new Error("Gagal mengambil riwayat trip dari server.");
+        let allTrips = await resTrips.json();
+        let userTrips = Array.isArray(allTrips) ? allTrips.filter(tr => isUserInTrip(tr, targetUser.id)) : [];
+
+        // Filter periode jika ditentukan (contoh "Oktober 2026")
+        let bulanIndo = {
+            'januari': '01', 'februari': '02', 'maret': '03', 'april': '04',
+            'mei': '05', 'juni': '06', 'juli': '07', 'agustus': '08',
+            'september': '09', 'oktober': '10', 'november': '11', 'desember': '12'
+        };
+        let pLower = (periodeLabel || '').toLowerCase();
+        let matchedMonth = Object.keys(bulanIndo).find(b => pLower.includes(b));
+        let matchedYear = pLower.match(/\b(20\d\d)\b/);
+        if (matchedMonth && matchedYear) {
+            let ym = `${matchedYear[1]}-${bulanIndo[matchedMonth]}`;
+            let filtered = userTrips.filter(tr => tr.tanggal && tr.tanggal.startsWith(ym));
+            if (filtered.length > 0) {
+                userTrips = filtered;
+            }
+        }
+
+        let container = document.getElementById('audit-cards-container');
+        if (!container) return;
+
+        if (userTrips.length === 0) {
+            container.innerHTML = `
+                <div style="text-align:center; padding:50px 20px; color:#64748b; background:#ffffff; border-radius:12px; border:1px solid #e2e8f0;">
+                    <span class="material-symbols-outlined" style="font-size:48px; color:#cbd5e1; margin-bottom:8px;">inbox</span>
+                    <div style="font-weight:700; font-size:14px; color:#334155;">Tidak ada riwayat untuk ${targetUser.nama} pada periode ini.</div>
+                </div>
+            `;
+            return;
+        }
+
+        let nf = new Intl.NumberFormat('id-ID');
+
+        let cardsHtml = userTrips.map(tr => {
+            let isMandiri = (tr.armada === 'Ambil Mandiri');
+            let isTruk = (tr.armada === 'Truk');
+            let rNama = tr.manifest_items?.[0]?.relasi || tr.catatan || 'Pengantaran';
+            let trKg = parseFloat(tr.total_kg) || 0;
+            let kmVal = parseFloat(tr.total_km) || 0;
+            let kmText = (isMandiri || isTruk || kmVal === 0) ? '0 KM' : `${kmVal} KM`;
+
+            let { upah } = hitungUpahSayaDiTrip(tr, targetUser.id);
+            let tglFormatted = tr.tanggal ? tr.tanggal.split('-').reverse().slice(0, 2).join('/') : '-';
+            let inisial = rNama.trim().slice(0, 2).toUpperCase() || 'TR';
+
+            return `
+                <div class="audit-trip-card" data-search="${rNama.toLowerCase()} ${tglFormatted}" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:12px 15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                    <div style="display:flex; align-items:center; gap:12px; min-width:0;">
+                        <div style="width:38px; height:38px; border-radius:50%; background:#f1f5f9; color:#0f172a; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12.5px; flex-shrink:0; border:1px solid #cbd5e1;">
+                            ${inisial}
+                        </div>
+                        <div style="min-width:0;">
+                            <div style="font-weight:800; font-size:13.5px; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${rNama}</div>
+                            <div style="font-size:11.5px; color:#64748b; margin-top:2px;">
+                                ${tglFormatted} • <b>${nf.format(trKg)} Kg</b> • <span>${kmText}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align:right; display:flex; align-items:center; gap:10px; flex-shrink:0;">
+                        <div style="font-size:15px; font-weight:800; color:#0f172a;">+Rp ${nf.format(upah)}</div>
+                        <button type="button" onclick="bukaModalDetailAuditSingle('${tr.id}', '${targetUser.id}')" style="background:#f8fafc; color:#1e293b; border:1px solid #cbd5e1; padding:6px 10px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer;">
+                            Rincian &gt;
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = cardsHtml;
+    } catch (e) {
+        let container = document.getElementById('audit-cards-container');
+        if (container) {
+            container.innerHTML = `<div style="text-align:center; padding:30px; color:#dc2626; background:#fff; border-radius:12px; border:1px solid #fecaca;">Gagal memuat audit rincian: ${e.message}</div>`;
+        }
+    }
+}
+
+function filterCardsAuditKlaim(query) {
+    let q = (query || '').toLowerCase();
+    let cards = document.querySelectorAll('.audit-trip-card');
+    cards.forEach(c => {
+        let s = c.getAttribute('data-search') || '';
+        c.style.display = s.includes(q) ? '' : 'none';
+    });
+}
+
+function tutupLayarAuditKlaimPublik() {
+    let screen = document.getElementById('screen-audit-klaim-digital');
+    if (screen) screen.remove();
+
+    let params = new URLSearchParams(window.location.search);
+    if (params.get('klaim_kru')) {
+        try { window.close(); } catch (e) {}
+        window.location.href = window.location.pathname;
+    }
+}
+
+async function bukaModalDetailAuditSingle(tripId, userId) {
+    let existing = document.getElementById('modal-detail-audit-single');
+    if (existing) existing.remove();
+
+    let modal = document.createElement('div');
+    modal.id = 'modal-detail-audit-single';
+    modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; z-index:99999999; padding:15px; box-sizing:border-box;';
+    modal.innerHTML = `
+        <div style="background:#ffffff; width:100%; max-width:440px; border-radius:14px; overflow:hidden; box-shadow:0 20px 40px rgba(0,0,0,0.25);">
+            <div style="background:#0f172a; color:white; padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
+                <h4 style="margin:0; font-size:14px; font-weight:800;">Rincian Pengantaran</h4>
+                <button type="button" onclick="document.getElementById('modal-detail-audit-single').remove()" style="background:transparent; border:none; color:white; font-size:18px; cursor:pointer;">✕</button>
+            </div>
+            <div id="modal-detail-audit-single-content" style="padding:16px; font-size:12px; color:#334155;">
+                <div style="text-align:center; padding:15px; color:#94a3b8;">Memuat detail...</div>
+            </div>
+            <div style="background:#f8fafc; padding:10px 16px; border-top:1px solid #e2e8f0; text-align:right;">
+                <button type="button" onclick="document.getElementById('modal-detail-audit-single').remove()" style="background:#0f172a; color:white; border:none; padding:7px 16px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer;">Tutup</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    try {
+        let res = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${tripId}&select=*`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        });
+        let data = await res.json();
+        let tr = data[0];
+        if (!tr) throw new Error("Data trip tidak ditemukan.");
+
+        let users = window.tripState?.cachedUsers || [];
+        let uDict = {};
+        users.forEach(u => { uDict[u.id] = u.nama; });
+
+        let nf = new Intl.NumberFormat('id-ID');
+        let rNama = tr.manifest_items?.[0]?.relasi || tr.catatan || 'Pengantaran';
+        let isMandiri = (tr.armada === 'Ambil Mandiri');
+        let isTruk = (tr.armada === 'Truk');
+        let trKg = parseFloat(tr.total_kg) || 0;
+        let kmVal = parseFloat(tr.total_km) || 0;
+        let { upah, porsiKg } = hitungUpahSayaDiTrip(tr, userId);
+
+        let kruNames = [];
+        let nKru = 1;
+        if (isMandiri || isTruk) {
+            let pIds = Array.isArray(tr.pekerja_muat_ids) ? tr.pekerja_muat_ids : [];
+            nKru = pIds.length || 1;
+            kruNames = pIds.map(id => uDict[id] || `User #${id}`);
+        } else {
+            let sopirNama = uDict[tr.sopir_user_id] || 'Sopir';
+            let k1Nama = uDict[tr.kernek_1_user_id];
+            let k2Nama = uDict[tr.kernek_2_user_id];
+            kruNames = [sopirNama, k1Nama, k2Nama].filter(Boolean);
+            nKru = kruNames.length || 1;
+        }
+
+        let tipeKerja = (isMandiri || isTruk) ? 'Bantu Muat / Bongkar Truk' : 'Pengantaran Armada Pick-up';
+        let rumusText = nKru > 1 
+            ? `(${nf.format(trKg)} Kg × Rp 15 / ${nKru} orang)`
+            : `(${nf.format(trKg)} Kg × Rp 15)`;
+
+        let gpsStr = (tr.gps_lat && tr.gps_lng) ? `${tr.gps_lat.toFixed(4)}, ${tr.gps_lng.toFixed(4)}` : 'Sesuai Kandang';
+        let waktuBerangkat = tr.waktu_berangkat ? tr.waktu_berangkat.slice(0, 5) : '-';
+        let waktuTiba = tr.waktu_tiba ? tr.waktu_tiba.slice(0, 5) : '-';
+
+        document.getElementById('modal-detail-audit-single-content').innerHTML = `
+            <div style="font-size:15px; font-weight:800; color:#0f172a; margin-bottom:10px;">${rNama}</div>
+            
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; background:#f8fafc; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+                <div><span style="color:#64748b; font-size:11px;">Tanggal:</span><br><b>${tr.tanggal || '-'}</b></div>
+                <div><span style="color:#64748b; font-size:11px;">Jam:</span><br><b>${waktuBerangkat} - ${waktuTiba}</b></div>
+                <div><span style="color:#64748b; font-size:11px;">Armada:</span><br><b>${tr.armada || '-'}</b></div>
+                <div><span style="color:#64748b; font-size:11px;">Jarak Tempuh:</span><br><b>${kmVal} KM</b></div>
+            </div>
+
+            <div style="margin-bottom:8px;">
+                <div style="color:#64748b; font-size:11px;">Kategori Pekerjaan:</div>
+                <div style="font-weight:700; color:#0f172a;">${tipeKerja}</div>
+            </div>
+
+            <div style="margin-bottom:8px;">
+                <div style="color:#64748b; font-size:11px;">Kru Bertugas (${nKru} Orang):</div>
+                <div style="font-weight:700; color:#0f172a;">${kruNames.join(' & ') || '-'}</div>
+            </div>
+
+            <div style="margin-bottom:12px; padding:10px; background:#f1f5f9; border-radius:8px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#64748b;">Muatan Total:</span>
+                    <b>${nf.format(trKg)} Kg</b>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#64748b;">Porsi Beban Petugas:</span>
+                    <b>${nf.format(porsiKg)} Kg</b>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:11px; color:#64748b;">
+                    <span>Rumus Upah:</span>
+                    <span>${rumusText}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding-top:6px; border-top:1px solid #cbd5e1; font-size:13px;">
+                    <span style="font-weight:700; color:#0f172a;">Upah Bagian Petugas:</span>
+                    <b style="font-size:14px; color:#0f172a;">Rp ${nf.format(upah)}</b>
+                </div>
+            </div>
+            
+            <div style="font-size:10.5px; color:#64748b;">
+                📍 Titik Lokasi: <b>${gpsStr}</b>
+            </div>
+        `;
+    } catch (err) {
+        document.getElementById('modal-detail-audit-single-content').innerHTML = `
+            <div style="color:#dc2626; text-align:center; padding:15px;">Gagal memuat detail: ${err.message}</div>
+        `;
+    }
+}
+
+// Inisialisasi Pemeriksaan URL Parameter untuk Link Audit Klaim
+window.addEventListener('DOMContentLoaded', () => {
+    let params = new URLSearchParams(window.location.search);
+    let kruNama = params.get('klaim_kru');
+    if (kruNama) {
+        let periode = params.get('periode') || 'Bulan Ini';
+        let loginScr = document.getElementById('login-screen');
+        if (loginScr) loginScr.style.setProperty('display', 'none', 'important');
+        let appScr = document.getElementById('app-screen');
+        if (appScr) appScr.classList.add('hidden');
+        bukaModalAuditKlaimPublik(kruNama, periode);
+    }
+});
+window.bukaModalAuditKlaimPublik = bukaModalAuditKlaimPublik;
+window.filterCardsAuditKlaim = filterCardsAuditKlaim;
+window.tutupLayarAuditKlaimPublik = tutupLayarAuditKlaimPublik;
+window.bukaModalDetailAuditSingle = bukaModalDetailAuditSingle;
 
 // ====================================================================
 // 7. SISI ADMIN: MONITORING & MUAT TRUK
@@ -3022,13 +3484,61 @@ async function loadMonitoringArmadaAdmin() {
 }
 
 // Rekap Payroll & Tombol Tutup Periode Insentif
-async function renderRekapPayrollAdmin() {
+let currentAdminPayrollFilter = 'bulanan';
+let cachedAdminPayrollTrips = [];
+let cachedAdminPayrollPeriodLabel = 'Bulan Ini';
+let cachedAdminPayrollStartDate = '';
+let cachedAdminPayrollEndDate = '';
+
+function setAdminPayrollFilter(mode) {
+    currentAdminPayrollFilter = mode;
+    ['mingguan', 'bulanan', 'tahunan'].forEach(m => {
+        let btn = document.getElementById(`btn-adm-pay-${m}`);
+        if (btn) {
+            btn.style.background = (m === mode) ? '#2563eb' : 'transparent';
+            btn.style.color = (m === mode) ? '#ffffff' : '#64748b';
+        }
+    });
+    renderRekapPayrollAdmin(mode);
+}
+
+async function renderRekapPayrollAdmin(filterMode = currentAdminPayrollFilter) {
     let tbody = document.getElementById('admin-payroll-tbody');
     let tfoot = document.getElementById('admin-payroll-tfoot');
+    let badgePeriode = document.getElementById('admin-payroll-badge-periode');
     if (!tbody) return;
 
-    let today = new Date().toISOString().split('T')[0];
-    let trips = await fetchTripsByDateRange(today, today);
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat data insentif periode...</td></tr>`;
+
+    let now = new Date();
+    let pad = n => String(n).padStart(2, '0');
+    let startDate, endDate, labelPeriode;
+
+    if (filterMode === 'mingguan') {
+        let dStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+        startDate = `${dStart.getFullYear()}-${pad(dStart.getMonth() + 1)}-${pad(dStart.getDate())}`;
+        endDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        labelPeriode = `7 Hari Terakhir (${dStart.getDate()}/${dStart.getMonth() + 1} - ${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()})`;
+    } else if (filterMode === 'tahunan') {
+        startDate = `${now.getFullYear()}-01-01`;
+        endDate = `${now.getFullYear()}-12-31`;
+        labelPeriode = `Tahun ${now.getFullYear()}`;
+    } else {
+        filterMode = 'bulanan';
+        let lastDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        startDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+        endDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(lastDate.getDate())}`;
+        labelPeriode = now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    }
+
+    if (badgePeriode) badgePeriode.innerText = `Periode: ${labelPeriode}`;
+    cachedAdminPayrollPeriodLabel = labelPeriode;
+    cachedAdminPayrollStartDate = startDate;
+    cachedAdminPayrollEndDate = endDate;
+
+    let allTrips = await fetchTripsByDateRange(startDate, endDate);
+    let trips = (allTrips || []).filter(tr => tr.status_trip === 'SELESAI');
+    cachedAdminPayrollTrips = trips;
     let users = window.tripState.cachedUsers || [];
 
     let akumulasi = hitungAkumulasiInsentifPeriode(trips, users);
@@ -3036,7 +3546,7 @@ async function renderRekapPayrollAdmin() {
 
     let rows = Object.values(akumulasi.userMap).filter(u => u.totalBersih > 0 || u.tripCount > 0);
     if (rows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada insentif tercatat untuk hari ini.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada insentif tercatat untuk periode ${labelPeriode}.</td></tr>`;
         if (tfoot) tfoot.innerText = 'Rp 0';
         return;
     }
@@ -3051,7 +3561,12 @@ async function renderRekapPayrollAdmin() {
                 <td style="padding:8px; text-align:right; font-weight:600; color:#0f766e;">${nf.format(u.totalKgAntar || 0)} Kg</td>
                 <td style="padding:8px; text-align:right; color:#2563eb; font-weight:700;">Rp ${nf.format(u.upahMuatTotal || 0)}</td>
                 <td style="padding:8px; text-align:right; color:#d97706;">${solarStr}</td>
-                <td style="padding:8px; text-align:right; font-weight:800; color:#15803d; font-size:12px;">Rp ${nf.format(u.totalBersih)}</td>
+                <td style="padding:8px; text-align:right; font-weight:800; color:#0f172a; font-size:12px;">Rp ${nf.format(u.totalBersih)}</td>
+                <td style="padding:8px; text-align:center;">
+                    <button type="button" onclick="cetakFormKlaimDariAdmin('${u.id}', '${encodeURIComponent(u.nama)}')" style="background:#0284c7; color:white; border:none; padding:5px 9px; border-radius:6px; font-weight:700; font-size:10.5px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
+                        <span class="material-symbols-outlined" style="font-size:13px;">print</span> Cetak Form
+                    </button>
+                </td>
             </tr>
         `;
     }).join('');
@@ -3059,14 +3574,58 @@ async function renderRekapPayrollAdmin() {
     if (tfoot) tfoot.innerText = `Rp ${nf.format(akumulasi.grandTotal)}`;
 }
 
+// Handler Cetak Form Klaim Karyawan Langsung dari Layar Admin
+async function cetakFormKlaimDariAdmin(userId, userNamaEncoded = '') {
+    let userNama = userNamaEncoded ? decodeURIComponent(userNamaEncoded) : '';
+    let users = window.tripState?.cachedUsers || [];
+
+    if (!Array.isArray(users) || users.length === 0) {
+        try {
+            let res = await fetch(`${SUPA_URL}/rest/v1/users_app?select=*&order=nama.asc`, {
+                headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+            });
+            if (res.ok) {
+                users = await res.json();
+                if (window.tripState) window.tripState.cachedUsers = users;
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    let targetUser = users.find(u => String(u.id) === String(userId))
+        || (userNama ? users.find(u => u.nama && u.nama.toLowerCase().trim() === userNama.toLowerCase().trim()) : null)
+        || (userNama ? users.find(u => u.nama && u.nama.toLowerCase().includes(userNama.toLowerCase())) : null);
+
+    if (!targetUser) {
+        alert("Data karyawan tidak ditemukan.");
+        return;
+    }
+
+    let trips = cachedAdminPayrollTrips;
+    if (!trips || trips.length === 0) {
+        let today = new Date().toISOString().split('T')[0];
+        let fetched = await fetchTripsByDateRange(today, today);
+        trips = (fetched || []).filter(tr => tr.status_trip === 'SELESAI');
+    }
+
+    let userTrips = trips.filter(tr => tr.status_trip === 'SELESAI' && isUserInTrip(tr, targetUser.id));
+    if (userTrips.length === 0) {
+        alert(`Tidak ada riwayat pengantaran atau muat untuk ${targetUser.nama} pada periode ${cachedAdminPayrollPeriodLabel}.`);
+        return;
+    }
+
+    cetakSlipKlaimDriver(targetUser, userTrips, cachedAdminPayrollPeriodLabel);
+}
+
 // Tombol Admin: Cairkan & Tutup Periode Insentif
 async function tutupPeriodeDanCairkanToples() {
-    let konfirm = confirm("Apakah Anda yakin ingin MENUTUP & MENCAIRKAN PERIODE INSENTIF? Seluruh saldo trip berjalan yang belum dicairkan akan ditandai LUNAS / SUDAH CAIR.");
+    let cutoffDate = cachedAdminPayrollEndDate || new Date().toISOString().split('T')[0];
+    let konfirm = confirm(`Apakah Anda yakin ingin MENCAIRKAN & MENUTUP PERIODE INSENTIF (${cachedAdminPayrollPeriodLabel})?\n\nSemua trip pengiriman yang SELESAI sampai tanggal ${cutoffDate} akan ditandai LUNAS / SUDAH CAIR.\nSaldo berjalan di dompet supir & kernek otomatis ter-reset kembali ke Rp 0.`);
     if (!konfirm) return;
 
-    let today = new Date().toISOString().split('T')[0];
     try {
-        let res = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?tanggal=lte.${today}&or=(status_klaim.is.null,status_klaim.neq.SUDAH_CAIR)`, {
+        let res = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?status_trip=eq.SELESAI&tanggal=lte.${cutoffDate}&or=(status_klaim.is.null,status_klaim.neq.SUDAH_CAIR)`, {
             method: 'PATCH',
             headers: {
                 'apikey': SUPA_ANON_KEY,
@@ -3078,7 +3637,12 @@ async function tutupPeriodeDanCairkanToples() {
             body: JSON.stringify({ status_klaim: 'SUDAH_CAIR' })
         });
 
-        alert("✅ Periode Insentif Berhasil Ditutup & Dicairkan! Slip gaji siap dibagikan.");
+        if (!res.ok) {
+            let errText = await res.text();
+            throw new Error(errText || "Gagal memperbarui status pencairan di database.");
+        }
+
+        alert(`✅ Periode Insentif (${cachedAdminPayrollPeriodLabel}) Berhasil Ditutup & Dicairkan!\n\nSaldo berjalan seluruh supir & kernek otomatis di-reset ke Rp 0 dan riwayat mutasi telah ditandai Lunas.`);
         renderRekapPayrollAdmin();
     } catch (e) {
         alert("Gagal menutup periode: " + e.message);
@@ -3450,6 +4014,9 @@ window.loadLogBBMAdmin = loadLogBBMAdmin;
 window.filterLogArmada = filterLogArmada;
 window.switchSubTabArmada = switchSubTabArmada;
 window.renderArmadaLogViews = renderArmadaLogViews;
+window.setAdminPayrollFilter = setAdminPayrollFilter;
+window.cetakFormKlaimDariAdmin = cetakFormKlaimDariAdmin;
+window.renderRekapPayrollAdmin = renderRekapPayrollAdmin;
 
 
 
