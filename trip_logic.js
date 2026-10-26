@@ -9,9 +9,7 @@ const LAT_GUDANG_CBL = -6.80173;
 const LNG_GUDANG_CBL = 107.61377;
 const KAPASITAS_PICKUP_NORMAL = 1500; // Kg
 const UANG_SOLAR_TRUK_PER_TITIK = 100000; // Rp / Titik
-const TARIF_INSENTIF_TOTAL_PICKUP = 15; // Rp / Kg
-const TARIF_ANGKAT_PICKUP = 10; // Rp / Kg (Komponen Otot)
-const TARIF_SUBSIDI_JARAK_PICKUP = 5; // Rp / Kg (Toples Jarak)
+const TARIF_INSENTIF_TOTAL_PICKUP = 15; // Rp / Kg Flat (dibagi rata ke kru pengiriman di trip tersebut)
 const TARIF_MUAT_BONGKAR_TRUK = 15; // Rp / Kg Bersih Kru Muat
 const TARIF_BONGKAR_MASUK_SUPPLIER = 15; // Rp / Kg
 
@@ -34,8 +32,11 @@ window.tripState = {
 };
 
 // ====================================================================
-// 2. KALKULASI JARAK (HAVERSINE & GEOLOCATION)
+// 2. KALKULASI JARAK RUTE JALAN (OSRM ROUTING & HAVERSINE FALLBACK)
 // ====================================================================
+
+// Cache memori rute OSRM agar tidak berulang kali hit API untuk koordinat yang sama
+window._osrmRouteCache = window._osrmRouteCache || {};
 
 // Hitung Jarak Garis Lurus (Haversine) dalam Km
 function hitungHaversineKm(lat1, lon1, lat2, lon2) {
@@ -51,11 +52,49 @@ function hitungHaversineKm(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-// Hitung Estimasi Jarak Jalan Realistis (dengan faktor kelok jalan pegunungan 1.3)
+// Hitung Estimasi Jarak Jalan Realistis (dengan faktor kelok pegunungan Lembang 2.5x dari garis lurus)
 function hitungEstimasiJarakRealistis(lat1, lon1, lat2, lon2) {
     let haversine = hitungHaversineKm(lat1, lon1, lat2, lon2);
-    let estimasi = haversine * 1.3;
+    let estimasi = haversine * 2.5;
     return Math.round(estimasi * 10) / 10;
+}
+
+// Ambil Jarak Riil Jalan Raya & Estimasi Durasi Perjalanan via OSRM (Open Source Routing Machine)
+async function fetchJarakDanWaktuRiil(lat1, lon1, lat2, lon2) {
+    if (!lat1 || !lon1 || !lat2 || !lon2) {
+        return { km: 0, menit: 0, via: 'fallback' };
+    }
+    let cacheKey = `${Number(lat1).toFixed(5)},${Number(lon1).toFixed(5)};${Number(lat2).toFixed(5)},${Number(lon2).toFixed(5)}`;
+    if (window._osrmRouteCache[cacheKey]) {
+        return window._osrmRouteCache[cacheKey];
+    }
+
+    try {
+        let url = `https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=false`;
+        let res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (res.ok) {
+            let data = await res.json();
+            if (data.routes && data.routes[0]) {
+                let meter = data.routes[0].distance || 0;
+                let detik = data.routes[0].duration || 0;
+                let km = Math.round((meter / 1000) * 10) / 10;
+                // Kecepatan pikap bermuatan di pegunungan Lembang: durasi OSRM + buffer 20%
+                let menit = Math.max(5, Math.round((detik / 60) * 1.2));
+                let result = { km, menit, via: 'osrm' };
+                window._osrmRouteCache[cacheKey] = result;
+                return result;
+            }
+        }
+    } catch (e) {
+        console.warn("OSRM routing offline/gagal, fallback ke estimasi jalan pegunungan:", e);
+    }
+
+    // Fallback realistis jika OSRM sedang lambat / offline
+    let km = hitungEstimasiJarakRealistis(lat1, lon1, lat2, lon2);
+    let menit = Math.max(5, Math.round(km * 4.5)); // ~15 km/jam di tanjakan/jalur sempit Lembang
+    let result = { km, menit, via: 'fallback' };
+    window._osrmRouteCache[cacheKey] = result;
+    return result;
 }
 
 // Ambil Koordinat GPS HP Terkini
@@ -239,15 +278,18 @@ async function fetchTripsByDateRange(startDate, endDate) {
 }
 
 // ====================================================================
-// 4. LOGIKA PERHITUNGAN INSENTIF (SOLUSI A: OTOT + TOPLES JARAK SIKLUS)
+// 4. LOGIKA PERHITUNGAN INSENTIF (FLAT RP 15/KG DIBAGI RATA KRU TRIP)
 // ====================================================================
 
 /**
- * Menghitung rincian upah bersih & toples jarak untuk seluruh trip periode ini.
- * Plafon total: Rp 15/kg.
- * - Komponen Otot: Rp 10 / kg (bagi rata kru angkat pick-up)
- * - Komponen Jarak: Rp 5 / kg (dikumpulkan ke toples dan dibagi proporsional km)
- * - Truk: Bersih Rp 15 / kg dibagi rata ke kru muat gudang + uang solar supir.
+ * Menghitung rincian upah bersih untuk seluruh trip periode ini.
+ * Model Flat: Rp 15 / kg muat.
+ * - Pick-Up: Total Rp 15 / kg dibagi rata ke kru yang bertugas di trip tersebut:
+ *   * Sopir + 1 Kernek = dibagi 2 (Rp 7.5 / kg per orang)
+ *   * Sopir + 2 Kernek = dibagi 3 (Rp 5 / kg per orang)
+ *   * Sopir Sendiri = 100% (Rp 15 / kg)
+ * - Truk: Bersih Rp 15 / kg dibagi rata ke kru muat gudang + uang solar supir (Rp 100.000 / titik).
+ * - Ambil Mandiri: Bersih Rp 15 / kg dibagi rata ke kru muat gudang.
  */
 function hitungAkumulasiInsentifPeriode(trips = [], users = []) {
     let userMap = {};
@@ -256,40 +298,39 @@ function hitungAkumulasiInsentifPeriode(trips = [], users = []) {
             id: u.id,
             nama: u.nama,
             role: u.role,
-            totalKgOtot: 0,
+            totalKgMuat: 0,      // Kg yang dibantu muat di gudang (Ambil Mandiri / Truk)
+            totalKgAntar: 0,     // Kg yang diantar langsung ke peternak (Pick-Up)
+            totalKgAll: 0,       // Total beban fisik yang ditangani
+            upahMuatGudang: 0,   // Rupiah dari bantu muat gudang (15/kg)
+            upahAntarPickup: 0,  // Rupiah dari antar pengiriman pick-up (15/kg)
+            upahMuatTotal: 0,    // Gabungan seluruh insentif muat & antar (15/kg)
+            uangSolarTruk: 0,    // Uang solar khusus supir truk
+            totalBersih: 0,      // Total bersih yang diterima
             totalKm: 0,
+            tripCount: 0,
+            // Backwards-compatible aliases
+            totalKgKirim: 0,
+            totalKgOtot: 0,
+            upahKirim: 0,
             upahOtot: 0,
-            subsidiJarak: 0,
             upahMuatTruk: 0,
-            uangSolarTruk: 0,
-            totalBersih: 0,
-            tripCount: 0
+            subsidiJarak: 0
         };
     });
 
-    // 1. Akumulasi Total Toples Jarak & Total Km Armada Pick-Up
-    let totalToplesJarak = 0;
     let totalKmSemuaPickup = 0;
 
     trips.forEach(tr => {
-        let isPickup = (tr.armada === 'D 8070 UE' || tr.armada === 'D 8142 UK');
-        if (isPickup) {
-            let kg = parseFloat(tr.total_kg) || 0;
-            let km = parseFloat(tr.jarak_tempuh_km) || 0;
-            totalToplesJarak += (kg * TARIF_SUBSIDI_JARAK_PICKUP);
-            totalKmSemuaPickup += km;
-        }
-    });
+        // Hanya hitung upah / insentif jika trip sudah SELESAI
+        if (tr.status_trip && tr.status_trip !== 'SELESAI') return;
 
-    // 2. Distribusi Insentif per Trip
-    trips.forEach(tr => {
         let isTruk = (tr.armada === 'Truk');
         let isAmbilMandiri = (tr.armada === 'Ambil Mandiri');
         let kg = parseFloat(tr.total_kg) || 0;
         let km = parseFloat(tr.jarak_tempuh_km) || 0;
 
         if (isTruk || isAmbilMandiri) {
-            // Truk / Ambil Mandiri: Upah Bersih Rp 15/kg Kru Muat Gudang
+            // 1. Truk / Ambil Mandiri: Aktivitas Bantu Muat Gudang (Flat Rp 15/kg Kru Muat)
             if (isTruk) {
                 let titik = parseInt(tr.jumlah_titik) || 1;
                 let solar = parseFloat(tr.uang_jalan_sopir) || (titik * UANG_SOLAR_TRUK_PER_TITIK);
@@ -310,68 +351,85 @@ function hitungAkumulasiInsentifPeriode(trips = [], users = []) {
                 pekerjaIds.forEach((uid, idx) => {
                     if (userMap[uid]) {
                         let dapat = perOrang + (idx === nKru - 1 ? sisa : 0);
+                        let porsiKg = Math.round(kg / nKru);
+
+                        userMap[uid].totalKgMuat += porsiKg;
+                        userMap[uid].totalKgAll += porsiKg;
+                        userMap[uid].totalKgKirim += porsiKg;
+                        userMap[uid].totalKgOtot += porsiKg;
+
+                        userMap[uid].upahMuatGudang += dapat;
+                        userMap[uid].upahMuatTotal += dapat;
+                        userMap[uid].upahKirim += dapat;
+                        userMap[uid].upahOtot += dapat;
                         userMap[uid].upahMuatTruk += dapat;
-                        userMap[uid].totalKgOtot += Math.round(kg / nKru);
+
                         userMap[uid].totalBersih += dapat;
                         userMap[uid].tripCount += 1;
                     }
                 });
             }
         } else {
-            // Pick-Up
+            // 2. Pick-Up: Aktivitas Antar Pengiriman ke Peternak (Flat Rp 15/kg dibagi rata kru)
             let sopirId = tr.sopir_user_id;
             let k1Id = tr.kernek_1_user_id;
             let k2Id = tr.kernek_2_user_id;
             let hasK2 = !!k2Id;
+            let hasK1 = !!k1Id;
+            let nKru = hasK2 ? 3 : (hasK1 ? 2 : 1);
 
-            // A. Upah Otot (Rp 10/kg)
-            let totalUpahOtotTrip = kg * TARIF_ANGKAT_PICKUP;
-            let nKru = hasK2 ? 3 : (k1Id ? 2 : 1);
-            let perKruOtot = Math.floor(totalUpahOtotTrip / nKru);
+            totalKmSemuaPickup += km;
+
+            let totalUpahTrip = Math.round(kg * TARIF_INSENTIF_TOTAL_PICKUP);
+            let perKru = Math.floor(totalUpahTrip / nKru);
+            let sisa = totalUpahTrip - (perKru * nKru);
+            let porsiKg = Math.round(kg / nKru);
 
             if (sopirId && userMap[sopirId]) {
-                userMap[sopirId].upahOtot += perKruOtot;
-                userMap[sopirId].totalKgOtot += Math.round(kg / nKru);
+                userMap[sopirId].totalKgAntar += porsiKg;
+                userMap[sopirId].totalKgAll += porsiKg;
+                userMap[sopirId].totalKgKirim += porsiKg;
+                userMap[sopirId].totalKgOtot += porsiKg;
+
+                userMap[sopirId].upahAntarPickup += perKru;
+                userMap[sopirId].upahMuatTotal += perKru;
+                userMap[sopirId].upahKirim += perKru;
+                userMap[sopirId].upahOtot += perKru;
+
                 userMap[sopirId].totalKm += km;
-                userMap[sopirId].totalBersih += perKruOtot;
+                userMap[sopirId].totalBersih += perKru;
                 userMap[sopirId].tripCount += 1;
             }
             if (k1Id && userMap[k1Id]) {
-                userMap[k1Id].upahOtot += perKruOtot;
-                userMap[k1Id].totalKgOtot += Math.round(kg / nKru);
+                userMap[k1Id].totalKgAntar += porsiKg;
+                userMap[k1Id].totalKgAll += porsiKg;
+                userMap[k1Id].totalKgKirim += porsiKg;
+                userMap[k1Id].totalKgOtot += porsiKg;
+
+                userMap[k1Id].upahAntarPickup += perKru;
+                userMap[k1Id].upahMuatTotal += perKru;
+                userMap[k1Id].upahKirim += perKru;
+                userMap[k1Id].upahOtot += perKru;
+
                 userMap[k1Id].totalKm += km;
-                userMap[k1Id].totalBersih += perKruOtot;
+                userMap[k1Id].totalBersih += perKru;
                 userMap[k1Id].tripCount += 1;
             }
             if (k2Id && userMap[k2Id]) {
-                let sisaOtot = totalUpahOtotTrip - (perKruOtot * 2);
-                userMap[k2Id].upahOtot += sisaOtot;
-                userMap[k2Id].totalKgOtot += Math.round(kg / nKru);
+                let dapatK2 = perKru + sisa;
+                userMap[k2Id].totalKgAntar += porsiKg;
+                userMap[k2Id].totalKgAll += porsiKg;
+                userMap[k2Id].totalKgKirim += porsiKg;
+                userMap[k2Id].totalKgOtot += porsiKg;
+
+                userMap[k2Id].upahAntarPickup += dapatK2;
+                userMap[k2Id].upahMuatTotal += dapatK2;
+                userMap[k2Id].upahKirim += dapatK2;
+                userMap[k2Id].upahOtot += dapatK2;
+
                 userMap[k2Id].totalKm += km;
-                userMap[k2Id].totalBersih += sisaOtot;
+                userMap[k2Id].totalBersih += dapatK2;
                 userMap[k2Id].tripCount += 1;
-            }
-
-            // B. Porsi Toples Jarak (Proporsional Km)
-            // Di Pick-Up: 60% Sopir, 40% Kernek
-            if (totalKmSemuaPickup > 0 && km > 0) {
-                let rupiahJarakTrip = Math.round((km / totalKmSemuaPickup) * totalToplesJarak);
-                let jatahSopirJarak = Math.round(rupiahJarakTrip * (hasK2 ? 0.6 : 0.6));
-                let jatahK1Jarak = Math.round(rupiahJarakTrip * (hasK2 ? 0.2 : 0.4));
-                let jatahK2Jarak = hasK2 ? (rupiahJarakTrip - jatahSopirJarak - jatahK1Jarak) : 0;
-
-                if (sopirId && userMap[sopirId]) {
-                    userMap[sopirId].subsidiJarak += jatahSopirJarak;
-                    userMap[sopirId].totalBersih += jatahSopirJarak;
-                }
-                if (k1Id && userMap[k1Id]) {
-                    userMap[k1Id].subsidiJarak += jatahK1Jarak;
-                    userMap[k1Id].totalBersih += jatahK1Jarak;
-                }
-                if (k2Id && userMap[k2Id]) {
-                    userMap[k2Id].subsidiJarak += jatahK2Jarak;
-                    userMap[k2Id].totalBersih += jatahK2Jarak;
-                }
             }
         }
     });
@@ -380,9 +438,9 @@ function hitungAkumulasiInsentifPeriode(trips = [], users = []) {
 
     return {
         userMap,
-        totalToplesJarak,
         totalKmSemuaPickup,
-        grandTotal
+        grandTotal,
+        totalToplesJarak: 0 // Tidak ada toples jarak
     };
 }
 
@@ -406,12 +464,154 @@ async function initDriverPortal() {
         elBadge.innerText = roleDisplay;
     }
 
+    // Role Kernek: Sembunyikan Log Armada (Khusus untuk Supir Penanggung Jawab Armada)
+    let isKernekRole = myRole.includes('kernek');
+    let navArmada = document.getElementById('nav-driver-armada');
+    let btnArmadaTop = document.getElementById('btn-driver-log-armada-top');
+    if (navArmada) {
+        if (isKernekRole) navArmada.classList.add('hidden');
+        else navArmada.classList.remove('hidden');
+    }
+    if (btnArmadaTop) {
+        if (isKernekRole) btnArmadaTop.classList.add('hidden');
+        else btnArmadaTop.classList.remove('hidden');
+    }
+
+    // Default Armada sesuai supir yang login: Adi -> D 8142 UK, Hilman -> D 8070 UE
+    let myNameLower = (activeUser || '').toLowerCase();
+    let armadaDesc = 'Grand Max Pick-up';
+    if (myNameLower.includes('adi')) {
+        window.tripState.currentArmada = 'D 8142 UK';
+        armadaDesc = 'Pick-up Putih';
+    } else if (myNameLower.includes('hilman')) {
+        window.tripState.currentArmada = 'D 8070 UE';
+        armadaDesc = 'Grand Max Pick-up';
+    } else {
+        window.tripState.currentArmada = 'D 8070 UE';
+    }
+
+    let elArmadaName = document.getElementById('driver-portal-armada-name');
+    let elArmadaTag = document.getElementById('driver-portal-armada-tag');
+    if (elArmadaName) {
+        if (isKernekRole) {
+            elArmadaName.innerText = window.tripState.currentArmada ? `${window.tripState.currentArmada} (Armada Terpilih)` : 'Pilih Sopir Armada di Bawah';
+            if (elArmadaTag) elArmadaTag.innerText = 'Ikut Sopir';
+        } else {
+            elArmadaName.innerText = `${window.tripState.currentArmada} (${armadaDesc})`;
+            if (elArmadaTag) elArmadaTag.innerText = 'Tetap';
+        }
+    }
+
     renderArmadaKernekPills();
+    await loadDriverMonthlyStats();
     await refreshAntreanDriver();
     await loadDompetDriver();
 
     // Deteksi jika supir/kernek memiliki trip aktif yang sedang berjalan
     await cekTripAktifDriver();
+
+    // Heartbeat auto-sync setiap 12 detik saat berada di portal driver
+    if (!window._driverPortalInterval) {
+        window._driverPortalInterval = setInterval(() => {
+            let portalEl = document.getElementById('page-driver-portal');
+            if (portalEl && !portalEl.classList.contains('hidden')) {
+                cekTripAktifDriver();
+            }
+        }, 12000);
+    }
+}
+
+let currentStatBulanMode = 'ini';
+
+function switchFilterBulanDriver(mode) {
+    currentStatBulanMode = mode;
+    let btnIni = document.getElementById('btn-stat-bulan-ini');
+    let btnLalu = document.getElementById('btn-stat-bulan-lalu');
+    if (mode === 'ini') {
+        if (btnIni) { btnIni.style.background = '#2563eb'; btnIni.style.color = '#ffffff'; btnIni.style.borderColor = '#2563eb'; }
+        if (btnLalu) { btnLalu.style.background = '#ffffff'; btnLalu.style.color = '#475569'; btnLalu.style.borderColor = '#cbd5e1'; }
+    } else {
+        if (btnIni) { btnIni.style.background = '#ffffff'; btnIni.style.color = '#475569'; btnIni.style.borderColor = '#cbd5e1'; }
+        if (btnLalu) { btnLalu.style.background = '#2563eb'; btnLalu.style.color = '#ffffff'; btnLalu.style.borderColor = '#2563eb'; }
+    }
+    loadDriverMonthlyStats(mode);
+}
+
+// Memuat Statistik Kinerja Bulanan Supir (Mendukung Filter Bulan Ini & Bulan Lalu)
+async function loadDriverMonthlyStats(mode = currentStatBulanMode) {
+    let meUser = (window.tripState.cachedUsers || []).find(u => u.nama === activeUser);
+    if (!meUser) return;
+
+    let now = new Date();
+    let year = now.getFullYear();
+    let month = now.getMonth();
+
+    let targetDate = (mode === 'lalu') ? new Date(year, month - 1, 1) : new Date(year, month, 1);
+    let tYear = targetDate.getFullYear();
+    let tMonth = targetDate.getMonth();
+    let pad = n => String(n).padStart(2, '0');
+    let firstDay = `${tYear}-${pad(tMonth + 1)}-01`;
+    let lastDateObj = new Date(tYear, tMonth + 1, 0);
+    let lastDay = `${tYear}-${pad(tMonth + 1)}-${pad(lastDateObj.getDate())}`;
+
+    let monthName = targetDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    let elBulan = document.getElementById('driver-stat-bulan');
+    if (elBulan) {
+        elBulan.innerText = `${monthName} (${mode === 'lalu' ? 'Bulan Lalu' : 'Bulan Ini'})`;
+    }
+
+    try {
+        let trips = await fetchTripsByDateRange(firstDay, lastDay);
+        
+        // Filter trip selesai yang melibatkan supir / kernek ini di bulan terpilih
+        let myMonthlyTrips = trips.filter(tr => 
+            (tr.status_trip === 'SELESAI') &&
+            (tr.sopir_user_id === meUser.id || tr.kernek_1_user_id === meUser.id || tr.kernek_2_user_id === meUser.id || (tr.pekerja_muat_ids || []).includes(meUser.id))
+        );
+
+        // 1. Total Rit (Pengantaran perjalanan armada yang dijalankan kru)
+        let ritTrips = myMonthlyTrips.filter(tr => 
+            tr.armada !== 'Ambil Mandiri' && 
+            (tr.sopir_user_id === meUser.id || tr.kernek_1_user_id === meUser.id || tr.kernek_2_user_id === meUser.id)
+        );
+        let totalRit = ritTrips.length;
+
+        // 2. Total KM (Jarak tempuh rute pengantaran)
+        let totalKm = ritTrips.reduce((s, tr) => s + (parseFloat(tr.jarak_tempuh_km) || 0), 0);
+
+        // 3. Total Bongkar (Pakan yang diantar & dibongkar ke kandang peternak lewat Pick-Up)
+        let totalKgBongkar = 0;
+
+        // 4. Total Muat (Pakan yang dimuat di gudang lewat Bantu Muat Truk / Ambil Mandiri)
+        let totalKgMuat = 0;
+
+        myMonthlyTrips.forEach(tr => {
+            let kg = parseFloat(tr.total_kg) || 0;
+            let isTruk = (tr.armada === 'Truk');
+            let isMandiri = (tr.armada === 'Ambil Mandiri');
+
+            if (isTruk || isMandiri) {
+                totalKgMuat += kg;
+            } else {
+                totalKgBongkar += kg;
+            }
+        });
+
+        let nf = new Intl.NumberFormat('id-ID');
+        let elRit = document.getElementById('driver-stat-rit');
+        let elKm = document.getElementById('driver-stat-km');
+        let elBongkar = document.getElementById('driver-stat-bongkar');
+        let elMuat = document.getElementById('driver-stat-muat');
+        let elKg = document.getElementById('driver-stat-kg');
+
+        if (elRit) elRit.innerText = `${nf.format(totalRit)} Rit`;
+        if (elKm) elKm.innerText = `${nf.format(totalKm)} Km`;
+        if (elBongkar) elBongkar.innerText = `${nf.format(totalKgBongkar)} Kg`;
+        if (elMuat) elMuat.innerText = `${nf.format(totalKgMuat)} Kg`;
+        if (elKg) elKg.innerText = `${nf.format(totalKgBongkar)} Kg`;
+    } catch (err) {
+        console.warn("Gagal memuat statistik bulanan supir:", err);
+    }
 }
 
 // Render Tombol Pill Pilihan Armada & Partner (Sopir / Kernek)
@@ -430,14 +630,24 @@ function renderArmadaKernekPills() {
         window.tripState.selectedKernekIds = window.tripState.selectedKernekId ? [window.tripState.selectedKernekId] : [];
     }
 
+    // Sinkronkan styling pill armada aktif di DOM
+    let curArmada = window.tripState.currentArmada || 'D 8070 UE';
+    document.querySelectorAll('.btn-pill-armada').forEach(b => {
+        let isSel = (b.dataset.armada === curArmada);
+        b.style.background = isSel ? '#2563eb' : '#f1f5f9';
+        b.style.color = isSel ? '#ffffff' : '#475569';
+        b.style.borderColor = isSel ? '#1d4ed8' : '#cbd5e1';
+    });
+
     if (myRole.includes('kernek')) {
-        // JIKA LOGIN SEBAGAI KERNEK (misal: Enggeng):
+        // JIKA LOGIN SEBAGAI KERNEK (misal: Enggeng / Mang Oboy):
         // 1. Pilih Sopir Armada (Wajib 1)
         // 2. Pilih Kernek Tambahan (Opsional 1 orang lain)
         let driverCandidates = users.filter(u => (u.role || '').toLowerCase().includes('sopir'));
         let otherKruCandidates = users.filter(u => {
             let r = (u.role || '').toLowerCase();
-            return (r.includes('kernek') || r.includes('lapangan') || r.includes('petugas') || r.includes('kandang')) && u.nama !== activeUser;
+            let isKernek = r.includes('kernek') && !u.nama.includes('Petugas') && !u.nama.includes('Agus');
+            return isKernek && u.nama !== activeUser;
         });
 
         let targetEl = partnerArea || partnerContainer;
@@ -480,10 +690,11 @@ function renderArmadaKernekPills() {
             </div>
         `;
     } else {
-        // JIKA LOGIN SEBAGAI SOPIR (misal: Hilman):
+        // JIKA LOGIN SEBAGAI SOPIR (misal: Hilman / Adi):
         let kruCandidates = users.filter(u => {
             let r = (u.role || '').toLowerCase();
-            return (r.includes('kernek') || r.includes('lapangan') || r.includes('petugas') || r.includes('kandang')) && u.nama !== activeUser;
+            let isKernek = r.includes('kernek') && !u.nama.includes('Petugas') && !u.nama.includes('Agus');
+            return isKernek && u.nama !== activeUser;
         });
 
         let selectedCount = window.tripState.selectedKernekIds.length;
@@ -519,6 +730,11 @@ function renderArmadaKernekPills() {
 
 function selectArmadaPill(armadaPlat) {
     window.tripState.currentArmada = armadaPlat;
+    let desc = (armadaPlat === 'D 8142 UK') ? 'Pick-up Putih' : 'Grand Max Pick-up';
+    let elArmadaName = document.getElementById('driver-portal-armada-name');
+    if (elArmadaName) {
+        elArmadaName.innerText = `${armadaPlat} (${desc})`;
+    }
     document.querySelectorAll('.btn-pill-armada').forEach(b => {
         let isSel = (b.dataset.armada === armadaPlat);
         b.style.background = isSel ? '#2563eb' : '#f1f5f9';
@@ -526,6 +742,51 @@ function selectArmadaPill(armadaPlat) {
         b.style.borderColor = isSel ? '#1d4ed8' : '#cbd5e1';
     });
     refreshAntreanDriver();
+}
+
+function getActiveTripKruCount() {
+    let meUser = (window.tripState.cachedUsers || []).find(u => u.nama === activeUser);
+    let myRole = (meUser?.role || (typeof currentRole !== 'undefined' ? currentRole : '') || 'sopir').toLowerCase();
+    let isKernek = myRole.includes('kernek');
+
+    let extraCount = Array.isArray(window.tripState.selectedKernekIds) ? window.tripState.selectedKernekIds.length : 0;
+    if (isKernek) {
+        // Kernek sendiri + sopir armada (wajib 1) + kernek extra (jika ada)
+        return 2 + extraCount;
+    } else {
+        // Sopir sendiri + jumlah kernek pendamping yang dipilih (0, 1, atau 2)
+        return 1 + extraCount;
+    }
+}
+
+function updateEstimasiUpahSemuaCards() {
+    let nKru = getActiveTripKruCount();
+    let nf = new Intl.NumberFormat('id-ID');
+    let kruLabel = (nKru === 1) ? 'Solo' : `Bagi ${nKru}`;
+
+    // Update semua kartu order yang ada di DOM secara dinamis
+    let buttons = document.querySelectorAll('[id^="btn-antar-"]');
+    if (buttons.length > 0) {
+        buttons.forEach(btnAntar => {
+            btnAntar.dataset.kru = nKru;
+            let safeKey = btnAntar.id.replace('btn-antar-', '');
+            let kruLabelEl = document.getElementById(`kru-label-${safeKey}`);
+            if (kruLabelEl) {
+                kruLabelEl.innerText = `(${kruLabel})`;
+            }
+            hitungTotalBawaRelasi(safeKey);
+        });
+    } else {
+        let relGroups = window.tripState.driverRelasiGroups || {};
+        Object.keys(relGroups).forEach((_, idx) => {
+            let safeKey = 'rel_' + idx;
+            let btnAntar = document.getElementById(`btn-antar-${safeKey}`);
+            if (btnAntar) btnAntar.dataset.kru = nKru;
+            let kruLabelEl = document.getElementById(`kru-label-${safeKey}`);
+            if (kruLabelEl) kruLabelEl.innerText = `(${kruLabel})`;
+            hitungTotalBawaRelasi(safeKey);
+        });
+    }
 }
 
 function selectPartnerChip(userId, type) {
@@ -538,6 +799,14 @@ function selectPartnerChip(userId, type) {
             window.tripState.selectedSopirId = null;
         } else {
             window.tripState.selectedSopirId = userId;
+            // Jika kernek memilih supir Adi -> Armada otomatis D 8142 UK
+            // Jika kernek memilih supir Hilman -> Armada otomatis D 8070 UE
+            let selUser = (window.tripState.cachedUsers || []).find(u => u.id === userId);
+            if (selUser) {
+                let sName = (selUser.nama || '').toLowerCase();
+                if (sName.includes('adi')) selectArmadaPill('D 8142 UK');
+                else if (sName.includes('hilman')) selectArmadaPill('D 8070 UE');
+            }
         }
     } else if (type === 'kernek_extra') {
         // Kernek yang login memilih 1 orang kernek tambahan
@@ -560,6 +829,7 @@ function selectPartnerChip(userId, type) {
         }
     }
     renderArmadaKernekPills();
+    updateEstimasiUpahSemuaCards();
 }
 
 function selectKernekChip(userId) {
@@ -569,6 +839,7 @@ function selectKernekChip(userId) {
 function resetKernekSelection() {
     window.tripState.selectedKernekIds = [];
     renderArmadaKernekPills();
+    updateEstimasiUpahSemuaCards();
 }
 
 // Muat Antrean DO Pengiriman Dikelompokkan per-Relasi (Konsumen)
@@ -621,19 +892,32 @@ async function refreshAntreanDriver() {
     let currentGps = window.tripState.currentLegOrigin || await getCurrentGpsPosition();
     let nf = new Intl.NumberFormat('id-ID');
 
-    let cardsHtml = Object.values(relasiGroups).map((grp, grpIdx) => {
+    let groupsArr = Object.values(relasiGroups);
+    let routeInfoArr = await Promise.all(groupsArr.map(async grp => {
+        let rData = window.tripState.cachedRelasiMap[grp.relasi] || {};
+        let rLat = rData.lat ? parseFloat(rData.lat) : null;
+        let rLng = rData.lng ? parseFloat(rData.lng) : null;
+        if (rLat && rLng && currentGps.lat && currentGps.lng) {
+            return await fetchJarakDanWaktuRiil(currentGps.lat, currentGps.lng, rLat, rLng);
+        }
+        return { km: 0, menit: 15, via: 'none' };
+    }));
+
+    let cardsHtml = groupsArr.map((grp, grpIdx) => {
         let safeKey = 'rel_' + grpIdx;
         let rData = window.tripState.cachedRelasiMap[grp.relasi] || {};
         let rLat = rData.lat ? parseFloat(rData.lat) : null;
         let rLng = rData.lng ? parseFloat(rData.lng) : null;
 
-        // Estimasi Jarak dari posisi supir saat ini ke kandang
-        let estimasiKm = (rLat && rLng) ? hitungEstimasiJarakRealistis(currentGps.lat, currentGps.lng, rLat, rLng) : 0;
+        // Estimasi Jarak Rute Jalan Riil & Waktu Tempuh via OSRM
+        let routeInfo = routeInfoArr[grpIdx] || { km: 0, menit: 15 };
+        let estimasiKm = routeInfo.km;
         let jarakLabel = estimasiKm > 0 ? `${estimasiKm} Km` : `<span style="color:#d97706; font-size:10px;">GPS Kandang Belum Ada</span>`;
-        let estimasiMenit = estimasiKm > 0 ? Math.round((estimasiKm / 25) * 60) : 15;
+        let estimasiMenit = routeInfo.menit || 15;
 
-        let estimasiUpahOtot = Math.round((grp.totalSisaKg * TARIF_ANGKAT_PICKUP) / 2);
-        let poinBeban = Math.round(((grp.totalSisaKg / 50) + estimasiKm) * 10) / 10;
+        // Flat Rp 15 / kg dibagi rata kru aktif (bisa Solo, bagi 2, atau bagi 3 tergantung kernek yang dipilih)
+        let nKruActive = getActiveTripKruCount();
+        let kruLabel = (nKruActive === 1) ? 'Solo' : `Bagi ${nKruActive}`;
         let escapedRelasi = grp.relasi.replace(/'/g, "\\'");
 
         let isSingleItem = (grp.txItems.length === 1);
@@ -658,7 +942,8 @@ async function refreshAntreanDriver() {
                                value="${defaultVal}" 
                                min="0" 
                                max="${it.sisa_qty}" 
-                               oninput="hitungTotalBawaRelasi('${safeKey}')"
+                               oninput="validasiDanHitungBawa('${safeKey}', this)"
+                               onchange="validasiDanHitungBawa('${safeKey}', this)"
                                style="flex:1; padding:7px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:800; text-align:center; color:#1e3a8a;">
                         <span style="font-size:11px; font-weight:700; color:#64748b;">Kg</span>
                         <button type="button" onclick="setBawaFullTx(${it.id}, ${it.sisa_qty}, '${safeKey}')" style="padding:6px 10px; font-size:11px; font-weight:700; background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; border-radius:6px; cursor:pointer;">Semua</button>
@@ -668,39 +953,40 @@ async function refreshAntreanDriver() {
             `;
         }).join('');
 
-        return `
-            <div style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; padding:15px; margin-bottom:12px; box-shadow:0 2px 5px rgba(0,0,0,0.03);">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-                    <div>
+        let totalUpahRit = totalInitialKg * TARIF_INSENTIF_TOTAL_PICKUP;
+        let estimasiUpahKirim = Math.floor(Math.round(totalUpahRit) / nKruActive);
+        let estimasiUpahOtot = estimasiUpahKirim; // backwards-compatibility
+
+                let gmapsBtn = (rLat && rLng)
+                    ? `<a href="https://www.google.com/maps/dir/?api=1&origin=${currentGps.lat},${currentGps.lng}&destination=${rLat},${rLng}" target="_blank" title="Cek rute di Google Maps" style="display:inline-flex; align-items:center; gap:2px; font-size:10px; font-weight:700; color:#1d4ed8; background:#eff6ff; padding:2px 6px; border-radius:10px; text-decoration:none; border:1px solid #bfdbfe; margin-left:3px;">
+                         <span class="material-symbols-outlined" style="font-size:12px; color:#2563eb;">map</span> Maps
+                       </a>`
+                    : '';
+
+                return `
+            <div style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; padding:12px 14px; margin-bottom:12px; box-shadow:0 2px 5px rgba(0,0,0,0.03);">
+                <!-- Header Kartu: Kiri Relasi & Alamat, Kanan Titik GPS & Estimasi Menit -->
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; gap:8px;">
+                    <div style="min-width:0; flex:1;">
                         <h4 style="margin:0; font-size:15px; font-weight:800; color:#1e293b;">${grp.relasi}</h4>
                         <div style="font-size:11px; color:#64748b; margin-top:2px; display:inline-flex; align-items:center; gap:3px;">
                             <span class="material-symbols-outlined" style="font-size:13px; color:#ef4444;">location_on</span>
                             <span>${grp.alamat}</span>
                         </div>
                     </div>
-                    <span style="background:#eff6ff; color:#1d4ed8; font-size:12px; font-weight:800; padding:3px 8px; border-radius:6px; border:1px solid #bfdbfe;">
-                        Total Sisa: ${nf.format(grp.totalSisaKg)} Kg
-                    </span>
-                </div>
-
-                <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#475569; margin-bottom:10px; padding:0 2px;">
-                    <span style="display:inline-flex; align-items:center; gap:3px;">
-                        <span class="material-symbols-outlined" style="font-size:14px; color:#64748b;">navigation</span>
-                        <b>${jarakLabel}</b> <span style="color:#94a3b8;">(~${estimasiMenit} mnt)</span>
-                    </span>
-                    <span style="display:inline-flex; align-items:center; gap:3px;">
-                        <span class="material-symbols-outlined" style="font-size:14px; color:#64748b;">scale</span>
-                        <b>${poinBeban}</b> Poin
-                    </span>
-                    <span style="display:inline-flex; align-items:center; gap:3px; color:#15803d; font-weight:800;">
-                        <span class="material-symbols-outlined" style="font-size:14px; color:#15803d;">payments</span>
-                        ±Rp ${nf.format(estimasiUpahOtot)}
-                    </span>
+                    <!-- Kanan: Titik GPS & Estimasi Waktu (Pengganti Total Sisa) -->
+                    <div style="text-align:right; flex-shrink:0;">
+                        <div style="display:inline-flex; align-items:center; gap:3px; background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; font-size:11px; font-weight:800; padding:3px 8px; border-radius:6px;">
+                            <span class="material-symbols-outlined" style="font-size:13px;">navigation</span>
+                            <span>${jarakLabel}</span> <span style="font-size:10px; color:#166534; font-weight:normal;">(~${estimasiMenit} mnt)</span>
+                        </div>
+                        ${gmapsBtn ? `<div style="margin-top:3px; text-align:right;">${gmapsBtn}</div>` : ''}
+                    </div>
                 </div>
 
                 <!-- Daftar Input Qty per Jenis Pakan -->
-                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px; margin-bottom:12px;">
-                    <div style="font-size:11px; font-weight:700; color:#475569; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px; margin-bottom:10px;">
+                    <div style="font-size:11px; font-weight:700; color:#475569; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
                         <span>${isSingleItem ? 'Muatan yang Dibawa Rit Ini:' : 'Pilih & Tentukan Kg per Jenis Pakan:'}</span>
                         ${!isSingleItem ? `<button type="button" onclick="setBawaSemuaItemRelasi('${safeKey}')" style="background:none; border:none; color:#2563eb; font-size:11px; font-weight:700; cursor:pointer; text-decoration:underline;">Bawa Semua</button>` : ''}
                     </div>
@@ -708,17 +994,19 @@ async function refreshAntreanDriver() {
                 </div>
 
                 <!-- Bagian Eksekusi Berangkat -->
-                <div style="border-top:1px dashed #e2e8f0; padding-top:10px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                        <span style="font-size:12px; font-weight:700; color:#475569;">Total Muatan Pick-Up:</span>
-                        <strong style="font-size:14px; font-weight:800; color:#15803d;">
+                <div style="border-top:1px dashed #e2e8f0; padding-top:8px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <span style="font-size:11px; font-weight:700; color:#475569;">Total Muatan Dibawa:</span>
+                        <strong style="font-size:13px; font-weight:800; color:#15803d;">
                             <span id="label-total-kg-${safeKey}">${nf.format(totalInitialKg)}</span> Kg
                         </strong>
                     </div>
-                    <button type="button" id="btn-antar-${safeKey}" onclick="mulaiAntarKonsumen('${safeKey}', '${escapedRelasi}')" style="width:100%; background:linear-gradient(135deg, #2563eb, #1d4ed8); color:white; border:none; padding:11px 14px; border-radius:8px; font-size:13px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 2px 6px rgba(37,99,235,0.25);">
-                        <span class="material-symbols-outlined" style="font-size:18px;">local_shipping</span> Berangkatkan (<span id="btn-kg-${safeKey}">${nf.format(totalInitialKg)}</span> Kg)
+                    <button type="button" id="btn-antar-${safeKey}" data-kru="${nKruActive}" onclick="mulaiAntarKonsumen('${safeKey}', '${escapedRelasi}')" style="width:100%; background:linear-gradient(135deg, #2563eb, #1d4ed8); color:white; border:none; padding:11px 14px; border-radius:8px; font-size:13px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 2px 6px rgba(37,99,235,0.25);">
+                        <span class="material-symbols-outlined" style="font-size:18px;">local_shipping</span> Berangkatkan (+Rp <span id="btn-upah-${safeKey}">${nf.format(estimasiUpahKirim)}</span>)
                     </button>
-                    <small style="color:#64748b; font-size:10px; display:block; margin-top:5px; text-align:center;">*Sisa pakan yang tidak terangkut otomatis tetap menunggu di antrean.</small>
+                    <!-- Hidden element for backwards compatibility -->
+                    <span id="btn-kg-${safeKey}" style="display:none;">${nf.format(totalInitialKg)}</span>
+                    <small style="color:#94a3b8; font-size:10px; display:block; margin-top:4px; text-align:center;">*Upah dihitung Rp 15/kg dibagi rata kru <span id="kru-label-${safeKey}">(${kruLabel})</span>.</small>
                 </div>
             </div>
         `;
@@ -727,19 +1015,58 @@ async function refreshAntreanDriver() {
     container.innerHTML = cardsHtml;
 }
 
+// Helper validasi batasan muatan agar tidak melebihi sisa DO & kalkulasi total
+function validasiDanHitungBawa(safeKey, inp) {
+    if (inp) {
+        let max = parseFloat(inp.dataset.max) || 0;
+        let v = parseFloat(inp.value);
+        if (isNaN(v) || v < 0) {
+            inp.value = 0;
+        } else if (v > max) {
+            inp.value = max;
+        }
+    }
+    hitungTotalBawaRelasi(safeKey);
+}
+
 // Helper kalkulasi total muatan per relasi di layar supir
 function hitungTotalBawaRelasi(safeKey) {
     let inputs = document.querySelectorAll(`.input-bawa-${safeKey}`);
     let total = 0;
     inputs.forEach(inp => {
-        let v = parseFloat(inp.value) || 0;
+        let max = parseFloat(inp.dataset.max) || 0;
+        let v = parseFloat(inp.value);
+        if (isNaN(v) || v < 0) {
+            inp.value = 0;
+            v = 0;
+        } else if (v > max) {
+            inp.value = max;
+            v = max;
+        }
         total += v;
     });
     let lbl = document.getElementById(`label-total-kg-${safeKey}`);
     let btnKg = document.getElementById(`btn-kg-${safeKey}`);
+    let btnUpah = document.getElementById(`btn-upah-${safeKey}`);
+    let btnAntar = document.getElementById(`btn-antar-${safeKey}`);
+    let nKru = btnAntar ? (parseInt(btnAntar.dataset.kru) || getActiveTripKruCount() || 1) : (getActiveTripKruCount() || 1);
+    let upahPerKru = Math.floor(Math.round(total * TARIF_INSENTIF_TOTAL_PICKUP) / nKru);
+
     let nf = new Intl.NumberFormat('id-ID');
     if (lbl) lbl.innerText = nf.format(total);
     if (btnKg) btnKg.innerText = nf.format(total);
+    if (btnUpah) {
+        btnUpah.innerText = nf.format(upahPerKru);
+        btnUpah.style.transition = 'transform 0.15s ease, color 0.15s ease';
+        btnUpah.style.transform = 'scale(1.12)';
+        btnUpah.style.color = '#fef08a';
+        setTimeout(() => {
+            if (btnUpah) {
+                btnUpah.style.transform = 'scale(1)';
+                btnUpah.style.color = '';
+            }
+        }, 180);
+    }
 }
 
 function setBawaFullTx(txId, maxQty, safeKey) {
@@ -774,13 +1101,21 @@ async function mulaiAntarKonsumen(safeKey, namaRelasi) {
     let rincianPakanText = [];
 
     for (let inp of inputs) {
-        let qty = parseFloat(inp.value) || 0;
         let maxQty = parseFloat(inp.dataset.max) || 0;
+        let qty = parseFloat(inp.value);
         let txId = parseInt(inp.dataset.txId);
         let pakan = inp.dataset.pakan || 'Pakan';
 
+        if (isNaN(qty) || qty < 0) {
+            inp.value = 0;
+            hitungTotalBawaRelasi(safeKey);
+            return alert(`Jumlah muatan ${pakan} tidak boleh bernilai negatif atau kosong!`);
+        }
+
         if (qty > maxQty) {
-            return alert(`Jumlah muatan ${pakan} (${qty} Kg) melebihi sisa pesanan (${maxQty} Kg)!`);
+            inp.value = maxQty;
+            hitungTotalBawaRelasi(safeKey);
+            return alert(`Jumlah muatan ${pakan} (${qty} Kg) tidak boleh melebihi sisa pesanan (${maxQty} Kg)! Nilai telah disesuaikan.`);
         }
         if (qty > 0) {
             manifestItems.push({
@@ -828,7 +1163,11 @@ async function mulaiAntarKonsumen(safeKey, namaRelasi) {
     }
 
     let btn = document.getElementById(`btn-antar-${safeKey}`);
-    if (btn) { btn.disabled = true; btn.innerText = "Mengunci GPS..."; }
+    let origBtnHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px; animation:spin 1s linear infinite;">sync</span> Mengunci GPS...`;
+    }
 
     // Ambil GPS Titik Awal (Origin)
     let gpsStart = await getCurrentGpsPosition();
@@ -846,6 +1185,7 @@ async function mulaiAntarKonsumen(safeKey, namaRelasi) {
         kernek_2_user_id: kernek2Id,
         total_kg: totalKg,
         status_trip: 'BERANGKAT',
+        status_klaim: 'BELUM_KLAIM',
         waktu_berangkat: new Date().toISOString(),
         lat_start: gpsStart.lat,
         lng_start: gpsStart.lng,
@@ -877,12 +1217,27 @@ async function mulaiAntarKonsumen(safeKey, namaRelasi) {
 
         alert(`🚀 Berangkat! Anda sedang menuju ke ${namaRelasi} (${totalKg} Kg: ${rincianPakanText.join(', ')}).`);
         
+        // Broadcast Realtime ke HP Partner (Sopir / Kernek) & Admin Monitor
+        if (typeof broadcastRealtimeUpdate === 'function') {
+            broadcastRealtimeUpdate({
+                tipe: 'TRIP_UPDATE',
+                armada: armada,
+                relasi: namaRelasi,
+                status: 'BERANGKAT',
+                petugas: activeUser,
+                timestamp: Date.now()
+            });
+        }
+
         // Beralih ke Tampilan Trip Sedang Berjalan
         tampilkanLayarTripBerjalan(activeTrip, namaRelasi, totalKg);
     } catch (e) {
         alert("Gagal memulai perjalanan: " + e.message);
     } finally {
-        if (btn) { btn.disabled = false; btn.innerText = `Berangkatkan (${totalKg} Kg)`; }
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origBtnHtml;
+        }
     }
 }
 
@@ -1013,27 +1368,27 @@ async function konfirmasiSelesaiPengiriman(tripId, namaRelasi, qtyKg, kembaliKeG
         }
     }
 
-    // 2. Hitung Jarak Tempuh Leg ini
+    // 2. Hitung Jarak Tempuh Leg ini via OSRM Rute Jalan Riil
     let trip = window.tripState.activeTripItem || {};
     let latStart = trip.lat_start || LAT_GUDANG_CBL;
     let lngStart = trip.lng_start || LNG_GUDANG_CBL;
 
-    // Jarak Berangkat: dari Titik Berangkat -> Kandang Peternak
-    let legBerangkatKm = hitungEstimasiJarakRealistis(latStart, lngStart, gpsEnd.lat, gpsEnd.lng);
+    // Jarak Berangkat: dari Titik Berangkat -> Kandang Peternak (Rute Jalan)
+    let ruteBerangkat = await fetchJarakDanWaktuRiil(latStart, lngStart, gpsEnd.lat, gpsEnd.lng);
+    let legBerangkatKm = ruteBerangkat.km;
 
-    // Jarak Pulang: jika supir konfirmasi kembali ke Gudang PM
+    // Jarak Pulang: jika supir konfirmasi kembali ke Gudang PM (Rute Jalan)
     let legPulangKm = 0;
     if (kembaliKeGudang) {
-        // Hitung jarak kembali dari Kandang Peternak -> Gudang PM
-        legPulangKm = hitungEstimasiJarakRealistis(gpsEnd.lat, gpsEnd.lng, LAT_GUDANG_CBL, LNG_GUDANG_CBL);
+        let rutePulang = await fetchJarakDanWaktuRiil(gpsEnd.lat, gpsEnd.lng, LAT_GUDANG_CBL, LNG_GUDANG_CBL);
+        legPulangKm = rutePulang.km;
     }
 
     let totalJarakKm = Math.round((legBerangkatKm + legPulangKm) * 10) / 10;
-    let poinBeban = Math.round(((qtyKg / 50) + totalJarakKm) * 10) / 10;
 
     let catatanTambahan = kembaliKeGudang 
-        ? ` (PP ke Gudang PM, total ${totalJarakKm} Km)` 
-        : ` (Lanjut estafet, leg ${totalJarakKm} Km)`;
+        ? ` (PP ke Gudang PM, rute jalan ${totalJarakKm} Km)` 
+        : ` (Lanjut estafet, rute jalan ${totalJarakKm} Km)`;
 
     let payloadUpdate = {
         status_trip: 'SELESAI',
@@ -1041,7 +1396,7 @@ async function konfirmasiSelesaiPengiriman(tripId, namaRelasi, qtyKg, kembaliKeG
         lat_end: gpsEnd.lat,
         lng_end: gpsEnd.lng,
         jarak_tempuh_km: totalJarakKm,
-        poin_beban: poinBeban,
+        poin_beban: 0,
         foto_bukti_url: uploadedPhotoUrl,
         catatan: (trip.catatan || '') + catatanTambahan
     };
@@ -1082,11 +1437,13 @@ async function konfirmasiSelesaiPengiriman(tripId, namaRelasi, qtyKg, kembaliKeG
         }
         window.tripState.activeTripItem = null;
 
-        // 5. Hitung Hadiah Uang Otot Langsung untuk Efek Selebrasi Psikologis
+        // 5. Hitung Hadiah Insentif Flat Rp 15/kg Dibagi Rata Kru yang Bertugas
         let hasK2 = !!trip.kernek_2_user_id;
-        let upahOtotDapat = Math.round((qtyKg * TARIF_ANGKAT_PICKUP) / (hasK2 ? 3 : 2));
+        let hasK1 = !!trip.kernek_1_user_id;
+        let nKru = hasK2 ? 3 : (hasK1 ? 2 : 1);
+        let upahKirimDapat = Math.round((qtyKg * TARIF_INSENTIF_TOTAL_PICKUP) / nKru);
 
-        tampilkanModalSelebrasi(namaRelasi, upahOtotDapat, totalJarakKm, kembaliKeGudang);
+        tampilkanModalSelebrasi(namaRelasi, upahKirimDapat, totalJarakKm, kembaliKeGudang);
 
         // Reset Tampilan
         document.getElementById('driver-active-trip-box')?.classList.add('hidden');
@@ -1095,6 +1452,19 @@ async function konfirmasiSelesaiPengiriman(tripId, namaRelasi, qtyKg, kembaliKeG
 
         refreshAntreanDriver();
         loadDompetDriver();
+        loadDriverMonthlyStats();
+
+        // Broadcast Realtime ke HP partner dan admin
+        if (typeof broadcastRealtimeUpdate === 'function') {
+            broadcastRealtimeUpdate({
+                tipe: 'TRIP_UPDATE',
+                armada: trip.armada,
+                relasi: namaRelasi,
+                status: 'SELESAI',
+                petugas: activeUser,
+                timestamp: Date.now()
+            });
+        }
     } catch (e) {
         alert("Gagal konfirmasi selesai: " + e.message);
     } finally {
@@ -1104,17 +1474,17 @@ async function konfirmasiSelesaiPengiriman(tripId, namaRelasi, qtyKg, kembaliKeG
 }
 
 // Pop-up Selebrasi Psikologis (+Rp Masuk ke Dompet!)
-function tampilkanModalSelebrasi(namaRelasi, rupiahOtot, legKm, kembaliKeGudang = true) {
+function tampilkanModalSelebrasi(namaRelasi, rupiahKirim, legKm, kembaliKeGudang = true) {
     let modal = document.getElementById('driver-celebration-modal');
     if (!modal) return;
     let nf = new Intl.NumberFormat('id-ID');
 
     document.getElementById('celeb-nama-peternak').innerText = namaRelasi;
-    document.getElementById('celeb-nominal-uang').innerText = `+Rp ${nf.format(rupiahOtot)}`;
+    document.getElementById('celeb-nominal-uang').innerText = `+Rp ${nf.format(rupiahKirim)}`;
     
     let infoKmText = kembaliKeGudang 
-        ? `+${legKm} Km (Termasuk Pulang ke PM) ditambahkan ke Tabungan Jarak` 
-        : `+${legKm} Km (Leg Antar) ditambahkan ke Tabungan Jarak`;
+        ? `+${legKm} Km (Termasuk Pulang ke PM) rute jalan tercatat` 
+        : `+${legKm} Km (Leg Antar) rute jalan tercatat`;
     document.getElementById('celeb-km-poin').innerText = infoKmText;
 
     modal.classList.remove('hidden');
@@ -1131,108 +1501,1573 @@ function tutupModalSelebrasi() {
 }
 
 // ====================================================================
-// 6. DOMPET DRIVER & KLAIM INSENTIF
+// 6. DOMPET DRIVER & KLAIM INSENTIF (SALDO BERJALAN & KARTU MUTASI)
 // ====================================================================
 
-async function loadDompetDriver() {
+let currentDompetFilter = 'bulanan';
+
+function switchFilterDompetDriver(mode) {
+    currentDompetFilter = mode;
+    ['mingguan', 'bulanan', 'tahunan'].forEach(m => {
+        let btn = document.getElementById(`btn-dompet-${m}`);
+        if (btn) {
+            btn.style.background = (m === mode) ? '#0f766e' : '#ffffff';
+            btn.style.color = (m === mode) ? '#ffffff' : '#475569';
+            btn.style.borderColor = (m === mode) ? '#0f766e' : '#cbd5e1';
+        }
+    });
+    loadDompetDriver(mode);
+}
+
+function isUserInTrip(tr, userId) {
+    if (!tr || !userId) return false;
+    if (tr.sopir_user_id === userId) return true;
+    if (tr.kernek_1_user_id === userId) return true;
+    if (tr.kernek_2_user_id === userId) return true;
+    if (Array.isArray(tr.pekerja_muat_ids) && tr.pekerja_muat_ids.includes(userId)) return true;
+    return false;
+}
+
+function hitungUpahSayaDiTrip(tr, userId) {
+    let isTruk = (tr.armada === 'Truk');
+    let isMandiri = (tr.armada === 'Ambil Mandiri');
+    let kg = parseFloat(tr.total_kg) || 0;
+    let upah = 0;
+    let porsiKg = 0;
+
+    if (isTruk || isMandiri) {
+        let pekerjaIds = Array.isArray(tr.pekerja_muat_ids) ? tr.pekerja_muat_ids : [];
+        let nKru = pekerjaIds.length || 1;
+        let totalUpahMuat = kg * TARIF_MUAT_BONGKAR_TRUK; // 15
+        let perOrang = Math.floor(totalUpahMuat / nKru);
+        let sisa = totalUpahMuat - (perOrang * nKru);
+        let idx = pekerjaIds.indexOf(userId);
+        if (idx !== -1) {
+            upah += perOrang + (idx === nKru - 1 ? sisa : 0);
+            porsiKg += Math.round(kg / nKru);
+        }
+        if (isTruk && tr.sopir_user_id === userId) {
+            let titik = parseInt(tr.jumlah_titik) || 1;
+            let solar = parseFloat(tr.uang_jalan_sopir) || (titik * UANG_SOLAR_TRUK_PER_TITIK);
+            upah += solar;
+        }
+    } else {
+        // Pick-Up
+        let hasK2 = !!tr.kernek_2_user_id;
+        let hasK1 = !!tr.kernek_1_user_id;
+        let nKru = hasK2 ? 3 : (hasK1 ? 2 : 1);
+        let totalUpahTrip = Math.round(kg * TARIF_INSENTIF_TOTAL_PICKUP);
+        let perKru = Math.floor(totalUpahTrip / nKru);
+        let sisa = totalUpahTrip - (perKru * nKru);
+        porsiKg = Math.round(kg / nKru);
+
+        if (tr.sopir_user_id === userId || tr.kernek_1_user_id === userId) {
+            upah += perKru;
+        } else if (tr.kernek_2_user_id === userId) {
+            upah += (perKru + sisa);
+        }
+    }
+    return { upah, porsiKg };
+}
+
+async function loadDompetDriver(filterMode = currentDompetFilter) {
     let meUser = (window.tripState.cachedUsers || []).find(u => u.nama === activeUser);
     if (!meUser) return;
-
-    let today = new Date().toISOString().split('T')[0];
-    let trips = await fetchTripsByDateRange(today, today);
     let users = window.tripState.cachedUsers || [];
-
-    let akumulasi = hitungAkumulasiInsentifPeriode(trips, users);
-    let myData = akumulasi.userMap[meUser.id] || {
-        upahOtot: 0,
-        subsidiJarak: 0,
-        upahMuatTruk: 0,
-        uangSolarTruk: 0,
-        totalBersih: 0,
-        totalKm: 0,
-        totalKgOtot: 0
-    };
-
+    let userDict = {};
+    users.forEach(u => { userDict[u.id] = u.nama; });
     let nf = new Intl.NumberFormat('id-ID');
 
-    let upahMuat = myData.upahOtot || 0;
-    let upahNgantar = myData.subsidiJarak || 0;
-    let totalUpah = upahMuat + upahNgantar;
+    let now = new Date();
+    let pad = n => String(n).padStart(2, '0');
+    let startDate, endDate, labelPeriode;
 
-    // Update Kartu Utama Dompet Sesuai Rincian Baru
-    let elMuat = document.getElementById('dompet-upah-muat');
-    if (elMuat) elMuat.innerText = `Rp ${nf.format(upahMuat)}`;
+    if (filterMode === 'mingguan') {
+        let dStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+        startDate = `${dStart.getFullYear()}-${pad(dStart.getMonth() + 1)}-${pad(dStart.getDate())}`;
+        endDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        labelPeriode = `7 Hari Terakhir (${dStart.getDate()}/${dStart.getMonth() + 1} - ${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()})`;
+    } else if (filterMode === 'tahunan') {
+        startDate = `${now.getFullYear()}-01-01`;
+        endDate = `${now.getFullYear()}-12-31`;
+        labelPeriode = `Tahun ${now.getFullYear()}`;
+    } else {
+        filterMode = 'bulanan';
+        let lastDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        startDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+        endDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(lastDate.getDate())}`;
+        labelPeriode = now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    }
 
-    let elNgantar = document.getElementById('dompet-estimasi-ngantar');
-    if (elNgantar) elNgantar.innerText = `Rp ${nf.format(upahNgantar)}`;
+    let elLabelPeriode = document.getElementById('dompet-periode-label');
+    if (elLabelPeriode) elLabelPeriode.innerText = labelPeriode;
 
-    let elTotalUpah = document.getElementById('dompet-total-upah');
-    if (elTotalUpah) elTotalUpah.innerText = `Rp ${nf.format(totalUpah)}`;
+    let supaHeaders = { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` };
 
-    // Fallback backwards-compatibility
-    let elOtot = document.getElementById('dompet-upah-otot');
-    if (elOtot) elOtot.innerText = `Rp ${nf.format(upahMuat)}`;
+    // 1. Ambil seluruh trip yang belum dicairkan (status_klaim != SUDAH_CAIR) untuk saldo berjalan utama
+    // 2. Ambil trip sesuai filter periode aktif untuk riwayat mutasi buku kas
+    let urlPending = `${SUPA_URL}/rest/v1/trip_pengiriman?status_trip=eq.SELESAI&or=(status_klaim.is.null,status_klaim.neq.SUDAH_CAIR)&order=tanggal.desc,created_at.desc`;
+    let urlPeriod = `${SUPA_URL}/rest/v1/trip_pengiriman?tanggal=gte.${startDate}&tanggal=lte.${endDate}&order=tanggal.desc,created_at.desc`;
 
-    let elTotalBersih = document.getElementById('dompet-total-bersih');
-    if (elTotalBersih) elTotalBersih.innerText = `Rp ${nf.format(myData.totalBersih)}`;
+    try {
+        let [resPending, resPeriod] = await Promise.all([
+            fetch(urlPending, { headers: supaHeaders }).then(r => r.ok ? r.json() : []),
+            fetch(urlPeriod, { headers: supaHeaders }).then(r => r.ok ? r.json() : [])
+        ]);
 
-    // Update Tabungan Jarak (Semi-Transparan)
-    let elPoolTotal = document.getElementById('dompet-pool-toples');
-    if (elPoolTotal) elPoolTotal.innerText = `Rp ${nf.format(akumulasi.totalToplesJarak)}`;
+        // A. KALKULASI SALDO BERJALAN BELUM DICAIRKAN (TOP GREEN CARD & DETAIL KARTU PUTIH)
+        let myPendingTrips = resPending.filter(tr => tr.status_trip === 'SELESAI' && isUserInTrip(tr, meUser.id));
+        window.tripState.cachedUnclaimedTrips = myPendingTrips;
 
-    let elKmSaya = document.getElementById('dompet-km-saya');
-    if (elKmSaya) elKmSaya.innerText = `${myData.totalKm} Km dari ${akumulasi.totalKmSemuaPickup} Km Total`;
+        let akumulasiPending = hitungAkumulasiInsentifPeriode(myPendingTrips, users);
+        let myPendingData = akumulasiPending.userMap[meUser.id] || {
+            totalKgMuat: 0,
+            totalKgAntar: 0,
+            totalKgAll: 0,
+            upahMuatTotal: 0,
+            totalBersih: 0,
+            totalKm: 0,
+            tripCount: 0
+        };
 
-    let elEstimasiJarak = document.getElementById('dompet-estimasi-jarak');
-    if (elEstimasiJarak) elEstimasiJarak.innerText = `Rp ${nf.format(myData.subsidiJarak)}`;
+        let saldoBelumCair = myPendingData.totalBersih;
+        // Animasi count up nominal saldo berjalan di menu dompet
+        animateCountUp('dompet-total-upah', saldoBelumCair, 750);
 
-    // Render Riwayat Pengantaran
-    let tbodyRiwayat = document.getElementById('driver-riwayat-tbody');
-    if (tbodyRiwayat) {
-        let myTrips = trips.filter(tr => tr.sopir_user_id === meUser.id || tr.kernek_1_user_id === meUser.id || tr.kernek_2_user_id === meUser.id || (tr.pekerja_muat_ids || []).includes(meUser.id));
-        if (myTrips.length === 0) {
-            tbodyRiwayat.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:20px; color:#94a3b8; font-style:italic;">Belum ada pengantaran selesai hari ini.</td></tr>`;
+        let elRincianKgMuat = document.getElementById('dompet-rincian-kg-muat');
+        if (elRincianKgMuat) elRincianKgMuat.innerText = `${nf.format(myPendingData.totalKgMuat)} Kg`;
+
+        let elRincianKgAntar = document.getElementById('dompet-rincian-kg-antar');
+        if (elRincianKgAntar) elRincianKgAntar.innerText = `${nf.format(myPendingData.totalKgAntar)} Kg`;
+
+        let elRincianKgOtot = document.getElementById('dompet-rincian-kg-otot');
+        if (elRincianKgOtot) elRincianKgOtot.innerText = `${nf.format(myPendingData.totalKgAll)} Kg`;
+
+        let elKmSaya = document.getElementById('dompet-km-saya');
+        if (elKmSaya) elKmSaya.innerText = `${myPendingData.totalKm} Km`;
+
+        let elRincianRpOtot = document.getElementById('dompet-rincian-rp-otot');
+        if (elRincianRpOtot) elRincianRpOtot.innerText = `Rp ${nf.format(saldoBelumCair)}`;
+
+        // Backwards compatibility legacy elements
+        let elMuat = document.getElementById('dompet-upah-muat');
+        if (elMuat) elMuat.innerText = `${nf.format(myPendingData.totalKgAll)} Kg`;
+        let elSubMuatKg = document.getElementById('dompet-sub-muat-kg');
+        if (elSubMuatKg) elSubMuatKg.innerText = `(${myPendingData.tripCount} Rit)`;
+        let elNgantar = document.getElementById('dompet-estimasi-ngantar');
+        if (elNgantar) elNgantar.innerText = `${myPendingData.totalKm} Km`;
+        let elOtot = document.getElementById('dompet-upah-otot');
+        if (elOtot) elOtot.innerText = `Rp ${nf.format(saldoBelumCair)}`;
+        let elTotalBersih = document.getElementById('dompet-total-bersih');
+        if (elTotalBersih) elTotalBersih.innerText = `Rp ${nf.format(saldoBelumCair)}`;
+        let elEstimasiJarak = document.getElementById('dompet-estimasi-jarak');
+        if (elEstimasiJarak) elEstimasiJarak.innerText = `Rp ${nf.format(saldoBelumCair)}`;
+
+        // B. RENDER BUKU MUTASI & RIWAYAT SESUAI FILTER PERIODE (KONSEP M-BANKING TRANSAKSI)
+        let myPeriodTrips = resPeriod.filter(tr => tr.status_trip === 'SELESAI' && isUserInTrip(tr, meUser.id));
+        window.tripState.cachedPeriodTrips = myPeriodTrips;
+        window.tripState.currentFilterLabel = labelPeriode;
+        window.tripState.currentFilterMode = filterMode;
+
+        let totalUpahPeriode = 0;
+        let totalCairPeriode = 0;
+        let totalBelumCairPeriode = 0;
+
+        let listRiwayat = document.getElementById('driver-riwayat-list');
+        let tbodyRiwayat = document.getElementById('driver-riwayat-tbody');
+
+        if (myPeriodTrips.length === 0) {
+            let emptyMsg = `<div style="text-align:center; padding:30px 15px; color:#94a3b8; font-style:italic;">Belum ada riwayat transaksi pengantaran untuk periode ${labelPeriode}.</div>`;
+            if (listRiwayat) listRiwayat.innerHTML = emptyMsg;
+            if (tbodyRiwayat) tbodyRiwayat.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada riwayat.</td></tr>`;
         } else {
-            tbodyRiwayat.innerHTML = myTrips.map(tr => {
+            let listHtml = myPeriodTrips.map(tr => {
+                let isMandiri = (tr.armada === 'Ambil Mandiri');
+                let isTruk = (tr.armada === 'Truk');
+                let isBantuMuat = (isMandiri || isTruk);
                 let rNama = tr.manifest_items?.[0]?.relasi || tr.catatan || 'Pengantaran';
+                let trKg = parseFloat(tr.total_kg) || 0;
+
+                let { upah: upahSaya, porsiKg } = hitungUpahSayaDiTrip(tr, meUser.id);
+                let isCair = (tr.status_klaim === 'SUDAH_CAIR');
+
+                totalUpahPeriode += upahSaya;
+                if (isCair) totalCairPeriode += upahSaya;
+                else totalBelumCairPeriode += upahSaya;
+
+                let tglDisplay = tr.tanggal ? tr.tanggal.split('-').reverse().slice(0, 2).join('/') : '-';
+                let waktuStr = tr.waktu_berangkat 
+                    ? new Date(tr.waktu_berangkat).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) 
+                    : '';
+                let tglSubtitle = waktuStr ? `${tglDisplay} • ${waktuStr}` : tglDisplay;
+
+                let pal = getAvatarPalette(rNama);
+                let initials = getInitialsFromRelasi(rNama);
+
                 return `
-                    <tr style="border-bottom:1px solid #f1f5f9; font-size:11px;">
-                        <td style="padding:8px 6px; font-weight:700; color:#1e293b;">${rNama}</td>
-                        <td style="padding:8px 6px; text-align:right;">${nf.format(tr.total_kg)} Kg</td>
-                        <td style="padding:8px 6px; text-align:right;">${tr.jarak_tempuh_km} Km</td>
-                        <td style="padding:8px 6px; text-align:center;">
-                            <span style="background:#dcfce7; color:#15803d; font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px;">Selesai</span>
-                        </td>
-                    </tr>
+                    <div onclick="bukaModalRincianMutasiDriver(${tr.id})" style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid #f1f5f9; cursor:pointer; background:#ffffff; transition:background 0.15s ease;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#ffffff'">
+                        <!-- Kiri: Avatar Inisial & Relasi / Tanggal / Tonase -->
+                        <div style="display:flex; align-items:center; gap:12px; min-width:0; flex:1; padding-right:8px;">
+                            <div style="width:40px; height:40px; border-radius:50%; background:${pal.bg}; color:${pal.text}; border:1px solid ${pal.border}; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; position:relative; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+                                ${initials}
+                                <span style="position:absolute; bottom:-2px; right:-2px; width:15px; height:15px; border-radius:50%; background:#ffffff; border:1px solid #e2e8f0; display:flex; align-items:center; justify-content:center; font-size:9px; box-shadow:0 1px 2px rgba(0,0,0,0.06);">
+                                    ${isBantuMuat ? '📦' : '🚚'}
+                                </span>
+                            </div>
+                            <div style="min-width:0; flex:1;">
+                                <div style="font-size:13px; font-weight:800; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                    ${rNama}
+                                </div>
+                                <div style="font-size:11px; color:#64748b; margin-top:2px; display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
+                                    <span>${tglSubtitle}</span>
+                                    <span style="color:#cbd5e1;">•</span>
+                                    <span style="font-weight:600; color:#475569;">${nf.format(trKg)} Kg</span>
+                                    ${isBantuMuat ? '<span style="background:#fef3c7; color:#b45309; font-size:9px; font-weight:700; padding:1px 5px; border-radius:4px; margin-left:2px;">Bantu Muat</span>' : ''}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Kanan: Nominal Upah Bersih, Status Pencairan & Tombol Rincian -->
+                        <div style="text-align:right; flex-shrink:0; display:flex; align-items:center; gap:6px;">
+                            <div>
+                                <div style="font-size:14px; font-weight:900; color:#15803d; letter-spacing:-0.2px;">
+                                    +Rp ${nf.format(upahSaya)}
+                                </div>
+                                <div style="font-size:10px; font-weight:700; margin-top:2px; color:${isCair ? '#15803d' : '#b45309'}; display:flex; align-items:center; justify-content:flex-end; gap:3px;">
+                                    <span style="width:6px; height:6px; border-radius:50%; background:${isCair ? '#22c55e' : '#f59e0b'};"></span>
+                                    <span>${isCair ? 'Sudah Cair' : 'Belum Cair'}</span>
+                                </div>
+                            </div>
+                            <button type="button" onclick="event.stopPropagation(); bukaModalRincianMutasiDriver(${tr.id})" style="background:#f8fafc; border:1px solid #e2e8f0; color:#475569; font-size:10px; font-weight:700; padding:4px 6px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; gap:1px;" title="Lihat Rincian">
+                                <span>Rincian</span>
+                                <span class="material-symbols-outlined" style="font-size:12px; color:#64748b;">chevron_right</span>
+                            </button>
+                        </div>
+                    </div>
                 `;
             }).join('');
+
+            if (listRiwayat) listRiwayat.innerHTML = listHtml;
+            if (tbodyRiwayat) tbodyRiwayat.innerHTML = '';
         }
+
+        // Update Ringkasan Rekening Periode
+        let elHistTotal = document.getElementById('dompet-hist-total');
+        let elHistCair = document.getElementById('dompet-hist-cair');
+        let elHistPending = document.getElementById('dompet-hist-pending');
+
+        if (elHistTotal) elHistTotal.innerText = `Rp ${nf.format(totalUpahPeriode)}`;
+        if (elHistCair) elHistCair.innerText = `Rp ${nf.format(totalCairPeriode)}`;
+        if (elHistPending) elHistPending.innerText = `Rp ${nf.format(totalBelumCairPeriode)}`;
+
+    } catch (err) {
+        console.error("Gagal memuat data dompet supir:", err);
     }
 }
 
-// Beralih Tab di Layar Driver (Order Kirim vs Dompet)
+// ====================================================================
+// 6A. HELPER ANIMASI COUNT-UP & MODAL RINCIAN MUTASI (M-BANKING STYLE)
+// ====================================================================
+
+function animateCountUp(targetId, endValue, duration = 750) {
+    let el = document.getElementById(targetId);
+    if (!el) return;
+    let target = Math.max(0, Math.round(Number(endValue) || 0));
+    let startTime = null;
+    let nf = new Intl.NumberFormat('id-ID');
+
+    el.innerText = 'Rp 0';
+
+    function step(currentTime) {
+        if (!startTime) startTime = currentTime;
+        let elapsed = currentTime - startTime;
+        let progress = Math.min(elapsed / duration, 1);
+        let ease = (progress === 1) ? 1 : 1 - Math.pow(2, -10 * progress);
+        let current = Math.floor(target * ease);
+        el.innerText = `Rp ${nf.format(current)}`;
+        if (progress < 1) {
+            requestAnimationFrame(step);
+        } else {
+            el.innerText = `Rp ${nf.format(target)}`;
+        }
+    }
+    requestAnimationFrame(step);
+}
+
+const AVATAR_PALETTES = [
+    { bg: '#fef3c7', text: '#b45309', border: '#fde68a' }, // Amber
+    { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' }, // Blue
+    { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0' }, // Green
+    { bg: '#fdf2f8', text: '#be185d', border: '#fbcfe8' }, // Pink
+    { bg: '#f3e8ff', text: '#7e22ce', border: '#e9d5ff' }, // Purple
+    { bg: '#ecfeff', text: '#0e7490', border: '#a5f3fc' }  // Cyan
+];
+
+function getAvatarPalette(str) {
+    let hash = 0;
+    for (let i = 0; i < (str || '').length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    let idx = Math.abs(hash) % AVATAR_PALETTES.length;
+    return AVATAR_PALETTES[idx];
+}
+
+function getInitialsFromRelasi(relasi) {
+    if (!relasi) return 'CBL';
+    let clean = relasi.replace(/^(antar ke|muat truk ke|bantu muat ke)\s*/i, '').trim();
+    let words = clean.split(/[\s-]+/).filter(Boolean);
+    if (words.length === 0) return 'CBL';
+    if (words.length === 1) {
+        return words[0].slice(0, 2).toUpperCase();
+    }
+    return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+// Buka Modal Rincian Mutasi / Transaksi Pengantaran Driver
+function bukaModalRincianMutasiDriver(tripId) {
+    let meUser = (window.tripState.cachedUsers || []).find(u => u.nama === activeUser);
+    if (!meUser) return;
+
+    let trips = window.tripState.cachedPeriodTrips || [];
+    let tr = trips.find(t => String(t.id) === String(tripId));
+    if (!tr) {
+        let unclaimed = window.tripState.cachedUnclaimedTrips || [];
+        tr = unclaimed.find(t => String(t.id) === String(tripId));
+    }
+    if (!tr) return;
+
+    let nf = new Intl.NumberFormat('id-ID');
+    let userDict = {};
+    (window.tripState.cachedUsers || []).forEach(u => { userDict[u.id] = u.nama; });
+
+    let isMandiri = (tr.armada === 'Ambil Mandiri');
+    let isTruk = (tr.armada === 'Truk');
+    let isBantuMuat = (isMandiri || isTruk);
+    let rNama = tr.manifest_items?.[0]?.relasi || tr.catatan || 'Pengantaran';
+    let trKg = parseFloat(tr.total_kg) || 0;
+
+    let kruNames = [];
+    let nKru = 1;
+    if (isBantuMuat) {
+        let pekerjaIds = Array.isArray(tr.pekerja_muat_ids) ? tr.pekerja_muat_ids : [];
+        nKru = pekerjaIds.length || 1;
+        kruNames = pekerjaIds.map(id => userDict[id] || `User #${id}`);
+    } else {
+        let sopirNama = userDict[tr.sopir_user_id] || 'Sopir';
+        let k1Nama = userDict[tr.kernek_1_user_id];
+        let k2Nama = userDict[tr.kernek_2_user_id];
+        kruNames = [sopirNama, k1Nama, k2Nama].filter(Boolean);
+        nKru = kruNames.length || 1;
+    }
+    let kruText = kruNames.join(' & ') || 'Kru';
+
+    let { upah: upahSaya, porsiKg } = hitungUpahSayaDiTrip(tr, meUser.id);
+    let isCair = (tr.status_klaim === 'SUDAH_CAIR');
+
+    let tglDisplay = tr.tanggal ? tr.tanggal.split('-').reverse().join('/') : '-';
+    let waktuStr = tr.waktu_berangkat 
+        ? new Date(tr.waktu_berangkat).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) 
+        : '';
+    let tglWaktu = waktuStr ? `${tglDisplay}, ${waktuStr} WIB` : tglDisplay;
+
+    // Set Data di Modal
+    let elNom = document.getElementById('mutasi-modal-nominal');
+    if (elNom) elNom.innerText = `+Rp ${nf.format(upahSaya)}`;
+
+    let badgeEl = document.getElementById('mutasi-modal-status-badge');
+    if (badgeEl) {
+        if (isCair) {
+            badgeEl.style.background = '#dcfce7';
+            badgeEl.style.color = '#15803d';
+            badgeEl.style.border = '1px solid #86efac';
+            badgeEl.innerHTML = '<span class="material-symbols-outlined" style="font-size:13px;">check_circle</span> Sudah Cair (Lunas)';
+        } else {
+            badgeEl.style.background = '#fef3c7';
+            badgeEl.style.color = '#b45309';
+            badgeEl.style.border = '1px solid #fde68a';
+            badgeEl.innerHTML = '<span class="material-symbols-outlined" style="font-size:13px;">hourglass_top</span> Belum Dicairkan (Saldo Berjalan)';
+        }
+    }
+
+    let elTgl = document.getElementById('mutasi-modal-tgl');
+    if (elTgl) elTgl.innerText = tglWaktu;
+
+    let elAkt = document.getElementById('mutasi-modal-aktivitas');
+    if (elAkt) elAkt.innerText = isBantuMuat ? 'Bantu Muat Gudang (Truk)' : `Antar Pick-Up (${tr.armada || '-'})`;
+
+    let elRel = document.getElementById('mutasi-modal-relasi');
+    if (elRel) elRel.innerText = rNama;
+
+    let elKg = document.getElementById('mutasi-modal-total-kg');
+    if (elKg) elKg.innerText = `${nf.format(trKg)} Kg`;
+
+    let elKru = document.getElementById('mutasi-modal-kru');
+    if (elKru) elKru.innerText = `${kruText} (${nKru} Orang)`;
+
+    let elPorsi = document.getElementById('mutasi-modal-porsi-kg');
+    if (elPorsi) elPorsi.innerText = `${nf.format(porsiKg)} Kg (Bagi rata ${nKru} kru)`;
+
+    let elJarak = document.getElementById('mutasi-modal-jarak');
+    if (elJarak) elJarak.innerText = `${tr.jarak_tempuh_km || 0} Km`;
+
+    let elCat = document.getElementById('mutasi-modal-catatan');
+    if (elCat) elCat.innerText = tr.catatan || '-';
+
+    let modal = document.getElementById('modal-rincian-mutasi-driver');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function tutupModalRincianMutasi() {
+    let modal = document.getElementById('modal-rincian-mutasi-driver');
+    if (modal) modal.classList.add('hidden');
+}
+
+// ====================================================================
+// 6B. CATAT BELI BENSIN / SOLAR ARMADA (INTEGRASI KE CASHFLOW UANG KELUAR)
+// ====================================================================
+
+function bukaModalCatatBBM() {
+    let modal = document.getElementById('modal-catat-bbm-driver');
+    if (!modal) return;
+
+    let katSel = document.getElementById('bbm-input-kategori');
+    if (katSel) katSel.value = 'BBM / Solar';
+
+    let armadaSel = document.getElementById('bbm-input-armada');
+    if (armadaSel && window.tripState.currentArmada) {
+        armadaSel.value = window.tripState.currentArmada;
+    }
+
+    let tglInput = document.getElementById('bbm-input-tanggal');
+    if (tglInput) {
+        tglInput.value = new Date().toISOString().split('T')[0];
+    }
+
+    let nom = document.getElementById('bbm-input-nominal');
+    if (nom) nom.value = '';
+    let lit = document.getElementById('bbm-input-liter');
+    if (lit) lit.value = '';
+    let km = document.getElementById('bbm-input-km');
+    if (km) km.value = '';
+    let det = document.getElementById('bbm-input-detail');
+    if (det) det.value = '';
+    let prev = document.getElementById('bbm-foto-preview');
+    if (prev) prev.innerHTML = '';
+    let fileInp = document.getElementById('bbm-input-foto');
+    if (fileInp) {
+        fileInp.value = '';
+        fileInp.onchange = function(e) {
+            let f = e.target.files[0];
+            if (f && prev) {
+                let r = new FileReader();
+                r.onload = (evt) => {
+                    prev.innerHTML = `<img src="${evt.target.result}" style="width:100%; max-height:140px; object-fit:cover; border-radius:6px; border:1px solid #cbd5e1;">`;
+                };
+                r.readAsDataURL(f);
+            }
+        };
+    }
+
+    toggleKategoriOperasionalForm();
+    modal.classList.remove('hidden');
+}
+
+function toggleKategoriOperasionalForm() {
+    let kat = document.getElementById('bbm-input-kategori')?.value || 'BBM / Solar';
+    let colLiter = document.getElementById('bbm-col-liter');
+    let rowDetail = document.getElementById('bbm-row-detail');
+    let labelNominal = document.getElementById('bbm-label-nominal');
+    let iconEl = document.getElementById('bbm-kategori-icon');
+
+    let iconMap = {
+        'BBM / Solar': { icon: 'local_gas_station', color: '#2563eb' },
+        'Ban / Isi Angin': { icon: 'tire_repair', color: '#dc2626' },
+        'Servis / Ganti Oli': { icon: 'build', color: '#0284c7' },
+        'Cuci Mobil': { icon: 'local_car_wash', color: '#0891b2' },
+        'Operasional Lainnya': { icon: 'handyman', color: '#7c3aed' }
+    };
+
+    if (iconEl && iconMap[kat]) {
+        iconEl.textContent = iconMap[kat].icon;
+        iconEl.style.color = iconMap[kat].color;
+    }
+
+    if (kat === 'BBM / Solar') {
+        if (colLiter) colLiter.style.display = 'block';
+        if (rowDetail) rowDetail.style.display = 'none';
+        if (labelNominal) labelNominal.innerHTML = `Nominal Biaya Bensin (Rp) <span style="color:#dc2626;">*Wajib</span>:`;
+    } else {
+        if (colLiter) colLiter.style.display = 'none';
+        if (rowDetail) rowDetail.style.display = 'block';
+        if (labelNominal) labelNominal.innerHTML = `Biaya / Ongkos (Rp) <span style="color:#dc2626;">*Wajib</span>:`;
+    }
+}
+
+function tutupModalCatatBBM() {
+    document.getElementById('modal-catat-bbm-driver')?.classList.add('hidden');
+}
+
+async function simpanBeliBBMDriver(e) {
+    if (e) e.preventDefault();
+
+    let kategori = document.getElementById('bbm-input-kategori')?.value || 'BBM / Solar';
+    let armada = document.getElementById('bbm-input-armada')?.value || 'D 8070 UE';
+    let tanggal = document.getElementById('bbm-input-tanggal')?.value || new Date().toISOString().split('T')[0];
+    let metode = document.getElementById('bbm-input-metode')?.value || 'Cash';
+    let nominal = parseInt(document.getElementById('bbm-input-nominal')?.value) || 0;
+    let liter = parseFloat(document.getElementById('bbm-input-liter')?.value) || 0;
+    let kmOdo = parseInt(document.getElementById('bbm-input-km')?.value) || 0;
+    let detailCatatan = document.getElementById('bbm-input-detail')?.value?.trim() || '';
+    let fileInput = document.getElementById('bbm-input-foto');
+    let file = fileInput?.files?.[0];
+
+    if (nominal <= 0) {
+        return alert("Harap masukkan nominal biaya yang valid!");
+    }
+
+    let btn = document.getElementById('btn-simpan-bbm');
+    let originalHtml = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerText = "Mengirim ke Cashflow..."; }
+
+    try {
+        let buktiUrl = "-";
+        if (file && typeof uploadGambarKeSupabase === 'function') {
+            btn.innerText = "Mengunggah foto bukti...";
+            let reader = new FileReader();
+            let base64Promise = new Promise((resolve, reject) => {
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+            let dataUrl = await base64Promise;
+            let parts = dataUrl.split(',');
+            let mime = parts[0].match(/:(.*?);/)[1];
+            let base64 = parts[1];
+            let rawFilename = `armada_${armada.replace(/\s+/g, '_')}_${tanggal}_${Date.now()}.jpg`;
+            buktiUrl = await uploadGambarKeSupabase(base64, mime, 'cashflow', rawFilename);
+        }
+
+        let isBBM = (kategori === 'BBM / Solar');
+        let descText = "";
+        if (isBBM) {
+            descText = `Beli BBM ${armada}`;
+            if (liter > 0) descText += ` - ${liter} Liter`;
+            if (kmOdo > 0) descText += ` - Spido: ${kmOdo} KM`;
+            descText += ` (Oleh: ${activeUser || 'Driver'})`;
+        } else {
+            descText = `[${kategori}] ${armada}${detailCatatan ? ' - ' + detailCatatan : ''}`;
+            if (kmOdo > 0) descText += ` - Spido: ${kmOdo} KM`;
+            descText += ` (Oleh: ${activeUser || 'Driver'})`;
+        }
+
+        let payloadCF = {
+            tanggal: tanggal,
+            jenis: 'Keluar',
+            metode: metode,
+            kategori: isBBM ? 'BBM / Solar' : 'Operasional - Kendaraan / Servis',
+            relasi: isBBM ? `SPBU (${armada})` : `Bengkel / Perawatan (${armada})`,
+            nominal: nominal,
+            diskon: 0,
+            keterangan: descText,
+            bukti_url: buktiUrl,
+            petugas: activeUser || 'Driver'
+        };
+
+        let res = await fetch(`${SUPA_URL}/rest/v1/cashflow`, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPA_ANON_KEY,
+                'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify(payloadCF)
+        });
+
+        if (!res.ok) {
+            let err = await res.json();
+            throw new Error(err.message || "Gagal mencatat pengeluaran");
+        }
+
+        // Broadcast Realtime ke Kasir / Admin Kantor
+        if (typeof broadcastRealtimeUpdate === 'function') {
+            broadcastRealtimeUpdate(payloadCF);
+        }
+
+        tutupModalCatatBBM();
+        alert(`✅ Berhasil! Laporan ${kategori} Rp ${new Intl.NumberFormat('id-ID').format(nominal)} untuk armada ${armada} telah tercatat di Laporan Uang Keluar.`);
+        
+        // Segarkan data di admin jika terbuka
+        if (typeof loadLogBBMAdmin === 'function') {
+            loadLogBBMAdmin();
+        }
+    } catch (err) {
+        alert("Gagal mencatat operasional: " + err.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = originalHtml; }
+    }
+}
+
+// Beralih Tab di Layar Driver (Order Kirim vs Log Armada vs Dompet)
 function pindahDriverTab(tab) {
-    document.querySelectorAll('#driver-nav .nav-item').forEach(n => n.classList.remove('active'));
-    document.getElementById(`nav-driver-${tab}`)?.classList.add('active');
+    let meUser = (window.tripState.cachedUsers || []).find(u => u.nama === activeUser);
+    let myRole = (meUser?.role || (typeof currentRole !== 'undefined' ? currentRole : '') || 'sopir').toLowerCase();
+    if (tab === 'armada' && myRole.includes('kernek')) {
+        tab = 'order'; // Role kernek tidak memiliki akses log armada
+    }
+
+    document.querySelectorAll('#driver-nav .driver-nav-btn, #driver-nav .nav-item').forEach(n => {
+        n.classList.remove('active');
+        n.style.color = '';
+    });
+    let activeBtn = document.getElementById(`nav-driver-${tab}`);
+    if (activeBtn) {
+        activeBtn.classList.add('active');
+    }
 
     let viewOrder = document.getElementById('driver-view-order');
     let viewDompet = document.getElementById('driver-view-dompet');
+    let viewArmada = document.getElementById('driver-view-armada');
+
+    if (viewOrder) viewOrder.classList.add('hidden');
+    if (viewDompet) viewDompet.classList.add('hidden');
+    if (viewArmada) viewArmada.classList.add('hidden');
 
     if (tab === 'order') {
         if (viewOrder) viewOrder.classList.remove('hidden');
-        if (viewDompet) viewDompet.classList.add('hidden');
         refreshAntreanDriver();
+    } else if (tab === 'armada') {
+        if (viewArmada) viewArmada.classList.remove('hidden');
+        loadArmadaDriver();
     } else {
-        if (viewOrder) viewOrder.classList.add('hidden');
         if (viewDompet) viewDompet.classList.remove('hidden');
+        let elTotalUpah = document.getElementById('dompet-total-upah');
+        if (elTotalUpah) elTotalUpah.innerText = 'Rp 0';
         loadDompetDriver();
     }
 }
 
-// Cetak Slip Klaim Upah Supir / Kernek
-function cetakSlipKlaimDriver() {
-    window.print();
+// Muat Log Khusus Armada yang Dipegang Supir yang Sedang Login
+async function loadArmadaDriver() {
+    let user = (window.tripState.cachedUsers || []).find(u => u.nama === activeUser) || {};
+    let uName = (user.nama || activeUser || '').toLowerCase();
+    
+    let targetArmada = 'D 8070 UE';
+    let supirLabel = 'Hilman';
+    let armadaDesc = 'Grand Max Pick-up';
+
+    if (uName.includes('adi')) {
+        targetArmada = 'D 8142 UK';
+        supirLabel = 'Adi';
+        armadaDesc = 'Pick-up Putih';
+    } else if (uName.includes('hilman')) {
+        targetArmada = 'D 8070 UE';
+        supirLabel = 'Hilman';
+        armadaDesc = 'Grand Max Pick-up';
+    } else {
+        // Kernek atau staf lain
+        targetArmada = window.tripState.currentArmada || 'D 8070 UE';
+        supirLabel = (targetArmada === 'D 8142 UK') ? 'Adi' : 'Hilman';
+        armadaDesc = (targetArmada === 'D 8142 UK') ? 'Pick-up Putih' : 'Grand Max Pick-up';
+    }
+
+    let titleEl = document.getElementById('driver-armada-title');
+    let subEl = document.getElementById('driver-armada-subtitle');
+    if (titleEl) titleEl.innerText = `${targetArmada} (${armadaDesc})`;
+    if (subEl) subEl.innerHTML = `Supir Penanggung Jawab: <b style="color:#1e3a8a;">${supirLabel}</b>`;
+
+    let odoEl = document.getElementById('driver-armada-odo');
+    let biayaEl = document.getElementById('driver-armada-biaya');
+    let ritEl = document.getElementById('driver-armada-rit');
+    let servisContainer = document.getElementById('driver-armada-servis-list');
+    let ritContainer = document.getElementById('driver-armada-rit-list');
+
+    let nf = new Intl.NumberFormat('id-ID');
+
+    try {
+        let p1 = fetch(`${SUPA_URL}/rest/v1/cashflow?jenis=eq.Keluar&order=tanggal.desc,created_at.desc&limit=150`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        }).then(r => r.json());
+
+        let p2 = fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?order=tanggal.desc,created_at.desc&limit=100`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        }).then(r => r.json());
+
+        let [rawCF, rawTrips] = await Promise.all([p1, p2]);
+
+        // Filter expenses khusus armada ini
+        let myExpenses = (Array.isArray(rawCF) ? rawCF : []).filter(item => {
+            let str = `${item.armada || ''} ${item.relasi || ''} ${item.keterangan || ''}`.toUpperCase();
+            return str.includes(targetArmada.toUpperCase());
+        });
+
+        // Filter trips khusus armada ini
+        let myTrips = (Array.isArray(rawTrips) ? rawTrips : []).filter(t => {
+            return (t.armada || '').toUpperCase().includes(targetArmada.toUpperCase());
+        });
+
+        // Odometer terakhir
+        let lastOdo = '- KM';
+        for (let item of myExpenses) {
+            let m = (item.keterangan || '').match(/Spido:\s*([0-9]+)\s*KM/i);
+            if (m) {
+                lastOdo = `${nf.format(m[1])} KM`;
+                break;
+            }
+        }
+
+        let totalBiaya = myExpenses.reduce((s, i) => s + (parseFloat(i.nominal) || 0), 0);
+
+        if (odoEl) odoEl.innerText = lastOdo;
+        if (biayaEl) biayaEl.innerText = `Rp ${nf.format(totalBiaya)}`;
+        if (ritEl) ritEl.innerText = `${myTrips.length} Rit`;
+
+        // Render List Catatan Servis & BBM
+        if (servisContainer) {
+            if (myExpenses.length === 0) {
+                servisContainer.innerHTML = `<div style="text-align:center; padding:25px; color:#94a3b8; font-style:italic; background:#ffffff; border-radius:10px; border:1px solid #e2e8f0;">Belum ada catatan servis/BBM untuk mobil ${targetArmada}.</div>`;
+            } else {
+                servisContainer.innerHTML = myExpenses.map(item => {
+                    let ket = item.keterangan || '-';
+                    let odoM = ket.match(/Spido:\s*([0-9]+)\s*KM/i);
+                    let odoStr = odoM ? ` • Spido: ${nf.format(odoM[1])} KM` : '';
+
+                    let katBadge = `<span style="background:#eff6ff; color:#1d4ed8; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px;">receipt</span> ${item.kategori || 'Operasional'}</span>`;
+                    if ((item.kategori || '').includes('BBM')) {
+                        katBadge = `<span style="background:#fef3c7; color:#b45309; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#d97706;">local_gas_station</span> BBM/Solar</span>`;
+                    } else if (ket.toLowerCase().includes('ban') || ket.toLowerCase().includes('angin')) {
+                        katBadge = `<span style="background:#fee2e2; color:#b91c1c; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#dc2626;">tire_repair</span> Ban/Angin</span>`;
+                    } else if (ket.toLowerCase().includes('oli') || ket.toLowerCase().includes('servis')) {
+                        katBadge = `<span style="background:#dbeafe; color:#1e40af; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#2563eb;">build</span> Servis/Oli</span>`;
+                    } else if (ket.toLowerCase().includes('cuci')) {
+                        katBadge = `<span style="background:#e0f2fe; color:#0369a1; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#0284c7;">local_car_wash</span> Cuci Mobil</span>`;
+                    }
+
+                    let buktiBtn = (item.bukti_url && item.bukti_url !== '-')
+                        ? `<a href="${item.bukti_url}" target="_blank" style="background:#eff6ff; color:#2563eb; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; text-decoration:none; display:inline-flex; align-items:center; gap:2px;">
+                             <span class="material-symbols-outlined" style="font-size:12px;">receipt</span> Bukti
+                           </a>`
+                        : '';
+
+                    return `
+                        <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:8px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    ${katBadge}
+                                    <span style="font-size:10px; color:#64748b;">${item.tanggal}</span>
+                                </div>
+                                <div style="font-size:13px; font-weight:800; color:#15803d;">Rp ${nf.format(item.nominal)}</div>
+                            </div>
+                            <div style="font-size:11px; color:#334155; line-height:1.4;">${ket}</div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:10px; color:#64748b;">
+                                <span>Dicatat oleh: <b>${item.petugas || supirLabel}</b>${odoStr}</span>
+                                ${buktiBtn}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        // Render List Riwayat Perjalanan
+        if (ritContainer) {
+            if (myTrips.length === 0) {
+                ritContainer.innerHTML = `<div style="text-align:center; padding:25px; color:#94a3b8; font-style:italic; background:#ffffff; border-radius:10px; border:1px solid #e2e8f0;">Belum ada riwayat pengantaran untuk mobil ${targetArmada}.</div>`;
+            } else {
+                ritContainer.innerHTML = myTrips.map(tr => {
+                    let waktuStr = tr.waktu_berangkat 
+                        ? new Date(tr.waktu_berangkat).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) 
+                        : '-';
+                    let manifest = tr.manifest_items || [];
+                    let relasiList = [...new Set(manifest.map(m => m.relasi).filter(Boolean))].join(', ') || tr.catatan || 'Konsumen';
+                    let pakanList = manifest.map(m => `${m.pakan} (${m.qty} Kg)`).join(', ') || '-';
+
+                    let firstRelasi = manifest[0]?.relasi || tr.catatan;
+                    let rData = firstRelasi ? (window.tripState.cachedRelasiMap[firstRelasi] || {}) : {};
+                    let rLat = rData.lat ? parseFloat(rData.lat) : null;
+                    let rLng = rData.lng ? parseFloat(rData.lng) : null;
+                    let mapsBtn = (rLat && rLng)
+                        ? `<a href="https://www.google.com/maps/dir/?api=1&origin=${LAT_GUDANG_CBL},${LNG_GUDANG_CBL}&destination=${rLat},${rLng}" target="_blank" style="display:inline-flex; align-items:center; gap:2px; font-size:10px; font-weight:700; color:#1d4ed8; background:#eff6ff; padding:2px 6px; border-radius:4px; text-decoration:none;">
+                             <span class="material-symbols-outlined" style="font-size:12px;">map</span> Maps
+                           </a>`
+                        : '';
+
+                    return `
+                        <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:8px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
+                                <div>
+                                    <div style="font-size:12px; font-weight:800; color:#1e3a8a;">${relasiList}</div>
+                                    <div style="font-size:10px; color:#64748b;">${tr.tanggal} (${waktuStr}) • ${tr.jarak_tempuh_km || 0} Km PP</div>
+                                </div>
+                                ${mapsBtn}
+                            </div>
+                            <div style="font-size:11px; color:#475569; margin-top:4px;">${pakanList}</div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:10px;">
+                                <span style="font-weight:700; color:#15803d;">Total Muatan: ${nf.format(tr.total_kg || 0)} Kg</span>
+                                <span style="background:#dcfce7; color:#15803d; font-weight:700; padding:2px 6px; border-radius:4px;">${tr.status_trip || 'SELESAI'}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+    } catch (err) {
+        if (servisContainer) servisContainer.innerHTML = `<div style="text-align:center; padding:20px; color:#dc2626;">Gagal memuat log: ${err.message}</div>`;
+    }
 }
+
+function switchDriverArmadaSubTab(subtab) {
+    let btnServis = document.getElementById('btn-tab-supir-servis');
+    let btnRit = document.getElementById('btn-tab-supir-rit');
+    let viewServis = document.getElementById('driver-armada-view-servis');
+    let viewRit = document.getElementById('driver-armada-view-rit');
+
+    if (subtab === 'servis') {
+        if (btnServis) { btnServis.style.background = '#2563eb'; btnServis.style.color = '#ffffff'; btnServis.style.borderColor = '#2563eb'; }
+        if (btnRit) { btnRit.style.background = '#ffffff'; btnRit.style.color = '#475569'; btnRit.style.borderColor = '#cbd5e1'; }
+        if (viewServis) viewServis.classList.remove('hidden');
+        if (viewRit) viewRit.classList.add('hidden');
+    } else {
+        if (btnServis) { btnServis.style.background = '#ffffff'; btnServis.style.color = '#475569'; btnServis.style.borderColor = '#cbd5e1'; }
+        if (btnRit) { btnRit.style.background = '#2563eb'; btnRit.style.color = '#ffffff'; btnRit.style.borderColor = '#2563eb'; }
+        if (viewServis) viewServis.classList.add('hidden');
+        if (viewRit) viewRit.classList.remove('hidden');
+    }
+}
+
+
+// Cetak Slip Klaim Upah Supir / Kernek (Kartu Piutang & Pengajuan Kasir)
+function cetakSlipKlaimDriver(targetUserParam = null, customTripsParam = null, customFilterLabel = null) {
+    let meUser = targetUserParam || (window.tripState.cachedUsers || []).find(u => u.nama === activeUser);
+    if (!meUser) {
+        alert("Sesi kru/driver tidak ditemukan.");
+        return;
+    }
+
+    let unclaimedTrips = window.tripState.cachedUnclaimedTrips || [];
+    let periodTrips = window.tripState.cachedPeriodTrips || [];
+    let filterLabel = customFilterLabel || window.tripState.currentFilterLabel || 'Bulan Ini';
+
+    // Prioritaskan mencetak daftar trip yang diberikan secara spesifik, atau yang belum dicairkan jika ada, atau daftar mutasi periode jika semua sudah cair
+    let rawTrips = customTripsParam || ((unclaimedTrips.length > 0) ? unclaimedTrips : periodTrips);
+    let tripsToPrint = (rawTrips || []).filter(tr => tr.status_trip === 'SELESAI');
+    let hasBelumCair = tripsToPrint.some(tr => !tr.status_klaim || tr.status_klaim !== 'SUDAH_CAIR');
+    let isPengajuanKlaim = hasBelumCair;
+
+    if (!tripsToPrint || tripsToPrint.length === 0) {
+        alert(`Tidak ada data pengantaran untuk ${meUser.nama} pada periode ${filterLabel}.`);
+        return;
+    }
+
+    let nf = new Intl.NumberFormat('id-ID');
+    let userDict = {};
+    (window.tripState.cachedUsers || []).forEach(u => { userDict[u.id] = u.nama; });
+
+    let tglCetak = new Date().toLocaleDateString('id-ID', {
+        day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+
+    let totalGrossKg = 0;
+    let totalUpahPrint = 0;
+    let totalKgPrint = 0;
+    let relasiSummary = {};
+
+    tripsToPrint.forEach(tr => {
+        let isMandiri = (tr.armada === 'Ambil Mandiri');
+        let isTruk = (tr.armada === 'Truk');
+        let rNama = tr.manifest_items?.[0]?.relasi || tr.catatan || 'Pengantaran';
+        let trKg = parseFloat(tr.total_kg) || 0;
+        totalGrossKg += trKg;
+
+        let { upah: upahSaya, porsiKg } = hitungUpahSayaDiTrip(tr, meUser.id);
+        totalUpahPrint += upahSaya;
+        totalKgPrint += porsiKg;
+
+        if (!relasiSummary[rNama]) {
+            relasiSummary[rNama] = { rit: 0, grossKg: 0, upah: 0 };
+        }
+        relasiSummary[rNama].rit += 1;
+        relasiSummary[rNama].grossKg += trKg;
+        relasiSummary[rNama].upah += upahSaya;
+    });
+
+    let avgKgPerRit = tripsToPrint.length > 0 ? Math.round(totalGrossKg / tripsToPrint.length) : 0;
+
+    let armadaStandar = '-';
+    let userNamaLower = (meUser.nama || '').toLowerCase();
+    let userRoleLower = (meUser.role || '').toLowerCase();
+    if (userRoleLower.includes('sopir') || userRoleLower.includes('supir')) {
+        if (userNamaLower.includes('hilman')) {
+            armadaStandar = 'D 8070 UE (Grand Max)';
+        } else if (userNamaLower.includes('adi')) {
+            armadaStandar = 'D 8142 UK (Pick-up Putih)';
+        } else if (meUser.armada_default) {
+            armadaStandar = meUser.armada_default;
+        }
+    } else if (userRoleLower.includes('kernek')) {
+        armadaStandar = 'Fleksibel (Sesuai Sopir)';
+    }
+
+    let safeUserNama = (meUser.nama || 'Driver').replace(/[^a-zA-Z0-9]/g, '_');
+    let safeFilter = (filterLabel || 'Klaim').replace(/[^a-zA-Z0-9]/g, '_');
+    let namaFilePdf = `Slip_Klaim_Upah_${safeUserNama}_${safeFilter}.pdf`;
+
+    let baseUrl = window.location.href.split('?')[0];
+    let verificationUrl = `${baseUrl}?klaim_kru=${encodeURIComponent(meUser.nama)}&periode=${encodeURIComponent(filterLabel)}`;
+
+    let relasiKeys = Object.keys(relasiSummary);
+    let relasiRowsHtml = relasiKeys.map((rName, idx) => {
+        let it = relasiSummary[rName];
+        return `
+            <tr style="font-size:11px;">
+                <td style="border:1px solid #cbd5e1; padding:6px 8px; text-align:center; color:#64748b;">${idx + 1}</td>
+                <td style="border:1px solid #cbd5e1; padding:6px 8px; font-weight:600; color:#0f172a;">${rName}</td>
+                <td style="border:1px solid #cbd5e1; padding:6px 8px; text-align:center; font-weight:700; color:#0f172a;">${it.rit} Rit</td>
+                <td style="border:1px solid #cbd5e1; padding:6px 8px; text-align:right; color:#0f172a;">${nf.format(it.grossKg)} Kg</td>
+                <td style="border:1px solid #cbd5e1; padding:6px 8px; text-align:right; font-weight:700; color:#0f172a;">Rp ${nf.format(it.upah)}</td>
+            </tr>
+        `;
+    }).join('');
+
+    let docTitle = isPengajuanKlaim 
+        ? "FORM PENGAJUAN KLAIM UPAH INSENTIF" 
+        : `BUKTI PENCAIRAN & MUTASI INSENTIF (${filterLabel.toUpperCase()})`;
+
+    let printWindow = window.open('', '_blank', 'width=900,height=950');
+    if (!printWindow) {
+        window.print();
+        return;
+    }
+
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>${docTitle} - PT CBL - ${meUser.nama}</title>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+                    padding: 24px;
+                    color: #0f172a;
+                    background: #fff;
+                    margin: 0;
+                }
+                #printable-area {
+                    max-width: 800px;
+                    margin: 0 auto;
+                    background: #ffffff;
+                }
+                .header {
+                    border-bottom: 2px solid #0f172a;
+                    padding-bottom: 12px;
+                    margin-bottom: 16px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                }
+                .company-name {
+                    font-size: 18px;
+                    font-weight: 800;
+                    color: #0f172a;
+                    letter-spacing: 0.5px;
+                }
+                .company-sub {
+                    font-size: 11px;
+                    color: #64748b;
+                    margin-top: 2px;
+                }
+                .form-title {
+                    font-size: 14px;
+                    font-weight: 800;
+                    color: #0f172a;
+                    margin-top: 8px;
+                    letter-spacing: 0.3px;
+                }
+                .badge-doc {
+                    font-size: 11px;
+                    font-weight: 700;
+                    padding: 6px 12px;
+                    background: #ffffff;
+                    color: #000000;
+                    border: 1.5px solid #000000;
+                    border-radius: 6px;
+                    text-align: right;
+                }
+                .info-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 10px;
+                    background: #f8fafc;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 8px;
+                    padding: 10px 14px;
+                    margin-bottom: 14px;
+                    font-size: 11px;
+                }
+                .info-item {
+                    display: flex;
+                    justify-content: space-between;
+                    padding: 2px 0;
+                }
+                .table-slip {
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 11px;
+                }
+                .table-slip th {
+                    background: #f8fafc;
+                    border: 1px solid #cbd5e1;
+                    padding: 6px 8px;
+                    font-weight: 700;
+                    color: #334155;
+                    font-size: 10px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.3px;
+                }
+                .table-slip td {
+                    color: #0f172a;
+                }
+                .total-card {
+                    background: #1e3a8a !important;
+                    border: none !important;
+                    border-radius: 8px;
+                    padding: 12px 18px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    color: #ffffff !important;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                }
+                .signatures {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr 1fr;
+                    gap: 16px;
+                    text-align: center;
+                    font-size: 11px;
+                    page-break-inside: avoid;
+                }
+                .sig-box {
+                    padding-top: 45px;
+                    border-top: 1px solid #334155;
+                    font-weight: bold;
+                }
+                @media print {
+                    body { padding: 0; }
+                    .no-print { display: none !important; }
+                    .total-card {
+                        background: #1e3a8a !important;
+                        color: #ffffff !important;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="no-print" style="margin-bottom:15px; display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+                <button onclick="kirimWhatsAppKlaim()" style="padding:8px 14px; background:#15803d; color:white; border:none; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
+                    📲 Kirim Ringkasan ke WhatsApp
+                </button>
+                <button id="btn-download-pdf" onclick="unduhPdfKlaim()" style="padding:8px 14px; background:#0284c7; color:white; border:none; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
+                    📥 Download File PDF (1 Lembar)
+                </button>
+                <button onclick="window.print()" style="padding:8px 14px; background:#1e3a8a; color:white; border:none; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
+                    🖨️ Cetak Dokumen
+                </button>
+                <button onclick="window.close()" style="padding:8px 14px; background:#64748b; color:white; border:none; border-radius:6px; font-size:12px; cursor:pointer;">
+                    Tutup
+                </button>
+            </div>
+
+            <div id="printable-area">
+                <div class="header">
+                    <div>
+                        <div class="company-name">PT CBL - LOGISTIK PENGIRIMAN PAKAN</div>
+                        <div class="company-sub">Sistem Kartu Piutang & Manajemen Insentif Kru Lapangan</div>
+                        <div class="form-title">${docTitle}</div>
+                    </div>
+                    <div class="badge-doc">
+                        ${isPengajuanKlaim ? 'STATUS: PENGAJUAN KLAIM' : 'STATUS: SUDAH DICAIRKAN (LUNAS)'}<br>
+                        <span style="font-size:10px; font-weight:normal; color:#475569;">Waktu Cetak: ${tglCetak}</span>
+                    </div>
+                </div>
+
+                <div class="info-grid">
+                    <div>
+                        <div class="info-item"><span style="color:#64748b;">Nama Petugas:</span> <strong>${meUser.nama}</strong></div>
+                        <div class="info-item"><span style="color:#64748b;">Role / Jabatan:</span> <strong style="text-transform:capitalize;">${meUser.role}</strong></div>
+                        <div class="info-item"><span style="color:#64748b;">Armada Standar:</span> <strong>${armadaStandar}</strong></div>
+                    </div>
+                    <div>
+                        <div class="info-item"><span style="color:#64748b;">Tarif Per Kg:</span> <strong>Rp 15 / Kg (Bagi Rata Kru)</strong></div>
+                        <div class="info-item"><span style="color:#64748b;">Jumlah Pengantaran:</span> <strong>${tripsToPrint.length} Rit</strong></div>
+                        <div class="info-item"><span style="color:#64748b;">Periode Pengajuan:</span> <strong>${filterLabel}</strong></div>
+                    </div>
+                </div>
+
+                <!-- 1. Indikator Kinerja & Muatan -->
+                <table class="table-slip" style="margin-bottom:12px;">
+                    <thead>
+                        <tr style="background:#f8fafc; font-size:10px;">
+                            <th style="text-align:left; padding:6px 10px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">Indikator Kinerja Pengantaran</th>
+                            <th style="text-align:center; padding:6px 10px; width:130px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">Jumlah / Volume</th>
+                            <th style="text-align:right; padding:6px 10px; width:180px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">Keterangan & Rata-rata</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="font-size:11px;">
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; font-weight:600; color:#0f172a;">Total Ritase Pengiriman Selesai</td>
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; text-align:center; font-weight:700; color:#0f172a;">${tripsToPrint.length} Rit</td>
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; text-align:right; font-size:10.5px; color:#475569;">Rata-rata: ${nf.format(avgKgPerRit)} Kg / Rit</td>
+                        </tr>
+                        <tr style="font-size:11px;">
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; font-weight:600; color:#0f172a;">Total Muatan Fisik Bruto Diangkut</td>
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; text-align:center; font-weight:700; color:#0f172a;">${nf.format(totalGrossKg)} Kg</td>
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; text-align:right; font-size:10.5px; color:#475569;">Tonase kotor seluruh armada</td>
+                        </tr>
+                        <tr style="font-size:11px;">
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; font-weight:600; color:#0f172a;">Porsi Beban Fisik Ditangani Petugas</td>
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; text-align:center; font-weight:700; color:#0f172a;">${nf.format(totalKgPrint)} Kg</td>
+                            <td style="border:1px solid #cbd5e1; padding:7px 10px; text-align:right; font-size:10.5px; color:#475569;">Dibagi rata kru aktif per trip</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- 2. Ringkasan per Relasi Konsumen -->
+                <div style="font-size:11px; font-weight:700; color:#0f172a; margin:10px 0 5px 0;">Rekapitulasi Ritase per Relasi Tujuan:</div>
+                <table class="table-slip" style="margin-bottom:14px;">
+                    <thead>
+                        <tr style="background:#f8fafc; font-size:10px;">
+                            <th style="text-align:center; padding:6px 8px; width:30px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">No</th>
+                            <th style="text-align:left; padding:6px 8px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">Relasi / Konsumen Tujuan</th>
+                            <th style="text-align:center; padding:6px 8px; width:70px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">Ritase</th>
+                            <th style="text-align:right; padding:6px 8px; width:110px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">Tonase Diangkut</th>
+                            <th style="text-align:right; padding:6px 8px; width:120px; text-transform:uppercase; letter-spacing:0.3px; color:#334155;">Bagian Upah</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${relasiRowsHtml}
+                    </tbody>
+                </table>
+
+                <!-- 3. QR Code & Audit Digital Link (Centerpiece) -->
+                <div style="background:#f8fafc; border:1.5px solid #0f172a; border-radius:8px; padding:10px 14px; margin-bottom:14px; display:flex; align-items:center; gap:14px; page-break-inside:avoid;">
+                    <div style="flex-shrink:0; background:#ffffff; padding:5px; border:1px solid #cbd5e1; border-radius:6px; display:flex; align-items:center; justify-content:center;">
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=110x110&margin=0&data=${encodeURIComponent(verificationUrl)}" 
+                             alt="QR Code Verifikasi" 
+                             width="88" height="88" 
+                             style="display:block; width:88px; height:88px;" />
+                    </div>
+                    <div style="flex:1; min-width:0;">
+                        <div style="display:inline-flex; align-items:center; gap:4px; background:#0f172a; color:#ffffff; font-size:9.5px; font-weight:800; padding:2px 7px; border-radius:4px; margin-bottom:4px; letter-spacing:0.5px;">
+                            SCAN UNTUK AUDIT DETAIL (${tripsToPrint.length} RIT)
+                        </div>
+                        <div style="font-size:12px; font-weight:800; color:#0f172a; margin-bottom:2px;">Verifikasi Rincian Lengkap Digital</div>
+                        <div style="font-size:10px; color:#64748b; line-height:1.45; margin-bottom:5px;">
+                            Scan QR Code di samping menggunakan kamera HP untuk mengaudit rincian lengkap ke-<b>${tripsToPrint.length} rit pengantaran</b> (jam berangkat/tiba, GPS kandang, jenis pakan, dan kru pendamping).
+                        </div>
+                        <div style="font-size:9.5px; color:#2563eb; font-weight:700; word-break:break-all;">
+                            🔗 ${verificationUrl}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Kotak Total Biru Tua -->
+                <div class="total-card" style="margin-bottom:18px;">
+                    <div>
+                        <div style="font-size:10px; color:#bfdbfe; font-weight:700; letter-spacing:0.5px;">TOTAL ESTIMASI BEBAN FISIK DITANGANI:</div>
+                        <div style="font-size:17px; font-weight:800; color:#ffffff; margin-top:2px;">${nf.format(totalKgPrint)} Kg</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:10px; color:#bfdbfe; font-weight:700; letter-spacing:0.5px;">TOTAL UPAH BERSIH KLAIM:</div>
+                        <div style="font-size:22px; font-weight:900; color:#ffffff; margin-top:2px;">Rp ${nf.format(totalUpahPrint)}</div>
+                    </div>
+                </div>
+
+                <!-- 5. Tanda Tangan Tiga Pihak -->
+                <div class="signatures">
+                    <div>
+                        <p style="margin-bottom:45px;">Petugas Pengaju,</p>
+                        <div class="sig-box">${meUser.nama}<br><span style="font-weight:normal; font-size:10px; color:#64748b;">(${meUser.role})</span></div>
+                    </div>
+                    <div>
+                        <p style="margin-bottom:45px;">Koordinator Lapangan,</p>
+                        <div class="sig-box">Pak Agus<br><span style="font-weight:normal; font-size:10px; color:#64748b;">Koordinator Armada & Logistik</span></div>
+                    </div>
+                    <div>
+                        <p style="margin-bottom:45px;">Disetujui Oleh,</p>
+                        <div class="sig-box">Wildan<br><span style="font-weight:normal; font-size:10px; color:#64748b;">Admin Pusat & Keuangan</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                var pesanWA = "*FORM PENGAJUAN KLAIM UPAH INSENTIF*\\n"
+                    + "PT CBL - Logistik Pengiriman Pakan\\n\\n"
+                    + "Petugas: *${meUser.nama}* (${meUser.role})\\n"
+                    + "Periode Pengajuan: ${filterLabel}\\n"
+                    + "Jumlah Pengantaran: *${tripsToPrint.length} Rit*\\n"
+                    + "Total Muatan Diangkut: ${nf.format(totalGrossKg)} Kg\\n"
+                    + "Porsi Beban Fisik: ${nf.format(totalKgPrint)} Kg\\n"
+                    + "Total Upah Bersih: *Rp ${nf.format(totalUpahPrint)}*\\n\\n"
+                    + "🔍 *Verifikasi & Rincian Lengkap (${tripsToPrint.length} Rit):*\\n"
+                    + "${verificationUrl}\\n\\n"
+                    + "Dokumen fisik ringkasan eksekutif telah ditandatangani. Mohon untuk diperiksa dan diproses pencairannya. Terima kasih.";
+
+                function kirimWhatsAppKlaim() {
+                    var waUrl = "https://api.whatsapp.com/send?text=" + encodeURIComponent(pesanWA);
+                    window.open(waUrl, '_blank');
+                }
+
+                async function unduhPdfKlaim() {
+                    var btn = document.getElementById('btn-download-pdf');
+                    var oriText = btn.innerHTML;
+                    btn.innerHTML = '⏳ Mengunduh PDF...';
+                    btn.disabled = true;
+
+                    var docEl = document.getElementById('printable-area');
+                    var namaFile = "${namaFilePdf}";
+                    var opt = {
+                        margin: [0.3, 0.3, 0.3, 0.3],
+                        filename: namaFile,
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+                        pagebreak: { mode: 'css', avoid: ['table', '.total-card', '.signatures'] },
+                        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+                    };
+
+                    try {
+                        await html2pdf().set(opt).from(docEl).save();
+                    } catch (err) {
+                        console.error(err);
+                        alert("Gagal mengunduh otomatis, membuka dialog cetak...");
+                        window.print();
+                    } finally {
+                        btn.innerHTML = oriText;
+                        btn.disabled = false;
+                    }
+                }
+            </script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+}
+
+// ====================================================================
+// MODAL AUDIT VERIFIKASI DIGITAL KLAIM UPAH (DIBUKA SAAT SCAN QR CODE ATAU KLIK LINK WA)
+// ====================================================================
+async function bukaModalAuditKlaimPublik(kruNama, periodeLabel) {
+    let existing = document.getElementById('screen-audit-klaim-digital');
+    if (existing) existing.remove();
+
+    let screen = document.createElement('div');
+    screen.id = 'screen-audit-klaim-digital';
+    screen.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:#f8fafc; z-index:9999999; display:flex; flex-direction:column; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
+    screen.innerHTML = `
+        <!-- Top Navbar -->
+        <header style="background:linear-gradient(135deg, #1e3a8a, #1d4ed8); color:white; padding:14px 18px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 2px 10px rgba(0,0,0,0.12); flex-shrink:0;">
+            <div>
+                <div style="display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,0.18); padding:2px 8px; border-radius:12px; font-size:10px; font-weight:800; letter-spacing:0.5px; margin-bottom:3px;">
+                    <span class="material-symbols-outlined" style="font-size:13px; color:#86efac;">verified</span> VERIFIKASI DIGITAL PT CBL
+                </div>
+                <h3 style="margin:0; font-size:16px; font-weight:800; letter-spacing:0.3px;">Audit Rincian Klaim Upah Insentif</h3>
+                <div style="font-size:11.5px; opacity:0.9; margin-top:2px;">Petugas: <b>${kruNama}</b> | Periode: <b>${periodeLabel}</b></div>
+            </div>
+            <button type="button" onclick="tutupLayarAuditKlaimPublik()" style="background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.3); color:white; padding:8px 14px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                <span>Selesai</span> ✕
+            </button>
+        </header>
+
+        <!-- Main Content Area -->
+        <main style="flex:1; overflow-y:auto; padding:16px; max-width:760px; width:100%; margin:0 auto; box-sizing:border-box;">
+            <div style="margin-bottom:12px;">
+                <input type="text" id="cari-audit-card-input" placeholder="🔍 Cari nama konsumen atau tanggal..." 
+                       oninput="filterCardsAuditKlaim(this.value)" 
+                       style="width:100%; box-sizing:border-box; padding:10px 14px; border:1px solid #cbd5e1; border-radius:10px; font-size:13px; background:#ffffff;">
+            </div>
+
+            <div id="audit-cards-container">
+                <div style="text-align:center; padding:40px 20px; color:#64748b;">
+                    <span class="material-symbols-outlined icon-spin" style="font-size:36px; color:#2563eb;">sync</span>
+                    <div style="margin-top:10px; font-size:13px; font-weight:700;">Mengambil seluruh rincian riwayat pengantaran & muat...</div>
+                </div>
+            </div>
+        </main>
+
+        <footer style="background:#ffffff; border-top:1px solid #e2e8f0; padding:10px 18px; text-align:center; font-size:11px; color:#64748b; flex-shrink:0;">
+            Sistem Kartu Piutang & Insentif Kru CBL • Verifikasi Dokumen Digital
+        </footer>
+    `;
+    document.body.appendChild(screen);
+
+    try {
+        let users = [];
+        if (window.tripState && Array.isArray(window.tripState.cachedUsers) && window.tripState.cachedUsers.length > 0) {
+            users = window.tripState.cachedUsers;
+        } else {
+            let resUsers = await fetch(`${SUPA_URL}/rest/v1/users_app?select=id,nama,role`, {
+                headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+            });
+            if (resUsers.ok) {
+                let data = await resUsers.json();
+                if (Array.isArray(data)) users = data;
+            }
+        }
+
+        if (!Array.isArray(users) || users.length === 0) {
+            throw new Error("Gagal mengambil data kru dari server.");
+        }
+
+        let targetUser = users.find(u => u.nama && u.nama.toLowerCase().trim() === kruNama.toLowerCase().trim())
+            || users.find(u => u.nama && u.nama.toLowerCase().includes(kruNama.toLowerCase())) 
+            || users.find(u => u.nama && kruNama.toLowerCase().includes(u.nama.toLowerCase()));
+        if (!targetUser) throw new Error(`Petugas "${kruNama}" tidak ditemukan di database.`);
+
+        let uDict = {};
+        users.forEach(u => { uDict[u.id] = u.nama; });
+
+        // Query seluruh trip SELESAI tanpa rest or filter agar pekerja_muat_ids (Hilman) ikut terambil
+        let resTrips = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?status_trip=eq.SELESAI&order=tanggal.desc,waktu_berangkat.desc&limit=300`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        });
+        if (!resTrips.ok) throw new Error("Gagal mengambil riwayat trip dari server.");
+        let allTrips = await resTrips.json();
+        let userTrips = Array.isArray(allTrips) ? allTrips.filter(tr => isUserInTrip(tr, targetUser.id)) : [];
+
+        // Filter periode jika ditentukan (contoh "Oktober 2026")
+        let bulanIndo = {
+            'januari': '01', 'februari': '02', 'maret': '03', 'april': '04',
+            'mei': '05', 'juni': '06', 'juli': '07', 'agustus': '08',
+            'september': '09', 'oktober': '10', 'november': '11', 'desember': '12'
+        };
+        let pLower = (periodeLabel || '').toLowerCase();
+        let matchedMonth = Object.keys(bulanIndo).find(b => pLower.includes(b));
+        let matchedYear = pLower.match(/\b(20\d\d)\b/);
+        if (matchedMonth && matchedYear) {
+            let ym = `${matchedYear[1]}-${bulanIndo[matchedMonth]}`;
+            let filtered = userTrips.filter(tr => tr.tanggal && tr.tanggal.startsWith(ym));
+            if (filtered.length > 0) {
+                userTrips = filtered;
+            }
+        }
+
+        let container = document.getElementById('audit-cards-container');
+        if (!container) return;
+
+        if (userTrips.length === 0) {
+            container.innerHTML = `
+                <div style="text-align:center; padding:50px 20px; color:#64748b; background:#ffffff; border-radius:12px; border:1px solid #e2e8f0;">
+                    <span class="material-symbols-outlined" style="font-size:48px; color:#cbd5e1; margin-bottom:8px;">inbox</span>
+                    <div style="font-weight:700; font-size:14px; color:#334155;">Tidak ada riwayat untuk ${targetUser.nama} pada periode ini.</div>
+                </div>
+            `;
+            return;
+        }
+
+        let nf = new Intl.NumberFormat('id-ID');
+
+        let cardsHtml = userTrips.map(tr => {
+            let isMandiri = (tr.armada === 'Ambil Mandiri');
+            let isTruk = (tr.armada === 'Truk');
+            let rNama = tr.manifest_items?.[0]?.relasi || tr.catatan || 'Pengantaran';
+            let trKg = parseFloat(tr.total_kg) || 0;
+            let kmVal = parseFloat(tr.total_km) || 0;
+            let kmText = (isMandiri || isTruk || kmVal === 0) ? '0 KM' : `${kmVal} KM`;
+
+            let { upah } = hitungUpahSayaDiTrip(tr, targetUser.id);
+            let tglFormatted = tr.tanggal ? tr.tanggal.split('-').reverse().slice(0, 2).join('/') : '-';
+            let inisial = rNama.trim().slice(0, 2).toUpperCase() || 'TR';
+
+            return `
+                <div class="audit-trip-card" data-search="${rNama.toLowerCase()} ${tglFormatted}" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:12px 15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                    <div style="display:flex; align-items:center; gap:12px; min-width:0;">
+                        <div style="width:38px; height:38px; border-radius:50%; background:#f1f5f9; color:#0f172a; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12.5px; flex-shrink:0; border:1px solid #cbd5e1;">
+                            ${inisial}
+                        </div>
+                        <div style="min-width:0;">
+                            <div style="font-weight:800; font-size:13.5px; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${rNama}</div>
+                            <div style="font-size:11.5px; color:#64748b; margin-top:2px;">
+                                ${tglFormatted} • <b>${nf.format(trKg)} Kg</b> • <span>${kmText}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align:right; display:flex; align-items:center; gap:10px; flex-shrink:0;">
+                        <div style="font-size:15px; font-weight:800; color:#0f172a;">+Rp ${nf.format(upah)}</div>
+                        <button type="button" onclick="bukaModalDetailAuditSingle('${tr.id}', '${targetUser.id}')" style="background:#f8fafc; color:#1e293b; border:1px solid #cbd5e1; padding:6px 10px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer;">
+                            Rincian &gt;
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = cardsHtml;
+    } catch (e) {
+        let container = document.getElementById('audit-cards-container');
+        if (container) {
+            container.innerHTML = `<div style="text-align:center; padding:30px; color:#dc2626; background:#fff; border-radius:12px; border:1px solid #fecaca;">Gagal memuat audit rincian: ${e.message}</div>`;
+        }
+    }
+}
+
+function filterCardsAuditKlaim(query) {
+    let q = (query || '').toLowerCase();
+    let cards = document.querySelectorAll('.audit-trip-card');
+    cards.forEach(c => {
+        let s = c.getAttribute('data-search') || '';
+        c.style.display = s.includes(q) ? '' : 'none';
+    });
+}
+
+function tutupLayarAuditKlaimPublik() {
+    let screen = document.getElementById('screen-audit-klaim-digital');
+    if (screen) screen.remove();
+
+    let params = new URLSearchParams(window.location.search);
+    if (params.get('klaim_kru')) {
+        try { window.close(); } catch (e) {}
+        window.location.href = window.location.pathname;
+    }
+}
+
+async function bukaModalDetailAuditSingle(tripId, userId) {
+    let existing = document.getElementById('modal-detail-audit-single');
+    if (existing) existing.remove();
+
+    let modal = document.createElement('div');
+    modal.id = 'modal-detail-audit-single';
+    modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; z-index:99999999; padding:15px; box-sizing:border-box;';
+    modal.innerHTML = `
+        <div style="background:#ffffff; width:100%; max-width:440px; border-radius:14px; overflow:hidden; box-shadow:0 20px 40px rgba(0,0,0,0.25);">
+            <div style="background:#0f172a; color:white; padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
+                <h4 style="margin:0; font-size:14px; font-weight:800;">Rincian Pengantaran</h4>
+                <button type="button" onclick="document.getElementById('modal-detail-audit-single').remove()" style="background:transparent; border:none; color:white; font-size:18px; cursor:pointer;">✕</button>
+            </div>
+            <div id="modal-detail-audit-single-content" style="padding:16px; font-size:12px; color:#334155;">
+                <div style="text-align:center; padding:15px; color:#94a3b8;">Memuat detail...</div>
+            </div>
+            <div style="background:#f8fafc; padding:10px 16px; border-top:1px solid #e2e8f0; text-align:right;">
+                <button type="button" onclick="document.getElementById('modal-detail-audit-single').remove()" style="background:#0f172a; color:white; border:none; padding:7px 16px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer;">Tutup</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    try {
+        let res = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${tripId}&select=*`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        });
+        let data = await res.json();
+        let tr = data[0];
+        if (!tr) throw new Error("Data trip tidak ditemukan.");
+
+        let users = window.tripState?.cachedUsers || [];
+        let uDict = {};
+        users.forEach(u => { uDict[u.id] = u.nama; });
+
+        let nf = new Intl.NumberFormat('id-ID');
+        let rNama = tr.manifest_items?.[0]?.relasi || tr.catatan || 'Pengantaran';
+        let isMandiri = (tr.armada === 'Ambil Mandiri');
+        let isTruk = (tr.armada === 'Truk');
+        let trKg = parseFloat(tr.total_kg) || 0;
+        let kmVal = parseFloat(tr.total_km) || 0;
+        let { upah, porsiKg } = hitungUpahSayaDiTrip(tr, userId);
+
+        let kruNames = [];
+        let nKru = 1;
+        if (isMandiri || isTruk) {
+            let pIds = Array.isArray(tr.pekerja_muat_ids) ? tr.pekerja_muat_ids : [];
+            nKru = pIds.length || 1;
+            kruNames = pIds.map(id => uDict[id] || `User #${id}`);
+        } else {
+            let sopirNama = uDict[tr.sopir_user_id] || 'Sopir';
+            let k1Nama = uDict[tr.kernek_1_user_id];
+            let k2Nama = uDict[tr.kernek_2_user_id];
+            kruNames = [sopirNama, k1Nama, k2Nama].filter(Boolean);
+            nKru = kruNames.length || 1;
+        }
+
+        let tipeKerja = (isMandiri || isTruk) ? 'Bantu Muat / Bongkar Truk' : 'Pengantaran Armada Pick-up';
+        let rumusText = nKru > 1 
+            ? `(${nf.format(trKg)} Kg × Rp 15 / ${nKru} orang)`
+            : `(${nf.format(trKg)} Kg × Rp 15)`;
+
+        let gpsStr = (tr.gps_lat && tr.gps_lng) ? `${tr.gps_lat.toFixed(4)}, ${tr.gps_lng.toFixed(4)}` : 'Sesuai Kandang';
+        let waktuBerangkat = tr.waktu_berangkat ? tr.waktu_berangkat.slice(0, 5) : '-';
+        let waktuTiba = tr.waktu_tiba ? tr.waktu_tiba.slice(0, 5) : '-';
+
+        document.getElementById('modal-detail-audit-single-content').innerHTML = `
+            <div style="font-size:15px; font-weight:800; color:#0f172a; margin-bottom:10px;">${rNama}</div>
+            
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; background:#f8fafc; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+                <div><span style="color:#64748b; font-size:11px;">Tanggal:</span><br><b>${tr.tanggal || '-'}</b></div>
+                <div><span style="color:#64748b; font-size:11px;">Jam:</span><br><b>${waktuBerangkat} - ${waktuTiba}</b></div>
+                <div><span style="color:#64748b; font-size:11px;">Armada:</span><br><b>${tr.armada || '-'}</b></div>
+                <div><span style="color:#64748b; font-size:11px;">Jarak Tempuh:</span><br><b>${kmVal} KM</b></div>
+            </div>
+
+            <div style="margin-bottom:8px;">
+                <div style="color:#64748b; font-size:11px;">Kategori Pekerjaan:</div>
+                <div style="font-weight:700; color:#0f172a;">${tipeKerja}</div>
+            </div>
+
+            <div style="margin-bottom:8px;">
+                <div style="color:#64748b; font-size:11px;">Kru Bertugas (${nKru} Orang):</div>
+                <div style="font-weight:700; color:#0f172a;">${kruNames.join(' & ') || '-'}</div>
+            </div>
+
+            <div style="margin-bottom:12px; padding:10px; background:#f1f5f9; border-radius:8px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#64748b;">Muatan Total:</span>
+                    <b>${nf.format(trKg)} Kg</b>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#64748b;">Porsi Beban Petugas:</span>
+                    <b>${nf.format(porsiKg)} Kg</b>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:11px; color:#64748b;">
+                    <span>Rumus Upah:</span>
+                    <span>${rumusText}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding-top:6px; border-top:1px solid #cbd5e1; font-size:13px;">
+                    <span style="font-weight:700; color:#0f172a;">Upah Bagian Petugas:</span>
+                    <b style="font-size:14px; color:#0f172a;">Rp ${nf.format(upah)}</b>
+                </div>
+            </div>
+            
+            <div style="font-size:10.5px; color:#64748b;">
+                📍 Titik Lokasi: <b>${gpsStr}</b>
+            </div>
+        `;
+    } catch (err) {
+        document.getElementById('modal-detail-audit-single-content').innerHTML = `
+            <div style="color:#dc2626; text-align:center; padding:15px;">Gagal memuat detail: ${err.message}</div>
+        `;
+    }
+}
+
+// Inisialisasi Pemeriksaan URL Parameter untuk Link Audit Klaim
+window.addEventListener('DOMContentLoaded', () => {
+    let params = new URLSearchParams(window.location.search);
+    let kruNama = params.get('klaim_kru');
+    if (kruNama) {
+        let periode = params.get('periode') || 'Bulan Ini';
+        let loginScr = document.getElementById('login-screen');
+        if (loginScr) loginScr.style.setProperty('display', 'none', 'important');
+        let appScr = document.getElementById('app-screen');
+        if (appScr) appScr.classList.add('hidden');
+        bukaModalAuditKlaimPublik(kruNama, periode);
+    }
+});
+window.bukaModalAuditKlaimPublik = bukaModalAuditKlaimPublik;
+window.filterCardsAuditKlaim = filterCardsAuditKlaim;
+window.tutupLayarAuditKlaimPublik = tutupLayarAuditKlaimPublik;
+window.bukaModalDetailAuditSingle = bukaModalDetailAuditSingle;
 
 // ====================================================================
 // 7. SISI ADMIN: MONITORING & MUAT TRUK
@@ -1331,7 +3166,8 @@ function bukaModalMuatTruk(namaRelasi, totalSisaKg) {
                        value="${totalSisaKg}" 
                        min="0" 
                        max="${totalSisaKg}" 
-                       oninput="hitungTotalMuatTruk()" 
+                       oninput="validasiDanHitungMuatTruk(this)" 
+                       onchange="validasiDanHitungMuatTruk(this)" 
                        style="width:100%; padding:9px 10px; font-size:13px; font-weight:800; border:1px solid #cbd5e1; border-radius:8px; color:#1e3a8a;">
             `;
         } else {
@@ -1351,7 +3187,8 @@ function bukaModalMuatTruk(namaRelasi, totalSisaKg) {
                                value="${it.sisa_qty}" 
                                min="0" 
                                max="${it.sisa_qty}" 
-                               oninput="hitungTotalMuatTruk()"
+                               oninput="validasiDanHitungMuatTruk(this)"
+                               onchange="validasiDanHitungMuatTruk(this)"
                                style="flex:1; padding:7px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:800; text-align:center; color:#1e3a8a;">
                         <span style="font-size:11px; font-weight:700; color:#64748b;">Kg</span>
                         <button type="button" onclick="setBawaFullTrukItem(${it.id}, ${it.sisa_qty})" style="padding:6px 10px; font-size:11px; font-weight:700; background:#fff7ed; color:#ea580c; border:1px solid #fed7aa; border-radius:6px; cursor:pointer;">Semua</button>
@@ -1377,11 +3214,35 @@ function bukaModalMuatTruk(namaRelasi, totalSisaKg) {
     modal.classList.remove('hidden');
 }
 
+function validasiDanHitungMuatTruk(inp) {
+    if (inp) {
+        let max = parseFloat(inp.dataset.max) || 0;
+        let v = parseFloat(inp.value);
+        if (isNaN(v)) {
+            if (inp.value !== '') inp.value = 0;
+        } else if (v < 0) {
+            inp.value = 0;
+        } else if (v > max) {
+            inp.value = max;
+        }
+    }
+    hitungTotalMuatTruk();
+}
+
 function hitungTotalMuatTruk() {
     let inputs = document.querySelectorAll('.input-truk-item');
     let total = 0;
     inputs.forEach(inp => {
-        total += (parseFloat(inp.value) || 0);
+        let max = parseFloat(inp.dataset.max) || 0;
+        let v = parseFloat(inp.value);
+        if (isNaN(v) || v < 0) {
+            inp.value = 0;
+            v = 0;
+        } else if (v > max) {
+            inp.value = max;
+            v = max;
+        }
+        total += v;
     });
     let totalDisplay = document.getElementById('modal-truk-total-display');
     let hiddenTotal = document.getElementById('modal-truk-input-kg');
@@ -1419,13 +3280,21 @@ async function simpanKeberangkatanTruk() {
     let rincianPakanText = [];
 
     for (let inp of inputs) {
-        let qty = parseFloat(inp.value) || 0;
         let maxQty = parseFloat(inp.dataset.max) || 0;
+        let qty = parseFloat(inp.value);
         let txId = inp.dataset.txId ? parseInt(inp.dataset.txId) : null;
         let pakan = inp.dataset.pakan || 'Pakan';
 
+        if (isNaN(qty) || qty < 0) {
+            inp.value = 0;
+            hitungTotalMuatTruk();
+            return alert(`Muatan ${pakan} tidak boleh negatif atau kosong!`);
+        }
+
         if (qty > maxQty) {
-            return alert(`Muatan ${pakan} (${qty} Kg) melebihi sisa pesanan (${maxQty} Kg)!`);
+            inp.value = maxQty;
+            hitungTotalMuatTruk();
+            return alert(`Muatan ${pakan} (${qty} Kg) melebihi sisa pesanan (${maxQty} Kg)! Nilai telah disesuaikan.`);
         }
         if (qty > 0) {
             manifestItems.push({
@@ -1462,6 +3331,7 @@ async function simpanKeberangkatanTruk() {
         uang_jalan_sopir: UANG_SOLAR_TRUK_PER_TITIK, // Rp 100.000
         pekerja_muat_ids: kruIds,
         status_trip: 'BERANGKAT',
+        status_klaim: 'BELUM_KLAIM',
         waktu_berangkat: new Date().toISOString(),
         catatan: `Muat Truk ke ${namaRelasi}: ${rincianPakanText.join(', ')}`,
         manifest_items: manifestItems
@@ -1485,7 +3355,7 @@ async function simpanKeberangkatanTruk() {
             throw new Error(err.message || "Gagal menyimpan pengiriman truk");
         }
 
-        alert(`✅ Pengiriman Truk Berhasil Diberangkatkan!\nMuatan: ${inputKg.toLocaleString('id-ID')} Kg\nKru: ${kruIds.length} Orang\nSolar Sopir: Rp 100.000`);
+        alert(`✅ Pengiriman Truk Berhasil Diberangkatkan!\nMuatan: ${totalKg.toLocaleString('id-ID')} Kg\nKru: ${kruIds.length} Orang\nSolar Sopir: Rp 100.000`);
         tutupModalMuatTruk();
 
         let today = new Date().toISOString().split('T')[0];
@@ -1511,32 +3381,30 @@ async function loadMonitoringArmadaAdmin() {
 
     let nf = new Intl.NumberFormat('id-ID');
 
-    // 1. Render Barometer Keadilan 100% Horizontal Stacked Bar
+    // 1. Render Barometer Keseimbangan 100% Horizontal Stacked Bar
     if (containerBarometer) {
-        let p1Poin = 0, p2Poin = 0, p1Kg = 0, p2Kg = 0, p1Km = 0, p2Km = 0;
+        let p1Kg = 0, p2Kg = 0, p1Km = 0, p2Km = 0;
         trips.forEach(tr => {
             if (tr.armada === 'D 8070 UE') {
-                p1Poin += (parseFloat(tr.poin_beban) || 0);
                 p1Kg += (parseFloat(tr.total_kg) || 0);
                 p1Km += (parseFloat(tr.jarak_tempuh_km) || 0);
             } else if (tr.armada === 'D 8142 UK') {
-                p2Poin += (parseFloat(tr.poin_beban) || 0);
                 p2Kg += (parseFloat(tr.total_kg) || 0);
                 p2Km += (parseFloat(tr.jarak_tempuh_km) || 0);
             }
         });
 
-        let totalPoin = p1Poin + p2Poin;
-        let pctP1 = totalPoin > 0 ? Math.round((p1Poin / totalPoin) * 100) : 50;
-        let pctP2 = totalPoin > 0 ? (100 - pctP1) : 50;
-        let isSeimbang = (pctP1 >= 45 && pctP1 <= 55);
+        let totalKg = p1Kg + p2Kg;
+        let pctP1 = totalKg > 0 ? Math.round((p1Kg / totalKg) * 100) : 50;
+        let pctP2 = totalKg > 0 ? (100 - pctP1) : 50;
+        let isSeimbang = (pctP1 >= 40 && pctP1 <= 60);
 
         containerBarometer.innerHTML = `
             <div style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; padding:15px; margin-bottom:15px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <span style="font-size:13px; font-weight:800; color:#1e293b;">⚖️ Barometer Keadilan Beban Pick-Up</span>
+                    <span style="font-size:13px; font-weight:800; color:#1e293b;">⚖️ Barometer Keseimbangan Pengiriman Pick-Up</span>
                     <span style="font-size:10px; font-weight:800; padding:3px 8px; border-radius:12px; background:${isSeimbang ? '#dcfce7' : '#fef3c7'}; color:${isSeimbang ? '#15803d' : '#b45309'};">
-                        ${isSeimbang ? '✅ SEIMBANG (45-55%)' : '⚠️ KURANG SEIMBANG'}
+                        ${isSeimbang ? '✅ SEIMBANG (40-60%)' : '⚠️ KURANG SEIMBANG'}
                     </span>
                 </div>
                 <div style="height:22px; border-radius:6px; overflow:hidden; display:flex; background:#e2e8f0;">
@@ -1544,8 +3412,8 @@ async function loadMonitoringArmadaAdmin() {
                     <div style="width:${pctP2}%; background:#ea580c; color:white; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center;">D 8142 UK (${pctP2}%)</div>
                 </div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; font-size:11px; color:#475569;">
-                    <div>• <b>D 8070 UE:</b> ${nf.format(p1Kg)} Kg | ${p1Km} Km | <b>${p1Poin} Poin</b></div>
-                    <div>• <b>D 8142 UK:</b> ${nf.format(p2Kg)} Kg | ${p2Km} Km | <b>${p2Poin} Poin</b></div>
+                    <div>• <b>D 8070 UE:</b> ${nf.format(p1Kg)} Kg | ${p1Km} Km</div>
+                    <div>• <b>D 8142 UK:</b> ${nf.format(p2Kg)} Kg | ${p2Km} Km</div>
                 </div>
             </div>
         `;
@@ -1615,14 +3483,62 @@ async function loadMonitoringArmadaAdmin() {
     }
 }
 
-// Rekap Payroll & Tombol Tutup Periode Toples Jarak
-async function renderRekapPayrollAdmin() {
+// Rekap Payroll & Tombol Tutup Periode Insentif
+let currentAdminPayrollFilter = 'bulanan';
+let cachedAdminPayrollTrips = [];
+let cachedAdminPayrollPeriodLabel = 'Bulan Ini';
+let cachedAdminPayrollStartDate = '';
+let cachedAdminPayrollEndDate = '';
+
+function setAdminPayrollFilter(mode) {
+    currentAdminPayrollFilter = mode;
+    ['mingguan', 'bulanan', 'tahunan'].forEach(m => {
+        let btn = document.getElementById(`btn-adm-pay-${m}`);
+        if (btn) {
+            btn.style.background = (m === mode) ? '#2563eb' : 'transparent';
+            btn.style.color = (m === mode) ? '#ffffff' : '#64748b';
+        }
+    });
+    renderRekapPayrollAdmin(mode);
+}
+
+async function renderRekapPayrollAdmin(filterMode = currentAdminPayrollFilter) {
     let tbody = document.getElementById('admin-payroll-tbody');
     let tfoot = document.getElementById('admin-payroll-tfoot');
+    let badgePeriode = document.getElementById('admin-payroll-badge-periode');
     if (!tbody) return;
 
-    let today = new Date().toISOString().split('T')[0];
-    let trips = await fetchTripsByDateRange(today, today);
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat data insentif periode...</td></tr>`;
+
+    let now = new Date();
+    let pad = n => String(n).padStart(2, '0');
+    let startDate, endDate, labelPeriode;
+
+    if (filterMode === 'mingguan') {
+        let dStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+        startDate = `${dStart.getFullYear()}-${pad(dStart.getMonth() + 1)}-${pad(dStart.getDate())}`;
+        endDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        labelPeriode = `7 Hari Terakhir (${dStart.getDate()}/${dStart.getMonth() + 1} - ${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()})`;
+    } else if (filterMode === 'tahunan') {
+        startDate = `${now.getFullYear()}-01-01`;
+        endDate = `${now.getFullYear()}-12-31`;
+        labelPeriode = `Tahun ${now.getFullYear()}`;
+    } else {
+        filterMode = 'bulanan';
+        let lastDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        startDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+        endDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(lastDate.getDate())}`;
+        labelPeriode = now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    }
+
+    if (badgePeriode) badgePeriode.innerText = `Periode: ${labelPeriode}`;
+    cachedAdminPayrollPeriodLabel = labelPeriode;
+    cachedAdminPayrollStartDate = startDate;
+    cachedAdminPayrollEndDate = endDate;
+
+    let allTrips = await fetchTripsByDateRange(startDate, endDate);
+    let trips = (allTrips || []).filter(tr => tr.status_trip === 'SELESAI');
+    cachedAdminPayrollTrips = trips;
     let users = window.tripState.cachedUsers || [];
 
     let akumulasi = hitungAkumulasiInsentifPeriode(trips, users);
@@ -1630,34 +3546,86 @@ async function renderRekapPayrollAdmin() {
 
     let rows = Object.values(akumulasi.userMap).filter(u => u.totalBersih > 0 || u.tripCount > 0);
     if (rows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada insentif tercatat untuk hari ini.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada insentif tercatat untuk periode ${labelPeriode}.</td></tr>`;
         if (tfoot) tfoot.innerText = 'Rp 0';
         return;
     }
 
-    tbody.innerHTML = rows.map(u => `
-        <tr style="border-bottom:1px solid #e2e8f0; font-size:11px;">
-            <td style="padding:8px; font-weight:700; color:#1e293b;">${u.nama}</td>
-            <td style="padding:8px; text-transform:capitalize; color:#64748b;">${u.role}</td>
-            <td style="padding:8px; text-align:right;">${nf.format(u.totalKgOtot)} Kg</td>
-            <td style="padding:8px; text-align:right; color:#2563eb;">Rp ${nf.format(u.upahOtot)}</td>
-            <td style="padding:8px; text-align:right; color:#d97706;">Rp ${nf.format(u.subsidiJarak)}</td>
-            <td style="padding:8px; text-align:right; color:#15803d;">Rp ${nf.format(u.upahMuatTruk + u.uangSolarTruk)}</td>
-            <td style="padding:8px; text-align:right; font-weight:800; color:#1e3a8a; font-size:12px;">Rp ${nf.format(u.totalBersih)}</td>
-        </tr>
-    `).join('');
+    tbody.innerHTML = rows.map(u => {
+        let solarStr = (u.uangSolarTruk > 0) ? `Rp ${nf.format(u.uangSolarTruk)}` : '-';
+        return `
+            <tr style="border-bottom:1px solid #e2e8f0; font-size:11px;">
+                <td style="padding:8px; font-weight:700; color:#1e293b;">${u.nama}</td>
+                <td style="padding:8px; text-transform:capitalize; color:#64748b;">${u.role}</td>
+                <td style="padding:8px; text-align:right; font-weight:600; color:#475569;">${nf.format(u.totalKgMuat || 0)} Kg</td>
+                <td style="padding:8px; text-align:right; font-weight:600; color:#0f766e;">${nf.format(u.totalKgAntar || 0)} Kg</td>
+                <td style="padding:8px; text-align:right; color:#2563eb; font-weight:700;">Rp ${nf.format(u.upahMuatTotal || 0)}</td>
+                <td style="padding:8px; text-align:right; color:#d97706;">${solarStr}</td>
+                <td style="padding:8px; text-align:right; font-weight:800; color:#0f172a; font-size:12px;">Rp ${nf.format(u.totalBersih)}</td>
+                <td style="padding:8px; text-align:center;">
+                    <button type="button" onclick="cetakFormKlaimDariAdmin('${u.id}', '${encodeURIComponent(u.nama)}')" style="background:#0284c7; color:white; border:none; padding:5px 9px; border-radius:6px; font-weight:700; font-size:10.5px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
+                        <span class="material-symbols-outlined" style="font-size:13px;">print</span> Cetak Form
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
 
     if (tfoot) tfoot.innerText = `Rp ${nf.format(akumulasi.grandTotal)}`;
 }
 
-// Tombol Admin: Cairkan & Tutup Periode Toples Jarak
+// Handler Cetak Form Klaim Karyawan Langsung dari Layar Admin
+async function cetakFormKlaimDariAdmin(userId, userNamaEncoded = '') {
+    let userNama = userNamaEncoded ? decodeURIComponent(userNamaEncoded) : '';
+    let users = window.tripState?.cachedUsers || [];
+
+    if (!Array.isArray(users) || users.length === 0) {
+        try {
+            let res = await fetch(`${SUPA_URL}/rest/v1/users_app?select=*&order=nama.asc`, {
+                headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+            });
+            if (res.ok) {
+                users = await res.json();
+                if (window.tripState) window.tripState.cachedUsers = users;
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    let targetUser = users.find(u => String(u.id) === String(userId))
+        || (userNama ? users.find(u => u.nama && u.nama.toLowerCase().trim() === userNama.toLowerCase().trim()) : null)
+        || (userNama ? users.find(u => u.nama && u.nama.toLowerCase().includes(userNama.toLowerCase())) : null);
+
+    if (!targetUser) {
+        alert("Data karyawan tidak ditemukan.");
+        return;
+    }
+
+    let trips = cachedAdminPayrollTrips;
+    if (!trips || trips.length === 0) {
+        let today = new Date().toISOString().split('T')[0];
+        let fetched = await fetchTripsByDateRange(today, today);
+        trips = (fetched || []).filter(tr => tr.status_trip === 'SELESAI');
+    }
+
+    let userTrips = trips.filter(tr => tr.status_trip === 'SELESAI' && isUserInTrip(tr, targetUser.id));
+    if (userTrips.length === 0) {
+        alert(`Tidak ada riwayat pengantaran atau muat untuk ${targetUser.nama} pada periode ${cachedAdminPayrollPeriodLabel}.`);
+        return;
+    }
+
+    cetakSlipKlaimDriver(targetUser, userTrips, cachedAdminPayrollPeriodLabel);
+}
+
+// Tombol Admin: Cairkan & Tutup Periode Insentif
 async function tutupPeriodeDanCairkanToples() {
-    let konfirm = confirm("Apakah Anda yakin ingin MENUTUP PERIODE dan mencairkan toples jarak? Seluruh saldo trip yang belum dicairkan akan ditandai LUNAS dan toples kembali ke Rp 0 untuk periode berikutnya.");
+    let cutoffDate = cachedAdminPayrollEndDate || new Date().toISOString().split('T')[0];
+    let konfirm = confirm(`Apakah Anda yakin ingin MENCAIRKAN & MENUTUP PERIODE INSENTIF (${cachedAdminPayrollPeriodLabel})?\n\nSemua trip pengiriman yang SELESAI sampai tanggal ${cutoffDate} akan ditandai LUNAS / SUDAH CAIR.\nSaldo berjalan di dompet supir & kernek otomatis ter-reset kembali ke Rp 0.`);
     if (!konfirm) return;
 
-    let today = new Date().toISOString().split('T')[0];
     try {
-        let res = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?tanggal=lte.${today}&status_klaim=eq.BELUM_KLAIM`, {
+        let res = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?status_trip=eq.SELESAI&tanggal=lte.${cutoffDate}&or=(status_klaim.is.null,status_klaim.neq.SUDAH_CAIR)`, {
             method: 'PATCH',
             headers: {
                 'apikey': SUPA_ANON_KEY,
@@ -1669,7 +3637,12 @@ async function tutupPeriodeDanCairkanToples() {
             body: JSON.stringify({ status_klaim: 'SUDAH_CAIR' })
         });
 
-        alert("✅ Periode Berhasil Ditutup & Toples Jarak Direset! Slip gaji siap dibagikan.");
+        if (!res.ok) {
+            let errText = await res.text();
+            throw new Error(errText || "Gagal memperbarui status pencairan di database.");
+        }
+
+        alert(`✅ Periode Insentif (${cachedAdminPayrollPeriodLabel}) Berhasil Ditutup & Dicairkan!\n\nSaldo berjalan seluruh supir & kernek otomatis di-reset ke Rp 0 dan riwayat mutasi telah ditandai Lunas.`);
         renderRekapPayrollAdmin();
     } catch (e) {
         alert("Gagal menutup periode: " + e.message);
@@ -1677,7 +3650,7 @@ async function tutupPeriodeDanCairkanToples() {
 }
 
 function switchAdminTripTab(tab) {
-    const tabs = ['antrean', 'monitor', 'payroll'];
+    const tabs = ['antrean', 'monitor', 'payroll', 'bbm'];
     tabs.forEach(t => {
         let btn = document.getElementById(`tab-adm-${t}`);
         let view = document.getElementById(`view-adm-${t}`);
@@ -1698,6 +3671,293 @@ function switchAdminTripTab(tab) {
         loadMonitoringArmadaAdmin();
     } else if (tab === 'payroll') {
         renderRekapPayrollAdmin();
+    } else if (tab === 'bbm') {
+        loadLogBBMAdmin();
+    }
+}
+
+// ====================================================================
+// 8. LOG & PERAWATAN ARMADA (SISI ADMIN)
+// ====================================================================
+
+window._armadaActiveFilter = 'all';
+window._armadaActiveSubtab = 'biaya';
+window._cacheArmadaData = { expenses: [], trips: [] };
+
+async function loadLogBBMAdmin() {
+    let tbodyExpenses = document.getElementById('admin-bbm-tbody');
+    let tbodyTrips = document.getElementById('admin-armada-rute-tbody');
+    let summaryBox = document.getElementById('admin-bbm-summary');
+    if (!tbodyExpenses) return;
+
+    tbodyExpenses.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat data operasional armada...</td></tr>`;
+    if (tbodyTrips) {
+        tbodyTrips.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat riwayat perjalanan armada...</td></tr>`;
+    }
+
+    try {
+        // 1. Ambil data pengeluaran armada (BBM, Servis, Ban, Cuci) dari cashflow
+        let p1 = fetch(`${SUPA_URL}/rest/v1/cashflow?jenis=eq.Keluar&order=tanggal.desc,created_at.desc&limit=150`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        }).then(r => r.json());
+
+        // 2. Ambil riwayat perjalanan/rit dari trip_pengiriman
+        let p2 = fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?order=tanggal.desc,created_at.desc&limit=100`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        }).then(r => r.json());
+
+        let [rawCF, rawTrips] = await Promise.all([p1, p2]);
+
+        // Filter cashflow yang relevan dengan armada (BBM, Ban, Servis, Cuci, atau ada sebutan plat)
+        let armadaExpenses = (Array.isArray(rawCF) ? rawCF : []).filter(item => {
+            let kat = (item.kategori || '').toLowerCase();
+            let rel = (item.relasi || '').toLowerCase();
+            let ket = (item.keterangan || '').toLowerCase();
+
+            let isArmadaRelated = kat.includes('bbm') || kat.includes('solar') || 
+                                  kat.includes('kendaraan') || kat.includes('servis') || 
+                                  kat.includes('operasional') || rel.includes('armada') || 
+                                  rel.includes('spbu') || rel.includes('bengkel') ||
+                                  ket.includes('d 8070 ue') || ket.includes('d 8142 uk') || 
+                                  ket.includes('truk') || ket.includes('ban') || 
+                                  ket.includes('angin') || ket.includes('oli');
+            return isArmadaRelated;
+        });
+
+        window._cacheArmadaData = {
+            expenses: armadaExpenses,
+            trips: Array.isArray(rawTrips) ? rawTrips : []
+        };
+
+        renderArmadaLogViews();
+    } catch (e) {
+        if (tbodyExpenses) tbodyExpenses.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:25px; color:#dc2626;">Gagal memuat log armada: ${e.message}</td></tr>`;
+    }
+}
+
+function filterLogArmada(armadaPlat) {
+    window._armadaActiveFilter = armadaPlat;
+    document.querySelectorAll('.btn-filter-armada').forEach(b => {
+        let isSel = (b.dataset.armada === armadaPlat);
+        b.style.background = isSel ? '#eff6ff' : '#ffffff';
+        b.style.color = isSel ? '#1d4ed8' : '#475569';
+        b.style.borderColor = isSel ? '#2563eb' : '#cbd5e1';
+    });
+    renderArmadaLogViews();
+}
+
+function switchSubTabArmada(subtab) {
+    window._armadaActiveSubtab = subtab;
+    let btnBiaya = document.getElementById('subtab-btn-biaya');
+    let btnRute = document.getElementById('subtab-btn-rute');
+    let viewBiaya = document.getElementById('subview-armada-biaya');
+    let viewRute = document.getElementById('subview-armada-rute');
+
+    if (subtab === 'biaya') {
+        if (btnBiaya) { btnBiaya.style.background = '#2563eb'; btnBiaya.style.color = '#ffffff'; btnBiaya.style.borderColor = '#2563eb'; }
+        if (btnRute) { btnRute.style.background = '#f8fafc'; btnRute.style.color = '#475569'; btnRute.style.borderColor = '#cbd5e1'; }
+        if (viewBiaya) viewBiaya.classList.remove('hidden');
+        if (viewRute) viewRute.classList.add('hidden');
+    } else {
+        if (btnBiaya) { btnBiaya.style.background = '#f8fafc'; btnBiaya.style.color = '#475569'; btnBiaya.style.borderColor = '#cbd5e1'; }
+        if (btnRute) { btnRute.style.background = '#0f766e'; btnRute.style.color = '#ffffff'; btnRute.style.borderColor = '#0f766e'; }
+        if (viewBiaya) viewBiaya.classList.add('hidden');
+        if (viewRute) viewRute.classList.remove('hidden');
+    }
+}
+
+function renderArmadaLogViews() {
+    let nf = new Intl.NumberFormat('id-ID');
+    let filter = window._armadaActiveFilter || 'all';
+    let summaryBox = document.getElementById('admin-bbm-summary');
+    let tbodyExpenses = document.getElementById('admin-bbm-tbody');
+    let tbodyTrips = document.getElementById('admin-armada-rute-tbody');
+
+    let allExpenses = window._cacheArmadaData.expenses || [];
+    let allTrips = window._cacheArmadaData.trips || [];
+
+    // Helper match armada plat
+    function matchArmada(targetArmada, itemArmada, relasi, keterangan) {
+        if (targetArmada === 'all') return true;
+        let str = `${itemArmada || ''} ${relasi || ''} ${keterangan || ''}`.toUpperCase();
+        return str.includes(targetArmada.toUpperCase());
+    }
+
+    let filteredExpenses = allExpenses.filter(item => {
+        return matchArmada(filter, item.armada, item.relasi, item.keterangan);
+    });
+
+    let filteredTrips = allTrips.filter(t => {
+        if (filter === 'all') return true;
+        let arm = (t.armada || '').toUpperCase();
+        return arm.includes(filter.toUpperCase());
+    });
+
+    // 1. KPI Aggregation & Data per Armada Tetap
+    let expensesHilman = allExpenses.filter(i => matchArmada('D 8070 UE', i.armada, i.relasi, i.keterangan));
+    let expensesAdi = allExpenses.filter(i => matchArmada('D 8142 UK', i.armada, i.relasi, i.keterangan));
+    let tripsHilman = allTrips.filter(t => (t.armada || '').toUpperCase().includes('D 8070 UE'));
+    let tripsAdi = allTrips.filter(t => (t.armada || '').toUpperCase().includes('D 8142 UK'));
+
+    let biayaHilman = expensesHilman.reduce((sum, item) => sum + (parseFloat(item.nominal) || 0), 0);
+    let biayaAdi = expensesAdi.reduce((sum, item) => sum + (parseFloat(item.nominal) || 0), 0);
+    let lastNoteHilman = expensesHilman[0] || null;
+    let lastNoteAdi = expensesAdi[0] || null;
+
+    let totalBiaya = filteredExpenses.reduce((sum, item) => sum + (parseFloat(item.nominal) || 0), 0);
+    let lastOdoMap = { 'D 8070 UE': '-', 'D 8142 UK': '-', 'Truk': '-' };
+
+    allExpenses.forEach(item => {
+        let ket = item.keterangan || '';
+        let odoMatch = ket.match(/Spido:\s*([0-9]+)\s*KM/i);
+        let arm = (item.relasi || '').replace('SPBU (', '').replace('Bengkel / Perawatan (', '').replace(')', '').trim();
+        if (!arm || arm === 'SPBU' || arm === 'Bengkel / Perawatan') {
+            if (ket.includes('D 8070 UE')) arm = 'D 8070 UE';
+            else if (ket.includes('D 8142 UK')) arm = 'D 8142 UK';
+            else if (ket.includes('Truk')) arm = 'Truk';
+        }
+        if (odoMatch && lastOdoMap[arm] === '-') {
+            lastOdoMap[arm] = `${nf.format(odoMatch[1])} KM`;
+        }
+    });
+
+    if (summaryBox) {
+        let filterLabel = (filter === 'all') ? 'Semua Armada' : filter;
+        summaryBox.innerHTML = `
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:10px; margin-bottom:15px;">
+                <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px;">
+                    <span style="font-size:11px; color:#1e40af; font-weight:700;">Total Biaya (${filterLabel})</span>
+                    <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#1d4ed8;">Rp ${nf.format(totalBiaya)}</h3>
+                    <div style="font-size:10px; color:#64748b; margin-top:2px;">BBM, Servis, Ban, Angin, Cuci</div>
+                </div>
+                <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px;">
+                    <span style="font-size:11px; color:#15803d; font-weight:700;">KM Odometer D 8070 UE</span>
+                    <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#16a34a;">${lastOdoMap['D 8070 UE']}</h3>
+                    <div style="font-size:10px; color:#15803d; margin-top:2px;">Grand Max Pick-up (Hilman)</div>
+                </div>
+                <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:10px; padding:12px;">
+                    <span style="font-size:11px; color:#c2410c; font-weight:700;">KM Odometer D 8142 UK</span>
+                    <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#ea580c;">${lastOdoMap['D 8142 UK']}</h3>
+                    <div style="font-size:10px; color:#c2410c; margin-top:2px;">Pick-up Putih (Adi)</div>
+                </div>
+                <div style="background:#f5f3ff; border:1px solid #ddd6fe; border-radius:10px; padding:12px;">
+                    <span style="font-size:11px; color:#6d28d9; font-weight:700;">Total Rit Pengiriman</span>
+                    <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#7c3aed;">${filteredTrips.length} Pengantaran</h3>
+                    <div style="font-size:10px; color:#6d28d9; margin-top:2px;">Tercatat di sistem logistik</div>
+                </div>
+            </div>
+        `;
+    }
+
+    // 2. Render Tabel Catatan Biaya & Servis
+    if (tbodyExpenses) {
+        if (filteredExpenses.length === 0) {
+            tbodyExpenses.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada catatan operasional untuk filter ini.</td></tr>`;
+        } else {
+            tbodyExpenses.innerHTML = filteredExpenses.map(item => {
+                let ket = item.keterangan || '-';
+                let odoMatch = ket.match(/Spido:\s*([0-9]+)\s*KM/i);
+                let odoStr = odoMatch ? `${nf.format(odoMatch[1])} KM` : '-';
+
+                // Deteksi armada & supir badge
+                let armName = 'Armada';
+                if (ket.includes('D 8070 UE') || (item.relasi || '').includes('D 8070 UE')) armName = 'D 8070 UE (Hilman)';
+                else if (ket.includes('D 8142 UK') || (item.relasi || '').includes('D 8142 UK')) armName = 'D 8142 UK (Adi)';
+                else if (ket.includes('Truk') || (item.relasi || '').includes('Truk')) armName = 'Truk';
+
+                let katBadge = `<span style="background:#eff6ff; color:#1d4ed8; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px;">receipt</span> ${item.kategori || 'Operasional'}</span>`;
+                if ((item.kategori || '').includes('BBM')) {
+                    katBadge = `<span style="background:#fef3c7; color:#b45309; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#d97706;">local_gas_station</span> BBM/Solar</span>`;
+                } else if (ket.toLowerCase().includes('ban') || ket.toLowerCase().includes('angin')) {
+                    katBadge = `<span style="background:#fee2e2; color:#b91c1c; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#dc2626;">tire_repair</span> Ban/Angin</span>`;
+                } else if (ket.toLowerCase().includes('oli') || ket.toLowerCase().includes('servis')) {
+                    katBadge = `<span style="background:#dbeafe; color:#1e40af; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#2563eb;">build</span> Servis/Oli</span>`;
+                } else if (ket.toLowerCase().includes('cuci')) {
+                    katBadge = `<span style="background:#e0f2fe; color:#0369a1; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#0284c7;">local_car_wash</span> Cuci Mobil</span>`;
+                }
+
+                let fotoLink = (item.bukti_url && item.bukti_url !== '-')
+                    ? `<a href="${item.bukti_url}" target="_blank" style="background:#eff6ff; color:#2563eb; padding:4px 8px; border-radius:6px; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:3px;">
+                         <span class="material-symbols-outlined" style="font-size:14px;">receipt</span> Bukti
+                       </a>`
+                    : `<span style="color:#94a3b8; font-size:10px;">-</span>`;
+
+                return `
+                    <tr style="border-bottom:1px solid #e2e8f0; font-size:11px;">
+                        <td style="padding:10px 8px; font-weight:700; color:#1e293b;">${item.tanggal || '-'}</td>
+                        <td style="padding:10px 8px; font-weight:800; color:#2563eb;">${armName}</td>
+                        <td style="padding:10px 8px;">${katBadge}</td>
+                        <td style="padding:10px 8px; color:#334155; max-width:220px;">${ket}</td>
+                        <td style="padding:10px 8px; text-align:right; font-weight:700; color:#475569;">${odoStr}</td>
+                        <td style="padding:10px 8px; text-align:right; font-weight:800; color:#15803d;">Rp ${nf.format(item.nominal)}</td>
+                        <td style="padding:10px 8px; text-align:center;">
+                            <span style="background:#f1f5f9; color:#475569; padding:2px 6px; border-radius:4px; font-weight:600;">${item.metode || 'Cash'}</span>
+                        </td>
+                        <td style="padding:10px 8px; color:#475569;">${item.petugas || '-'}</td>
+                        <td style="padding:10px 8px; text-align:center;">${fotoLink}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+    }
+
+    // 3. Render Tabel Riwayat Perjalanan (Tracking Kemana Aja)
+    if (tbodyTrips) {
+        if (filteredTrips.length === 0) {
+            tbodyTrips.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada riwayat pengantaran untuk armada ini.</td></tr>`;
+        } else {
+            let users = window.tripState.cachedUsers || [];
+            let userMap = {};
+            users.forEach(u => { userMap[u.id] = u.nama; });
+
+            tbodyTrips.innerHTML = filteredTrips.map(tr => {
+                let waktuStr = tr.waktu_berangkat 
+                    ? new Date(tr.waktu_berangkat).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) 
+                    : '-';
+                let tglDisplay = `${tr.tanggal} (${waktuStr})`;
+
+                let manifest = tr.manifest_items || [];
+                let relasiList = [...new Set(manifest.map(m => m.relasi).filter(Boolean))].join(', ') || tr.catatan || 'Konsumen';
+                let pakanList = manifest.map(m => `${m.pakan} (${m.qty} Kg)`).join(', ') || '-';
+
+                // Tambahkan Maps button jika kandang terdaftar di master_relasi
+                let firstRelasi = manifest[0]?.relasi || tr.catatan;
+                let rData = firstRelasi ? (window.tripState.cachedRelasiMap[firstRelasi] || {}) : {};
+                let rLat = rData.lat ? parseFloat(rData.lat) : null;
+                let rLng = rData.lng ? parseFloat(rData.lng) : null;
+                let mapsBtn = (rLat && rLng)
+                    ? `<a href="https://www.google.com/maps/dir/?api=1&origin=${LAT_GUDANG_CBL},${LNG_GUDANG_CBL}&destination=${rLat},${rLng}" target="_blank" title="Cek rute di Google Maps" style="display:inline-flex; align-items:center; gap:2px; font-size:10px; font-weight:700; color:#1d4ed8; background:#eff6ff; padding:2px 6px; border-radius:4px; text-decoration:none; margin-left:4px; border:1px solid #bfdbfe;">
+                         <span class="material-symbols-outlined" style="font-size:12px; color:#2563eb;">map</span> Maps
+                       </a>`
+                    : '';
+
+                let sopirNama = userMap[tr.sopir_user_id] || 'Supir';
+                let kernekNama = userMap[tr.kernek_1_user_id] || '-';
+                if (tr.kernek_2_user_id && userMap[tr.kernek_2_user_id]) {
+                    kernekNama += `, ${userMap[tr.kernek_2_user_id]}`;
+                }
+                let kruStr = `<b>${sopirNama}</b>${kernekNama !== '-' ? ` & ${kernekNama}` : ''}`;
+
+                let armLabel = tr.armada || '-';
+                if (armLabel.includes('D 8070 UE')) armLabel = 'D 8070 UE (Hilman)';
+                else if (armLabel.includes('D 8142 UK')) armLabel = 'D 8142 UK (Adi)';
+
+                return `
+                    <tr style="border-bottom:1px solid #e2e8f0; font-size:11px;">
+                        <td style="padding:10px 8px; font-weight:700; color:#1e293b;">${tglDisplay}</td>
+                        <td style="padding:10px 8px; font-weight:800; color:#0f766e;">${armLabel}</td>
+                        <td style="padding:10px 8px; font-weight:700; color:#1e3a8a;">${relasiList} ${mapsBtn}</td>
+                        <td style="padding:10px 8px; color:#334155; font-size:10px; max-width:200px;">${pakanList}</td>
+                        <td style="padding:10px 8px; text-align:right; font-weight:800; color:#15803d;">${nf.format(tr.total_kg || 0)} Kg</td>
+                        <td style="padding:10px 8px; color:#334155;">${kruStr}</td>
+                        <td style="padding:10px 8px; text-align:right; font-weight:700; color:#475569;">${tr.jarak_tempuh_km || 0} Km</td>
+                        <td style="padding:10px 8px; text-align:center;">
+                            <span style="background:#dcfce7; color:#15803d; font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px;">${tr.status_trip || 'SELESAI'}</span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
     }
 }
 
@@ -1721,17 +3981,42 @@ window.pindahDriverTab = pindahDriverTab;
 window.switchDriverPortalTab = switchDriverPortalTab;
 window.cetakSlipKlaimDriver = cetakSlipKlaimDriver;
 window.refreshAntreanDriver = refreshAntreanDriver;
+window.bukaModalCatatBBM = bukaModalCatatBBM;
+window.tutupModalCatatBBM = tutupModalCatatBBM;
+window.toggleKategoriOperasionalForm = toggleKategoriOperasionalForm;
+window.simpanBeliBBMDriver = simpanBeliBBMDriver;
+window.loadArmadaDriver = loadArmadaDriver;
+window.switchDriverArmadaSubTab = switchDriverArmadaSubTab;
+window.loadDriverMonthlyStats = loadDriverMonthlyStats;
+window.switchFilterBulanDriver = switchFilterBulanDriver;
+window.validasiDanHitungBawa = validasiDanHitungBawa;
+window.loadDompetDriver = loadDompetDriver;
+window.switchFilterDompetDriver = switchFilterDompetDriver;
+window.isUserInTrip = isUserInTrip;
+window.hitungUpahSayaDiTrip = hitungUpahSayaDiTrip;
+window.bukaModalRincianMutasiDriver = bukaModalRincianMutasiDriver;
+window.tutupModalRincianMutasi = tutupModalRincianMutasi;
+window.animateCountUp = animateCountUp;
 
 // Admin Window Exports
 window.initModulTripAdmin = initModulTripAdmin;
 window.switchAdminTripTab = switchAdminTripTab;
 window.bukaModalMuatTruk = bukaModalMuatTruk;
 window.tutupModalMuatTruk = tutupModalMuatTruk;
+window.validasiDanHitungMuatTruk = validasiDanHitungMuatTruk;
 window.hitungTotalMuatTruk = hitungTotalMuatTruk;
 window.setBawaFullTrukItem = setBawaFullTrukItem;
 window.setBawaNolTrukItem = setBawaNolTrukItem;
 window.simpanKeberangkatanTruk = simpanKeberangkatanTruk;
 window.tutupPeriodeDanCairkanToples = tutupPeriodeDanCairkanToples;
 window.kunciTitikKandangPeternak = autoLockTitikKandang;
+window.loadLogBBMAdmin = loadLogBBMAdmin;
+window.filterLogArmada = filterLogArmada;
+window.switchSubTabArmada = switchSubTabArmada;
+window.renderArmadaLogViews = renderArmadaLogViews;
+window.setAdminPayrollFilter = setAdminPayrollFilter;
+window.cetakFormKlaimDariAdmin = cetakFormKlaimDariAdmin;
+window.renderRekapPayrollAdmin = renderRekapPayrollAdmin;
+
 
 

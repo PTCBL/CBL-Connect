@@ -1,11 +1,20 @@
 {
   "name": "Sistem Pakan PT CBL",
-  "short_name": "Pakan CBL",
+  "short_name": "CBL Connect",
+  "description": "Sistem Informasi Manajemen Pakan & Logistik PT Cita Benggala Lestari",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#f5f5f5",
+  "background_color": "#f4f5f0",
   "theme_color": "#1a5c40",
+  "orientation": "portrait-primary",
   "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/wildansyif/pakan-cbl/2e732398572a6ac7d3512559c4344d40ab0902f9/Logo%20CBL.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "https://raw.githubusercontent.com/wildansyif/pakan-cbl/2e732398572a6ac7d3512559c4344d40ab0902f9/Logo%20CBL.png",
       "sizes": "512x512",
