@@ -7613,10 +7613,11 @@ function aturAksesMenu(role) {
                                  namaRelasi.includes('kapalang') || namaRelasi.includes('dewasa') || 
                                  namaRelasi.includes('jantan') || namaRelasi.includes('pedet') || 
                                  namaRelasi.includes('kerbau') || namaRelasi.includes('bunting') ||
-                                 namaRelasi.includes('bx') || namaRelasi.includes('domba')) {
+                                 namaRelasi.includes('bx') || namaRelasi.includes('domba') ||
+                                 namaRelasi.includes('cibulakan')) {
                             cKat = "Pemakaian";
                         } 
-                        else if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("cibulakan") || namaRelasi.includes("pembibitan")) {
+                        else if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("pembibitan")) {
                             cKat = "Mutasi";
                         } 
                         else {
@@ -7902,7 +7903,7 @@ function aturAksesMenu(role) {
                                  namaRelasi.includes("mutasi") ||
                                  kelompokSapi.includes(namaRelasi)) {
                             cKat = "Pemakaian"; // Hewan dan Internal digabung masuk ke Pemakaian / Mutasi
-                            if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("cibulakan") || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi")) cKat = "Mutasi";
+                            if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi")) cKat = "Mutasi";
                         } 
                         else {
                             cKat = "Penjualan";
@@ -10508,7 +10509,7 @@ function aturAksesMenu(role) {
             let labelRelasi = document.getElementById('label-relasi');
             let inputEkor = document.getElementById('ekor');
 
-            if (lokasi === '/kandang') {
+            if (lokasi === '/kandang' || lokasi === '/spn_kandang') {
                 labelRelasi.innerText = "Kelompok Sapi";
                 inputRelasi.classList.add('hidden');
                 selKandang.classList.remove('hidden');
@@ -11262,22 +11263,43 @@ function renderLiveStokDiInput() {
             let inputVal = document.getElementById('ekor').value.trim();
             let isAngka = !isNaN(inputVal) && inputVal !== "";
             let lokasiTerpilih = getLokasiAktif();
-            let isKandang = (lokasiTerpilih === '/kandang');
+            let isKandang = (lokasiTerpilih === '/kandang' || lokasiTerpilih === '/spn_kandang');
             let valRelasi = isKandang ? document.getElementById('relasi_kandang').value : document.getElementById('relasi').value.trim();
             let statusPilihan = document.getElementById('status').value;
-            let isMutasiKandang = valRelasi.toLowerCase().includes('kandang');
+            let rLower = (valRelasi || "").toLowerCase();
 
-            // --- TAMBAHAN POP-UP KONFIRMASI ONGKIR (CUSTOM MODAL) ---
+            // --- FILTER PENGECUALIAN POP-UP ONGKIR / DIKIRIM / DIAMBIL ---
             let inputOngkirEl = document.getElementById('ongkir');
-            let relDataObj = globalRelasi.find(r => r.nama === valRelasi);
+            let relDataObj = globalRelasi.find(r => (r.nama || "").toLowerCase() === rLower);
             let isKategoriMutasi = relDataObj && relDataObj.kategori && relDataObj.kategori.toLowerCase() === 'mutasi';
 
-            if (!skipOngkirModal && statusPilihan === 'Keluar' && inputOngkirEl.value.trim() === "" && !isKategoriMutasi && !isMutasiKandang) {
+            // 1. Relasi Gilingan (RL / RD / Darbun / Laktasi / Giling) -> Tidak ada ongkir & tanpa pop-up
+            let isGilinganRelasi = /\b(rl|rd)\b/i.test(valRelasi) || rLower.includes('darbun') || rLower.includes('laktasi') || rLower.includes('giling');
+
+            // 2. Laporan Pemakaian Kandang (Fasilitas Kandang atau Kelompok Sapi)
+            let kelompokSapi = ['kapalang', 'dewasa', 'jantan', 'pedet', 'kerbau', 'bunting', 'bx', 'domba'];
+            let isKelompokSapi = kelompokSapi.some(k => rLower === k || rLower.includes(k));
+            let isPemakaianKandang = isKandang || isKelompokSapi || rLower.includes('kandang');
+
+            // 3. Mutasi Cabang / Fasilitas Internal (RPH, SPN, Kandang, Pembibitan, Cibulakan, dll.)
+            let isMutasiInternal = isKategoriMutasi || 
+                rLower.includes('rph') || 
+                rLower.includes('spn') || 
+                rLower.includes('pembibitan') || 
+                rLower.includes('cibulakan') || 
+                rLower.includes('mutasi');
+
+            // Pop-up Dikirim / Diambil HANYA untuk penjualan komersial reguler
+            let skipPopupKirimAmbil = isGilinganRelasi || isPemakaianKandang || isMutasiInternal;
+
+            if (!skipOngkirModal && statusPilihan === 'Keluar' && inputOngkirEl.value.trim() === "" && !skipPopupKirimAmbil) {
                 window.tempKirimMode = mode;
                 document.getElementById('modal-ongkir').classList.remove('hidden');
                 return;
             }
-            // -----------------------------------------
+            // -------------------------------------------------------------
+
+            let isMutasiKandang = rLower.includes('kandang') || isMutasiInternal;
 
             if (isKandang && (!isAngka || parseFloat(inputVal) <= 0)) {
                 alert("⚠️ Jumlah Ekor wajib diisi untuk fasilitas Kandang!");
@@ -11784,8 +11806,8 @@ function renderLiveStokDiInput() {
                     else cKat = "Masuk";
                 } else {
                     if (namaRelasi.includes("rd") || namaRelasi.includes("rl") || namaRelasi.includes("darbun") || namaRelasi.includes("laktasi")) cKat = "Giling";
-                    else if (payload.lokasi === '/kandang' || namaRelasi.includes("kandang")) cKat = "Pemakaian";
-                    else if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("cibulakan") || namaRelasi.includes("pembibitan")) cKat = "Mutasi";
+                    else if (payload.lokasi === '/kandang' || payload.lokasi === '/spn_kandang' || namaRelasi.includes("kandang") || namaRelasi.includes("cibulakan")) cKat = "Pemakaian";
+                    else if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi")) cKat = "Mutasi";
                     else cKat = "Penjualan";
                 }
 
@@ -11834,8 +11856,8 @@ function renderLiveStokDiInput() {
                         if (namaOngkir.includes("pm gudang") || namaOngkir.includes("spn gudang") || namaOngkir.includes("rph gudang")) cKat = "mutasi";
                         else cKat = "masuk";
                     } else {
-                        if (payload.lokasi === '/kandang') cKat = "pemakaian";
-                        else if (namaRelasi.includes("kandang") || namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("cibulakan") || namaRelasi.includes("pembibitan")) cKat = "mutasi";
+                        if (payload.lokasi === '/kandang' || payload.lokasi === '/spn_kandang' || namaRelasi.includes("cibulakan")) cKat = "pemakaian";
+                        else if (namaRelasi.includes("kandang") || namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi")) cKat = "mutasi";
                         else cKat = "penjualan";
                     }
 
@@ -14430,8 +14452,8 @@ async function uploadGambarKeSupabase(base64Data, mimeType, folderName, fileName
                 return "Barang Masuk";
             } else {
                 if (namaRelasi === "rd" || namaRelasi === "rl" || namaRelasi === "darbun" || namaRelasi === "laktasi") return "Gilingan Pakan";
-                if (cabangLower.includes('kandang') || namaRelasi.includes("kandang") || kelompokSapi.includes(namaRelasi)) return "Pemakaian Kandang";
-                if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("cibulakan") || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi")) return "Mutasi Keluar";
+                if (cabangLower.includes('kandang') || namaRelasi.includes("kandang") || namaRelasi.includes("cibulakan") || kelompokSapi.includes(namaRelasi)) return "Pemakaian Kandang";
+                if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi")) return "Mutasi Keluar";
                 return "Penjualan Pakan";
             }
         }
@@ -15015,7 +15037,7 @@ async function uploadGambarKeSupabase(base64Data, mimeType, folderName, fileName
                              namaRelasi.includes("mutasi") || kelompokSapi.includes(namaRelasi)) {
                         
                         cKat = "Pemakaian";
-                        if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("cibulakan") || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi")) cKat = "Mutasi";
+                        if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi")) cKat = "Mutasi";
                     }
 
                     totalKeluar += qty;
@@ -15078,7 +15100,7 @@ async function uploadGambarKeSupabase(base64Data, mimeType, folderName, fileName
                              namaRelasi.includes("mutasi") || kelompokSapi.includes(namaRelasi)) {
                         
                         cKat = "Pemakaian";
-                        if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("cibulakan") || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi")) cKat = "Mutasi";
+                        if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi")) cKat = "Mutasi";
                     }
 
                     let blnKey = row.tanggal.substring(5, 7); 
