@@ -3617,7 +3617,7 @@
                             <span class="material-symbols-outlined" style="font-size:22px; color:#2563eb;">local_shipping</span>
                             <div>
                                 <div style="font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Armada Bertugas</div>
-                                <div id="driver-portal-armada-name" style="font-size:13px; font-weight:800; color:#1e293b;">D 8070 UE (Grand Max Pick-up)</div>
+                                <div id="driver-portal-armada-name" style="font-size:13px; font-weight:800; color:#1e293b;">D 8707 UE (Grand Max Pick-up)</div>
                             </div>
                         </div>
                         <span id="driver-portal-armada-tag" style="background:#eff6ff; color:#1d4ed8; font-size:10px; font-weight:800; padding:3px 8px; border-radius:12px; border:1px solid #bfdbfe;">Tetap</span>
@@ -3903,7 +3903,7 @@
                             <span style="background:#eff6ff; color:#1d4ed8; font-size:10px; font-weight:800; padding:2px 8px; border-radius:12px; display:inline-flex; align-items:center; gap:3px;">
                                 <span class="material-symbols-outlined" style="font-size:13px;">local_shipping</span> ARMADA SAYA
                             </span>
-                            <h3 id="driver-armada-title" style="margin:4px 0 0 0; font-size:17px; font-weight:800; color:#1e293b;">D 8070 UE</h3>
+                            <h3 id="driver-armada-title" style="margin:4px 0 0 0; font-size:17px; font-weight:800; color:#1e293b;">D 8707 UE</h3>
                             <div id="driver-armada-subtitle" style="font-size:11px; color:#64748b; margin-top:2px;">Supir Penanggung Jawab: <b style="color:#1e3a8a;">-</b></div>
                         </div>
                         <button type="button" onclick="loadArmadaDriver()" style="background:#f8fafc; border:1px solid #cbd5e1; color:#334155; padding:6px 10px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:3px;">
@@ -4014,7 +4014,7 @@
                             <div style="display:flex; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:0 10px;">
                                 <span class="material-symbols-outlined" style="color:#0f766e; font-size:20px; margin-right:8px;">directions_car</span>
                                 <select id="bbm-input-armada" style="flex:1; padding:9px 0; border:none; background:transparent; font-size:12px; font-weight:700; color:#1e293b; outline:none; cursor:pointer;">
-                                    <option value="D 8070 UE">D 8070 UE (Supir: Hilman)</option>
+                                    <option value="D 8707 UE">D 8707 UE (Supir: Hilman)</option>
                                     <option value="D 8142 UK">D 8142 UK (Supir: Adi)</option>
                                     <option value="Truk">Truk Ekspedisi</option>
                                 </select>
@@ -4083,126 +4083,20 @@
             </div>
         </div>
 
-        <!-- ================= HALAMAN MONITORING TRIP & INSENTIF (SISI ADMIN) ================= -->
+        <!-- ================= HALAMAN LOG & PERAWATAN ARMADA (SISI ADMIN) ================= -->
         <div id="page-trip" class="container hidden">
             <h2 style="display:flex; justify-content:center; align-items:center; gap:8px; color:#1e40af;">
-                <span class="material-symbols-outlined" style="font-size:28px; color:#2563eb;">local_shipping</span> Monitoring Pengiriman & Insentif
+                <span class="material-symbols-outlined" style="font-size:28px; color:#2563eb;">local_shipping</span> Log & Perawatan Armada CBL
             </h2>
-            <div class="sub-header" style="margin-bottom:15px;">Pantau Armada, Pengiriman Truk & Rekapitulasi Insentif Karyawan</div>
+            <div class="sub-header" style="margin-bottom:15px;">Tracking Rute Pengiriman, Beban Muatan Armada & Biaya Operasional</div>
 
-            <!-- Tabs Admin -->
-            <div style="display:flex; gap:8px; margin-bottom:15px; border-bottom:2px solid #e2e8f0; padding-bottom:8px; overflow-x:auto;">
-                <button id="tab-adm-antrean" class="btn-tab-trip active" onclick="switchAdminTripTab('antrean')" style="flex:1; min-width:140px; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 14px; font-weight:600; font-size:12px; border-radius:10px; border:none; cursor:pointer; background:#2563eb; color:white;">
-                    <span class="material-symbols-outlined" style="font-size:18px;">list_alt</span> Antrean DO & Muat Truk
-                </button>
-                <button id="tab-adm-monitor" class="btn-tab-trip" onclick="switchAdminTripTab('monitor')" style="flex:1; min-width:140px; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 14px; font-weight:600; font-size:12px; border-radius:10px; border:none; cursor:pointer; background:#f1f5f9; color:#475569;">
-                    <span class="material-symbols-outlined" style="font-size:18px;">equalizer</span> Live Monitoring & Barometer
-                </button>
-                <button id="tab-adm-payroll" class="btn-tab-trip" onclick="switchAdminTripTab('payroll')" style="flex:1; min-width:140px; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 14px; font-weight:600; font-size:12px; border-radius:10px; border:none; cursor:pointer; background:#f1f5f9; color:#475569;">
-                    <span class="material-symbols-outlined" style="font-size:18px;">payments</span> Rekapitulasi Gaji & Tutup Periode
-                </button>
-                <button id="tab-adm-bbm" class="btn-tab-trip" onclick="switchAdminTripTab('bbm')" style="flex:1; min-width:140px; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 14px; font-weight:600; font-size:12px; border-radius:10px; border:none; cursor:pointer; background:#f1f5f9; color:#475569;">
-                    <span class="material-symbols-outlined" style="font-size:18px;">local_shipping</span> Log & Perawatan Armada
-                </button>
-            </div>
+            <!-- DUMMY COMPATIBILITY HOOKS (HIDDEN) -->
+            <div id="tab-adm-monitor" style="display:none;"></div>
+            <div id="tab-adm-bbm" style="display:none;"></div>
+            <div id="view-adm-monitor" class="hidden"><div id="admin-monitoring-cards"></div></div>
 
-            <!-- TAB 1: ANTREAN DO & MUAT TRUK -->
-            <div id="view-adm-antrean" class="view-adm-content">
-                <div style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 2px 4px rgba(0,0,0,0.03);">
-                    <div style="background:#f8fafc; padding:12px 14px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <span style="font-size:13px; font-weight:800; color:#1e293b;">Daftar Pesanan Konsumen Menunggu Pengiriman</span>
-                            <div style="font-size:11px; color:#64748b;">Orderan besar dapat langsung diberangkatkan menggunakan Truk oleh Admin di sini.</div>
-                        </div>
-                    </div>
-                    <div style="overflow-x:auto;">
-                        <table style="width:100%; border-collapse:collapse; font-size:11px;">
-                            <thead style="background:#f1f5f9;">
-                                <tr>
-                                    <th style="padding:10px; text-align:left;">Konsumen / Relasi</th>
-                                    <th style="padding:10px; text-align:left;">Rincian Pakan</th>
-                                    <th style="padding:10px; text-align:right;">Sisa (Kg)</th>
-                                    <th style="padding:10px; text-align:left;">Alamat</th>
-                                    <th style="padding:10px; text-align:center;">Aksi Pengiriman</th>
-                                </tr>
-                            </thead>
-                            <tbody id="admin-antrean-tbody">
-                                <tr><td colspan="5" style="text-align:center; padding:25px; color:#94a3b8;">Memuat data antrean DO...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TAB 2: LIVE MONITORING & BAROMETER -->
-            <div id="view-adm-monitor" class="view-adm-content hidden">
-                <!-- Barometer 100% Stacked Bar -->
-                <div id="admin-barometer-container"></div>
-                <!-- Kartu Armada di Jalan -->
-                <h4 style="margin:15px 0 10px 0; font-size:13px; font-weight:800; color:#1e293b;">Armada Berangkat & Selesai Hari Ini</h4>
-                <div id="admin-monitoring-cards"></div>
-            </div>
-
-            <!-- TAB 3: REKAPITULASI GAJI & TUTUP PERIODE -->
-            <div id="view-adm-payroll" class="view-adm-content hidden">
-                <div style="background:#ffffff; padding:16px; border-radius:12px; border:1px solid #e2e8f0; margin-bottom:15px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-                        <div>
-                            <div style="display:flex; align-items:center; gap:8px;">
-                                <h4 style="margin:0; font-size:15px; font-weight:800; color:#1e293b;">Rekapitulasi Upah & Insentif Karyawan</h4>
-                                <span id="admin-payroll-badge-periode" style="background:#eff6ff; color:#1d4ed8; font-size:11px; font-weight:700; padding:2px 8px; border-radius:12px; border:1px solid #bfdbfe;">Periode: Bulan Ini</span>
-                            </div>
-                            <p style="margin:4px 0 0 0; font-size:11px; color:#64748b;">Insentif Kirim Pick-Up Flat Rp 15/kg (dibagi rata kru trip) & Kru Muat Truk/Mandiri Rp 15/kg</p>
-                        </div>
-                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                            <!-- Filter Pill: Mingguan | Bulanan | Tahunan -->
-                            <div style="display:inline-flex; background:#f1f5f9; padding:3px; border-radius:8px; border:1px solid #cbd5e1;">
-                                <button type="button" id="btn-adm-pay-mingguan" onclick="setAdminPayrollFilter('mingguan')" style="padding:6px 12px; border:none; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; background:transparent; color:#64748b;">Mingguan</button>
-                                <button type="button" id="btn-adm-pay-bulanan" onclick="setAdminPayrollFilter('bulanan')" style="padding:6px 12px; border:none; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; background:#2563eb; color:#ffffff;">Bulanan</button>
-                                <button type="button" id="btn-adm-pay-tahunan" onclick="setAdminPayrollFilter('tahunan')" style="padding:6px 12px; border:none; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; background:transparent; color:#64748b;">Tahunan</button>
-                            </div>
-                            <button type="button" onclick="tutupPeriodeDanCairkanToples()" style="background:#dc2626; color:white; border:none; padding:7px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(220,38,38,0.25);">
-                                <span class="material-symbols-outlined" style="font-size:15px;">lock_reset</span> Cairkan & Tutup Periode
-                            </button>
-                            <button type="button" onclick="window.print()" style="background:#15803d; color:white; border:none; padding:7px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(21,128,61,0.25);">
-                                <span class="material-symbols-outlined" style="font-size:15px;">print</span> Cetak Rekap
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
-                    <div style="overflow-x:auto;">
-                        <table style="width:100%; border-collapse:collapse; font-size:11px;">
-                            <thead style="background:#1e40af; color:white;">
-                                <tr>
-                                    <th style="padding:10px 8px; text-align:left;">Nama Karyawan</th>
-                                    <th style="padding:10px 6px; text-align:left;">Role</th>
-                                    <th style="padding:10px 8px; text-align:right;">Dimuat (Kg)</th>
-                                    <th style="padding:10px 8px; text-align:right;">Diantar (Kg)</th>
-                                    <th style="padding:10px 8px; text-align:right;">Upah Muat (15/kg)</th>
-                                    <th style="padding:10px 8px; text-align:right;">Solar Truk</th>
-                                    <th style="padding:10px 8px; text-align:right; font-weight:800; background:#1e3a8a;">Total Bersih</th>
-                                    <th style="padding:10px 8px; text-align:center; width:130px; background:#1e3a8a;">Aksi Cetak</th>
-                                </tr>
-                            </thead>
-                            <tbody id="admin-payroll-tbody">
-                                <tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8;">Memuat data insentif...</td></tr>
-                            </tbody>
-                            <tfoot style="background:#f1f5f9; font-weight:800; border-top:2px solid #cbd5e1;">
-                                <tr>
-                                    <td colspan="6" style="padding:10px 8px; text-align:right;">GRAND TOTAL PERIODE:</td>
-                                    <td id="admin-payroll-tfoot" style="padding:10px 8px; text-align:right; color:#15803d; font-size:13px;">Rp 0</td>
-                                    <td></td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TAB 4: LOG & PERAWATAN ARMADA (SISI ADMIN) -->
-            <div id="view-adm-bbm" class="view-adm-content hidden">
+            <!-- UNIFIED VIEW: LOG & PERAWATAN ARMADA -->
+            <div id="view-adm-bbm" class="view-adm-content">
                 <div style="background:#ffffff; padding:16px; border-radius:12px; border:1px solid #e2e8f0; margin-bottom:15px; box-shadow:0 2px 4px rgba(0,0,0,0.03);">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                         <div>
@@ -4226,8 +4120,8 @@
                         <button type="button" class="btn-filter-armada active" data-armada="all" onclick="filterLogArmada('all')" style="padding:6px 14px; font-size:11px; font-weight:700; border-radius:20px; border:1px solid #2563eb; background:#eff6ff; color:#1d4ed8; cursor:pointer;">
                             Semua Armada
                         </button>
-                        <button type="button" class="btn-filter-armada" data-armada="D 8070 UE" onclick="filterLogArmada('D 8070 UE')" style="padding:6px 14px; font-size:11px; font-weight:700; border-radius:20px; border:1px solid #cbd5e1; background:#ffffff; color:#475569; cursor:pointer;">
-                            D 8070 UE
+                        <button type="button" class="btn-filter-armada" data-armada="D 8707 UE" onclick="filterLogArmada('D 8707 UE')" style="padding:6px 14px; font-size:11px; font-weight:700; border-radius:20px; border:1px solid #cbd5e1; background:#ffffff; color:#475569; cursor:pointer;">
+                            D 8707 UE
                         </button>
                         <button type="button" class="btn-filter-armada" data-armada="D 8142 UK" onclick="filterLogArmada('D 8142 UK')" style="padding:6px 14px; font-size:11px; font-weight:700; border-radius:20px; border:1px solid #cbd5e1; background:#ffffff; color:#475569; cursor:pointer;">
                             D 8142 UK
@@ -4238,7 +4132,41 @@
                     </div>
                 </div>
 
-                <!-- KPI Summary Box -->
+                <!-- 1. BAROMETER KESEIMBANGAN PICK-UP (DIJADIKAN SATU DI SINI) -->
+                <div id="admin-barometer-container"></div>
+
+                <!-- 2. FILTER BAR: PERIODE (MINGGUAN / BULANAN / TAHUNAN) & CARI TUJUAN DENGAN REKOMENDASI -->
+                <div style="background:#ffffff; padding:12px 16px; border-radius:12px; border:1px solid #e2e8f0; margin-bottom:15px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                    <!-- Filter Periode Waktu -->
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span style="font-size:11px; font-weight:700; color:#475569; display:flex; align-items:center; gap:4px;">
+                            <span class="material-symbols-outlined" style="font-size:16px; color:#2563eb;">calendar_month</span> Periode:
+                        </span>
+                        <div style="display:inline-flex; background:#f1f5f9; padding:3px; border-radius:8px; gap:4px;">
+                            <button type="button" id="btn-period-mingguan" onclick="setArmadaPeriodFilter('mingguan')" style="padding:5px 12px; font-size:11px; font-weight:700; border:none; border-radius:6px; cursor:pointer; background:transparent; color:#64748b;">Mingguan</button>
+                            <button type="button" id="btn-period-bulanan" onclick="setArmadaPeriodFilter('bulanan')" style="padding:5px 12px; font-size:11px; font-weight:700; border:none; border-radius:6px; cursor:pointer; background:#2563eb; color:white;">Bulanan</button>
+                            <button type="button" id="btn-period-tahunan" onclick="setArmadaPeriodFilter('tahunan')" style="padding:5px 12px; font-size:11px; font-weight:700; border:none; border-radius:6px; cursor:pointer; background:transparent; color:#64748b;">Tahunan</button>
+                        </div>
+                        <span id="badge-armada-period-label" style="font-size:10px; font-weight:700; color:#0f766e; background:#ccfbf1; padding:3px 8px; border-radius:12px;">Bulan Ini</span>
+                    </div>
+
+                    <!-- Filter Tujuan (Autocomplete / Rekomendasi Ketik) -->
+                    <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:240px; max-width:400px;">
+                        <span style="font-size:11px; font-weight:700; color:#475569; display:flex; align-items:center; gap:4px; white-space:nowrap;">
+                            <span class="material-symbols-outlined" style="font-size:16px; color:#0f766e;">location_on</span> Tujuan:
+                        </span>
+                        <div style="position:relative; width:100%;">
+                            <input type="text" id="filter-armada-tujuan" list="list-tujuan-armada" placeholder="Ketik tujuan / peternak..." oninput="onTujuanFilterChange(this.value)" style="width:100%; box-sizing:border-box; padding:6px 28px 6px 10px; font-size:11px; font-weight:600; border:1px solid #cbd5e1; border-radius:8px; outline:none; background:#f8fafc;">
+                            <span class="material-symbols-outlined" style="position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:16px; color:#94a3b8; pointer-events:none;">search</span>
+                            <datalist id="list-tujuan-armada"></datalist>
+                        </div>
+                        <button type="button" onclick="clearTujuanFilter()" title="Reset Filter Tujuan" style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:5px 8px; font-size:11px; color:#64748b; cursor:pointer; display:flex; align-items:center;">
+                            <span class="material-symbols-outlined" style="font-size:15px;">close</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3. KPI Summary Box -->
                 <div id="admin-bbm-summary"></div>
 
                 <!-- Sub-tab Navigasi Antara Biaya/Servis vs Riwayat Perjalanan -->
@@ -4931,17 +4859,22 @@
                         <span class="material-symbols-outlined"
                             style="font-size:30px; color:#8AA624;">local_shipping</span>
                     </div>
-                    <h3 style="margin:0; font-size:18px;">Konfirmasi Pengiriman</h3>
+                    <h3 style="margin:0; font-size:18px;">Pilih Armada Pengantar</h3>
+                    <div style="font-size:11px; opacity:0.9; margin-top:3px;">Pilih armada pengantaran atau ambil mandiri</div>
                 </div>
                 <div
                     style="padding:15px; display:flex; flex-direction:column; gap:8px; background:#fff; border-top:1px solid #eee;">
-                    <button class="btn-submit" onclick="prosesOngkirKirim()"
-                        style="margin:0; background:#8AA624; padding:12px; font-size: 16px;">
-                        Dikirim
+                    <button class="btn-submit" onclick="prosesOngkirArmada('D 8707 UE')"
+                        style="margin:0; background:#2563eb; padding:12px; font-size: 15px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                        <span class="material-symbols-outlined">local_shipping</span> D 8707 UE (Pak Hilman)
+                    </button>
+                    <button class="btn-submit" onclick="prosesOngkirArmada('D 8142 UK')"
+                        style="margin:0; background:#ea580c; padding:12px; font-size: 15px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                        <span class="material-symbols-outlined">local_shipping</span> D 8142 UK (Pak Adi)
                     </button>
                     <button class="btn-submit" onclick="prosesOngkirAmbil()"
-                        style="margin:0; background:#FEA405; padding:12px; font-size: 16px;">
-                        Diambil
+                        style="margin:0; background:#64748b; padding:11px; font-size: 14px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                        <span class="material-symbols-outlined">storefront</span> Diambil Mandiri di Gudang
                     </button>
                 </div>
             </div>
@@ -6520,6 +6453,88 @@ async function prosesAntreanBackground() {
             let totalKgBongkar = 0;
 
             // ===============================================
+            // DETEKSI ARMADA & CATAT KE trip_pengiriman
+            // ===============================================
+            let targetArmada = pl.armada || (pl.isAmbilMandiri ? 'Ambil Mandiri' : null);
+            if (!targetArmada && pl.catatan) {
+                if (pl.catatan.includes('8707') || pl.catatan.includes('8070')) targetArmada = 'D 8707 UE';
+                else if (pl.catatan.includes('8142')) targetArmada = 'D 8142 UK';
+                else if (pl.catatan.toLowerCase().includes('ambil')) targetArmada = 'Ambil Mandiri';
+            }
+
+            let createdTripId = pl.createdTripId || null;
+            // Catat ke trip_pengiriman HANYA jika menggunakan armada pengantaran fisik CBL (D 8707 UE / D 8142 UK)
+            if (!createdTripId && targetArmada && targetArmada !== 'Ambil Mandiri') {
+                try {
+                    let totalKgMuatan = 0;
+                    let manifestItems = [];
+                    if (pl.items) {
+                        for (let pName in pl.items) {
+                            let q = parseFloat(pl.items[pName]) || 0;
+                            totalKgMuatan += q;
+                            manifestItems.push({
+                                relasi: pl.relasi || 'Umum',
+                                pakan: pName,
+                                qty: q
+                            });
+                        }
+                    }
+                    let tglTrip = pl.tanggal || new Date().toISOString().split('T')[0];
+
+                    // Hitung urutan rit hari ini secara dinamis untuk armada ini
+                    let nextRit = 1;
+                    try {
+                        let resCount = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?tanggal=eq.${tglTrip}&armada=eq.${encodeURIComponent(targetArmada)}&select=id`, {
+                            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+                        });
+                        if (resCount.ok) {
+                            let tripsHariIni = await resCount.json();
+                            nextRit = (Array.isArray(tripsHariIni) ? tripsHariIni.length : 0) + 1;
+                        }
+                    } catch (errCount) {}
+
+                    let tripPayload = {
+                        tanggal: tglTrip,
+                        cabang: cabangStr,
+                        armada: targetArmada,
+                        urutan_rit: nextRit,
+                        total_kg: totalKgMuatan,
+                        jarak_tempuh_km: 0,
+                        status_trip: 'SELESAI',
+                        catatan: pl.catatan || `${targetArmada} (Rit ${nextRit}) - ${pl.relasi}`,
+                        manifest_items: manifestItems
+                    };
+
+                    // Hubungkan supir default jika armada pick-up CBL
+                    if (targetArmada.includes('8707') || targetArmada.includes('8070')) tripPayload.sopir_user_id = 6; // Pak Hilman
+                    else if (targetArmada.includes('8142')) tripPayload.sopir_user_id = 7; // Pak Adi
+
+                    let resTrip = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman`, {
+                        method: 'POST',
+                        headers: {
+                            'apikey': SUPA_ANON_KEY,
+                            'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                            'Content-Type': 'application/json',
+                            'Prefer': 'return=representation', // 🔥 Minta balik row yang dibuat agar dapat ID-nya
+                            'x-pin-karyawan': currentLoggedPin
+                        },
+                        body: JSON.stringify(tripPayload)
+                    });
+
+                    if (resTrip.ok) {
+                        let createdData = await resTrip.json();
+                        if (Array.isArray(createdData) && createdData[0]?.id) {
+                            createdTripId = createdData[0].id;
+                            pl.createdTripId = createdTripId;
+                            try { localStorage.setItem('antrian_pakan', JSON.stringify(antrian)); } catch (eSave) {}
+                        }
+                    }
+                } catch (errTrip) {
+                    console.error("Gagal catat trip pengiriman armada:", errTrip);
+                }
+            }
+
+            // ===============================================
             // 2. URAIKAN DATA PAKAN
             // ===============================================
             for (let pakanName in pl.items) {
@@ -6554,7 +6569,9 @@ async function prosesAntreanBackground() {
                     hash_str: pl.hashStr + '_' + pakanName,
                     device_id: pl.device_id || null,
                     po_id: pl.po_id || null,
-                    target_batch_id: detail && detail.target_batch_id ? detail.target_batch_id : null
+                    target_batch_id: detail && detail.target_batch_id ? detail.target_batch_id : null,
+                    armada: targetArmada || null,
+                    trip_id: createdTripId || null
                 });
             }
 
@@ -6581,7 +6598,9 @@ async function prosesAntreanBackground() {
                     hash_str: (pl.hashStr || '') + '_ONGKIR',
                     device_id: pl.device_id || null,
                     po_id: pl.po_id || null,
-                    target_batch_id: null
+                    target_batch_id: null,
+                    armada: targetArmada || null,
+                    trip_id: createdTripId || null
                 });
             }
 
@@ -6624,57 +6643,6 @@ async function prosesAntreanBackground() {
             if (resPakan.ok) {
                 let payloads = payloadsToProcess;
                 await cekUpdateStatusPOLinked(payloads);
-
-                // 🔥 JIKA ADA AMBIL SENDIRI DI GUDANG: CATAT KE trip_pengiriman AGAR MASUK INSENTIF MUAT & BEBAS DARI ANTREAN SUPIR
-                for (let pl of payloads) {
-                    if (pl.isAmbilMandiri) {
-                        try {
-                            let totalKgAmbil = 0;
-                            let manifestItems = [];
-                            if (pl.items) {
-                                for (let pName in pl.items) {
-                                    let q = parseFloat(pl.items[pName]) || 0;
-                                    totalKgAmbil += q;
-                                    manifestItems.push({
-                                        relasi: pl.relasi || 'Umum',
-                                        pakan: pName,
-                                        qty: q
-                                    });
-                                }
-                            }
-                            let mapLoc = { '/pm': 'PM', '/spn': 'SPN', '/rph': 'RPH', '/kandang': 'PM', '/spn_kandang': 'SPN' };
-                            let cabangStr = mapLoc[pl.lokasi] || 'PM';
-
-                            let tripPayload = {
-                                tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
-                                cabang: cabangStr,
-                                armada: 'Ambil Mandiri',
-                                total_kg: totalKgAmbil,
-                                jarak_tempuh_km: 0,
-                                uang_jalan_sopir: 0,
-                                pekerja_muat_ids: pl.pekerjaMuatAmbilIds || [],
-                                status_trip: 'SELESAI',
-                                status_klaim: 'BELUM_KLAIM',
-                                catatan: pl.catatan || `Ambil Sendiri di Gudang - ${pl.relasi}`,
-                                manifest_items: manifestItems
-                            };
-
-                            await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman`, {
-                                method: 'POST',
-                                headers: {
-                                    'apikey': SUPA_ANON_KEY,
-                                    'Authorization': `Bearer ${SUPA_ANON_KEY}`,
-                                    'Content-Type': 'application/json',
-                                    'Prefer': 'return=minimal',
-                                    'x-pin-karyawan': currentLoggedPin
-                                },
-                                body: JSON.stringify(tripPayload)
-                            });
-                        } catch (errTrip) {
-                            console.error("Gagal catat trip ambil mandiri:", errTrip);
-                        }
-                    }
-                }
 
                 // 📡 Broadcast sinyal data baru ke seluruh perangkat online
                 if (typeof broadcastRealtimeUpdate === 'function') {
@@ -7127,11 +7095,11 @@ function aturAksesMenu(role) {
                 if (typeof initModulTripAdmin === 'function') {
                     initModulTripAdmin().then(() => {
                         if (typeof switchAdminTripTab === 'function') {
-                            switchAdminTripTab('antrean');
+                            switchAdminTripTab('monitor');
                         }
                     });
                 } else if (typeof switchAdminTripTab === 'function') {
-                    switchAdminTripTab('antrean');
+                    switchAdminTripTab('monitor');
                 }
                 return;
             }
@@ -8688,6 +8656,7 @@ function aturAksesMenu(role) {
                         arrNota.forEach(n => { sumTagihanLayar += n.totalTagihan; });
                         let sumBayarLayar = 0;
                         listBayar.forEach(b => { sumBayarLayar += b.nominal; });
+
 
                         let sisaHutangTersembunyi = (sisaPiutangDB + sumBayarLayar) - sumTagihanLayar;
                         if (sisaHutangTersembunyi < 0) sisaHutangTersembunyi = 0;
@@ -11122,7 +11091,13 @@ function renderLiveStokDiInput() {
         let pendingStatusPilihan = "";
 
         window.tempKirimMode = null;
-        function prosesOngkirKirim() {
+        window.tempSelectedArmada = null;
+        window.tempIsAmbilMandiri = false;
+
+        function prosesOngkirArmada(armada) {
+            window.tempSelectedArmada = armada;
+            window.tempIsAmbilMandiri = false;
+
             // Hitung total tonase (Kg) dari form yang diinput
             let grandTotalKg = 0;
             if (typeof currentItems !== 'undefined') {
@@ -11141,122 +11116,48 @@ function renderLiveStokDiInput() {
             let calculatedOngkir = multiples * 50000;
 
             let inputOngkirEl = document.getElementById('ongkir');
-            inputOngkirEl.value = calculatedOngkir;
-            document.getElementById('modal-ongkir').classList.add('hidden');
-            if (typeof formatOngkir === 'function') formatOngkir(inputOngkirEl);
+            if (inputOngkirEl) {
+                inputOngkirEl.value = calculatedOngkir;
+                if (typeof formatOngkir === 'function') formatOngkir(inputOngkirEl);
+            }
+
+            let modalEl = document.getElementById('modal-ongkir');
+            if (modalEl) modalEl.classList.add('hidden');
             kirimData(window.tempKirimMode, true);
         }
+
         function prosesOngkirAmbil() {
-            document.getElementById('modal-ongkir').classList.add('hidden');
-            bukaModalMuatAmbilMandiri();
+            window.tempSelectedArmada = 'Ambil Mandiri';
+            window.tempIsAmbilMandiri = true;
+
+            // Ongkir = 0
+            let inputOngkirEl = document.getElementById('ongkir');
+            if (inputOngkirEl) {
+                inputOngkirEl.value = 0;
+                if (typeof formatOngkir === 'function') formatOngkir(inputOngkirEl);
+            }
+
+            let modalEl = document.getElementById('modal-ongkir');
+            if (modalEl) modalEl.classList.add('hidden');
+            // Langsung kirim TANPA memunculkan pop up insentif muat!
+            kirimData(window.tempKirimMode, true);
         }
 
-        async function bukaModalMuatAmbilMandiri() {
-            let grandTotalKg = 0;
-            let itemsDetail = [];
-            if (typeof currentItems !== 'undefined') {
-                currentItems.forEach(function (item, index) {
-                    let el = document.getElementById('qty-' + index);
-                    if (el) {
-                        let qty = parseFloat(el.getAttribute('data-total')) || 0;
-                        if (qty > 0) {
-                            grandTotalKg += qty;
-                            itemsDetail.push({ pakan: item.nama, qty: qty });
-                        }
-                    }
-                });
-            }
-
-            let nf = new Intl.NumberFormat('id-ID');
-            let totalUpah = grandTotalKg * 15; // Rp 15 / kg
-
-            let elKg = document.getElementById('label-ambil-total-kg');
-            let elUpah = document.getElementById('label-ambil-total-upah');
-            if (elKg) elKg.innerText = `${nf.format(grandTotalKg)} Kg`;
-            if (elUpah) elUpah.innerText = `Rp ${nf.format(totalUpah)}`;
-
-            let container = document.getElementById('ambil-petugas-checkboxes');
-            if (container) {
-                container.innerHTML = `<div style="padding:10px; color:#64748b; font-size:11px;">Memuat daftar petugas...</div>`;
-                let users = (window.tripState && window.tripState.cachedUsers && window.tripState.cachedUsers.length > 0)
-                    ? window.tripState.cachedUsers
-                    : await (async () => {
-                        try {
-                            let res = await fetch(`${SUPA_URL}/rest/v1/users_app?select=id,nama,role`, {
-                                headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
-                            });
-                            return res.ok ? await res.json() : [];
-                        } catch (e) { return []; }
-                    })();
-
-                // Daftar khusus staf operasional muat gudang yang diminta
-                const DAFTAR_TARGET_AMBIL = [
-                    { label: 'Pak Agus', query: 'agus', fallbackId: 3, role: 'Petugas PM' },
-                    { label: 'Hilman', query: 'hilman', fallbackId: 6, role: 'Sopir' },
-                    { label: 'Adi', query: 'adi', fallbackId: 7, role: 'Sopir' },
-                    { label: 'Enggeng', query: 'enggeng', fallbackId: 8, role: 'Kernek' },
-                    { label: 'Mang Oboy', query: 'oboy', fallbackId: 10, role: 'Kernek' },
-                    { label: 'Eja', query: 'eja', fallbackId: 11, role: 'Petugas Kandang PM' },
-                    { label: 'Wildan', query: 'wildan', fallbackId: 1, role: 'Admin' }
-                ];
-
-                let listPetugas = DAFTAR_TARGET_AMBIL.map(t => {
-                    let matched = users.find(u => (u.nama || '').toLowerCase().includes(t.query));
-                    return {
-                        id: matched ? matched.id : t.fallbackId,
-                        nama: t.label,
-                        namaLengkap: matched ? matched.nama : t.label,
-                        role: matched ? (matched.role || t.role) : t.role
-                    };
-                });
-
-                // Default KOSONG (tidak auto centang staf tertentu)
-                container.innerHTML = listPetugas.map(u => {
-                    return `
-                        <label style="display:inline-flex; align-items:center; gap:6px; background:#ffffff; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; margin:2px; user-select:none;">
-                            <input type="checkbox" class="cb-ambil-petugas" value="${u.id}" data-nama="${u.nama}" style="accent-color:#ea580c; cursor:pointer; width:15px; height:15px;">
-                            <span>${u.nama} <small style="color:#64748b; font-size:9px;">(${u.role})</small></span>
-                        </label>
-                    `;
-                }).join('');
-            }
-
-            window.tempAmbilTotalKg = grandTotalKg;
-            window.tempAmbilItemsDetail = itemsDetail;
-            document.getElementById('modal-muat-ambil-mandiri').classList.remove('hidden');
+        function bukaModalMuatAmbilMandiri() {
+            prosesOngkirAmbil();
         }
 
         function konfirmasiMuatAmbilMandiri(adaInsentif) {
-            document.getElementById('modal-muat-ambil-mandiri').classList.add('hidden');
-            let kruIds = [];
-            let kruNames = [];
-
-            if (adaInsentif) {
-                let cbs = document.querySelectorAll('.cb-ambil-petugas:checked');
-                cbs.forEach(c => {
-                    kruIds.push(parseInt(c.value));
-                    kruNames.push(c.dataset.nama);
-                });
-
-                if (kruIds.length === 0) {
-                    let lanjut = confirm("Anda belum memilih petugas yang bantu muat. Lanjutkan tanpa insentif muat?");
-                    if (!lanjut) {
-                        document.getElementById('modal-muat-ambil-mandiri').classList.remove('hidden');
-                        return;
-                    }
-                }
-            }
-
-            window.tempAmbilMandiriData = {
-                isAmbil: true,
-                kruIds: kruIds,
-                kruNames: kruNames,
-                totalKg: window.tempAmbilTotalKg || 0,
-                itemsDetail: window.tempAmbilItemsDetail || []
-            };
-
-            kirimData(window.tempKirimMode, true);
+            prosesOngkirAmbil();
         }
+
+        function prosesOngkirKirim() {
+            prosesOngkirArmada('D 8707 UE');
+        }
+
+        window.prosesOngkirArmada = prosesOngkirArmada;
+        window.prosesOngkirAmbil = prosesOngkirAmbil;
+        window.bukaModalMuatAmbilMandiri = bukaModalMuatAmbilMandiri;
 
         function kirimData(mode = 'langsung', skipOngkirModal = false) {
             tutupKeyboard();
@@ -11333,14 +11234,21 @@ function renderLiveStokDiInput() {
                 po_id: window.currentLinkedPOId
             };
 
-            if (window.tempAmbilMandiriData && window.tempAmbilMandiriData.isAmbil) {
+            if (window.tempSelectedArmada) {
+                if (window.tempSelectedArmada === 'Ambil Mandiri' || window.tempIsAmbilMandiri) {
+                    payload.isAmbilMandiri = true;
+                    payload.armada = 'Ambil Mandiri';
+                    payload.catatan = `[AMBIL SENDIRI DI GUDANG] ` + (payload.catatan || '');
+                } else {
+                    payload.armada = window.tempSelectedArmada;
+                    payload.catatan = `[KIRIM ${window.tempSelectedArmada}] ` + (payload.catatan || '');
+                }
+                window.tempSelectedArmada = null; // reset
+                window.tempIsAmbilMandiri = false;
+            } else if (window.tempAmbilMandiriData && window.tempAmbilMandiriData.isAmbil) {
                 payload.isAmbilMandiri = true;
-                payload.pekerjaMuatAmbilIds = window.tempAmbilMandiriData.kruIds || [];
-                payload.pekerjaMuatAmbilNames = window.tempAmbilMandiriData.kruNames || [];
-                payload.itemsDetailAmbil = window.tempAmbilMandiriData.itemsDetail || [];
-                
-                let kruStr = payload.pekerjaMuatAmbilNames.length > 0 ? ` (Bantu Muat: ${payload.pekerjaMuatAmbilNames.join(', ')})` : ' (Muat Sendiri)';
-                payload.catatan = `[AMBIL SENDIRI DI GUDANG${kruStr}] ` + (payload.catatan || '');
+                payload.armada = 'Ambil Mandiri';
+                payload.catatan = `[AMBIL SENDIRI DI GUDANG] ` + (payload.catatan || '');
                 window.tempAmbilMandiriData = null; // reset
             }
 

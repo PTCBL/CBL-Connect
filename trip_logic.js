@@ -24,7 +24,7 @@ window.tripState = {
     customEndDate: '',
     
     // State Khusus Driver / Kernek
-    currentArmada: 'D 8070 UE',
+    currentArmada: 'D 8707 UE',
     selectedKernekId: null,
     currentLegOrigin: null, // { lat, lng, namaTitik }
     activeTripItem: null,   // Trip yang sedang berjalan
@@ -477,17 +477,17 @@ async function initDriverPortal() {
         else btnArmadaTop.classList.remove('hidden');
     }
 
-    // Default Armada sesuai supir yang login: Adi -> D 8142 UK, Hilman -> D 8070 UE
+    // Default Armada sesuai supir yang login: Adi -> D 8142 UK, Hilman -> D 8707 UE
     let myNameLower = (activeUser || '').toLowerCase();
     let armadaDesc = 'Grand Max Pick-up';
     if (myNameLower.includes('adi')) {
         window.tripState.currentArmada = 'D 8142 UK';
         armadaDesc = 'Pick-up Putih';
     } else if (myNameLower.includes('hilman')) {
-        window.tripState.currentArmada = 'D 8070 UE';
+        window.tripState.currentArmada = 'D 8707 UE';
         armadaDesc = 'Grand Max Pick-up';
     } else {
-        window.tripState.currentArmada = 'D 8070 UE';
+        window.tripState.currentArmada = 'D 8707 UE';
     }
 
     let elArmadaName = document.getElementById('driver-portal-armada-name');
@@ -631,7 +631,7 @@ function renderArmadaKernekPills() {
     }
 
     // Sinkronkan styling pill armada aktif di DOM
-    let curArmada = window.tripState.currentArmada || 'D 8070 UE';
+    let curArmada = window.tripState.currentArmada || 'D 8707 UE';
     document.querySelectorAll('.btn-pill-armada').forEach(b => {
         let isSel = (b.dataset.armada === curArmada);
         b.style.background = isSel ? '#2563eb' : '#f1f5f9';
@@ -800,12 +800,12 @@ function selectPartnerChip(userId, type) {
         } else {
             window.tripState.selectedSopirId = userId;
             // Jika kernek memilih supir Adi -> Armada otomatis D 8142 UK
-            // Jika kernek memilih supir Hilman -> Armada otomatis D 8070 UE
+            // Jika kernek memilih supir Hilman -> Armada otomatis D 8707 UE
             let selUser = (window.tripState.cachedUsers || []).find(u => u.id === userId);
             if (selUser) {
                 let sName = (selUser.nama || '').toLowerCase();
                 if (sName.includes('adi')) selectArmadaPill('D 8142 UK');
-                else if (sName.includes('hilman')) selectArmadaPill('D 8070 UE');
+                else if (sName.includes('hilman')) selectArmadaPill('D 8707 UE');
             }
         }
     } else if (type === 'kernek_extra') {
@@ -1133,7 +1133,7 @@ async function mulaiAntarKonsumen(safeKey, namaRelasi) {
         return alert("Pilih / masukkan minimal 1 jenis pakan dengan muatan lebih dari 0 Kg!");
     }
 
-    let armada = window.tripState.currentArmada || 'D 8070 UE';
+    let armada = window.tripState.currentArmada || 'D 8707 UE';
     let meUser = (window.tripState.cachedUsers || []).find(u => u.nama === activeUser);
     let myRole = (meUser?.role || (typeof currentRole !== 'undefined' ? currentRole : '') || 'sopir').toLowerCase();
 
@@ -1176,20 +1176,32 @@ async function mulaiAntarKonsumen(safeKey, namaRelasi) {
         gpsStart.lng = window.tripState.currentLegOrigin.lng;
     }
 
+    let tglToday = new Date().toISOString().split('T')[0];
+    let nextRit = 1;
+    try {
+        let resCount = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?tanggal=eq.${tglToday}&armada=eq.${encodeURIComponent(armada)}&select=id`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        });
+        if (resCount.ok) {
+            let tripsHariIni = await resCount.json();
+            nextRit = (Array.isArray(tripsHariIni) ? tripsHariIni.length : 0) + 1;
+        }
+    } catch (e) {}
+
     let payloadTrip = {
-        tanggal: new Date().toISOString().split('T')[0],
+        tanggal: tglToday,
         cabang: 'PM',
         armada: armada,
+        urutan_rit: nextRit,
         sopir_user_id: sopirId,
         kernek_1_user_id: kernek1Id,
         kernek_2_user_id: kernek2Id,
         total_kg: totalKg,
         status_trip: 'BERANGKAT',
-        status_klaim: 'BELUM_KLAIM',
         waktu_berangkat: new Date().toISOString(),
         lat_start: gpsStart.lat,
         lng_start: gpsStart.lng,
-        catatan: `Antar ke ${namaRelasi}: ${rincianPakanText.join(', ')}`,
+        catatan: `(Rit ${nextRit}) Antar ke ${namaRelasi}: ${rincianPakanText.join(', ')}`,
         manifest_items: manifestItems
     };
 
@@ -1396,7 +1408,6 @@ async function konfirmasiSelesaiPengiriman(tripId, namaRelasi, qtyKg, kembaliKeG
         lat_end: gpsEnd.lat,
         lng_end: gpsEnd.lng,
         jarak_tempuh_km: totalJarakKm,
-        poin_beban: 0,
         foto_bukti_url: uploadedPhotoUrl,
         catatan: (trip.catatan || '') + catatanTambahan
     };
@@ -2011,7 +2022,7 @@ async function simpanBeliBBMDriver(e) {
     if (e) e.preventDefault();
 
     let kategori = document.getElementById('bbm-input-kategori')?.value || 'BBM / Solar';
-    let armada = document.getElementById('bbm-input-armada')?.value || 'D 8070 UE';
+    let armada = document.getElementById('bbm-input-armada')?.value || 'D 8707 UE';
     let tanggal = document.getElementById('bbm-input-tanggal')?.value || new Date().toISOString().split('T')[0];
     let metode = document.getElementById('bbm-input-metode')?.value || 'Cash';
     let nominal = parseInt(document.getElementById('bbm-input-nominal')?.value) || 0;
@@ -2152,7 +2163,7 @@ async function loadArmadaDriver() {
     let user = (window.tripState.cachedUsers || []).find(u => u.nama === activeUser) || {};
     let uName = (user.nama || activeUser || '').toLowerCase();
     
-    let targetArmada = 'D 8070 UE';
+    let targetArmada = 'D 8707 UE';
     let supirLabel = 'Hilman';
     let armadaDesc = 'Grand Max Pick-up';
 
@@ -2161,12 +2172,12 @@ async function loadArmadaDriver() {
         supirLabel = 'Adi';
         armadaDesc = 'Pick-up Putih';
     } else if (uName.includes('hilman')) {
-        targetArmada = 'D 8070 UE';
+        targetArmada = 'D 8707 UE';
         supirLabel = 'Hilman';
         armadaDesc = 'Grand Max Pick-up';
     } else {
         // Kernek atau staf lain
-        targetArmada = window.tripState.currentArmada || 'D 8070 UE';
+        targetArmada = window.tripState.currentArmada || 'D 8707 UE';
         supirLabel = (targetArmada === 'D 8142 UK') ? 'Adi' : 'Hilman';
         armadaDesc = (targetArmada === 'D 8142 UK') ? 'Pick-up Putih' : 'Grand Max Pick-up';
     }
@@ -2398,7 +2409,7 @@ function cetakSlipKlaimDriver(targetUserParam = null, customTripsParam = null, c
     let userRoleLower = (meUser.role || '').toLowerCase();
     if (userRoleLower.includes('sopir') || userRoleLower.includes('supir')) {
         if (userNamaLower.includes('hilman')) {
-            armadaStandar = 'D 8070 UE (Grand Max)';
+            armadaStandar = 'D 8707 UE (Grand Max)';
         } else if (userNamaLower.includes('adi')) {
             armadaStandar = 'D 8142 UK (Pick-up Putih)';
         } else if (meUser.armada_default) {
@@ -3327,11 +3338,7 @@ async function simpanKeberangkatanTruk() {
         cabang: 'PM',
         armada: 'Truk',
         total_kg: totalKg,
-        jumlah_titik: 1,
-        uang_jalan_sopir: UANG_SOLAR_TRUK_PER_TITIK, // Rp 100.000
-        pekerja_muat_ids: kruIds,
         status_trip: 'BERANGKAT',
-        status_klaim: 'BELUM_KLAIM',
         waktu_berangkat: new Date().toISOString(),
         catatan: `Muat Truk ke ${namaRelasi}: ${rincianPakanText.join(', ')}`,
         manifest_items: manifestItems
@@ -3369,118 +3376,63 @@ async function simpanKeberangkatanTruk() {
     }
 }
 
-// Monitoring Armada & Barometer Keseimbangan Pick-Up
-async function loadMonitoringArmadaAdmin() {
-    let containerCards = document.getElementById('admin-monitoring-cards');
+// Render Barometer Keseimbangan Pengiriman Pick-Up (Hilman vs Adi)
+function renderBarometerArmada(trips, labelPeriode) {
     let containerBarometer = document.getElementById('admin-barometer-container');
-    let today = new Date().toISOString().split('T')[0];
-    let trips = await fetchTripsByDateRange(today, today);
-    let users = window.tripState.cachedUsers || [];
-    let userDict = {};
-    users.forEach(u => { userDict[u.id] = u.nama; });
+    if (!containerBarometer) return;
 
     let nf = new Intl.NumberFormat('id-ID');
+    let p1Kg = 0, p2Kg = 0, p1Km = 0, p2Km = 0;
+    let p1Trips = 0, p2Trips = 0;
 
-    // 1. Render Barometer Keseimbangan 100% Horizontal Stacked Bar
-    if (containerBarometer) {
-        let p1Kg = 0, p2Kg = 0, p1Km = 0, p2Km = 0;
-        trips.forEach(tr => {
-            if (tr.armada === 'D 8070 UE') {
-                p1Kg += (parseFloat(tr.total_kg) || 0);
-                p1Km += (parseFloat(tr.jarak_tempuh_km) || 0);
-            } else if (tr.armada === 'D 8142 UK') {
-                p2Kg += (parseFloat(tr.total_kg) || 0);
-                p2Km += (parseFloat(tr.jarak_tempuh_km) || 0);
-            }
-        });
-
-        let totalKg = p1Kg + p2Kg;
-        let pctP1 = totalKg > 0 ? Math.round((p1Kg / totalKg) * 100) : 50;
-        let pctP2 = totalKg > 0 ? (100 - pctP1) : 50;
-        let isSeimbang = (pctP1 >= 40 && pctP1 <= 60);
-
-        containerBarometer.innerHTML = `
-            <div style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; padding:15px; margin-bottom:15px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <span style="font-size:13px; font-weight:800; color:#1e293b;">⚖️ Barometer Keseimbangan Pengiriman Pick-Up</span>
-                    <span style="font-size:10px; font-weight:800; padding:3px 8px; border-radius:12px; background:${isSeimbang ? '#dcfce7' : '#fef3c7'}; color:${isSeimbang ? '#15803d' : '#b45309'};">
-                        ${isSeimbang ? '✅ SEIMBANG (40-60%)' : '⚠️ KURANG SEIMBANG'}
-                    </span>
-                </div>
-                <div style="height:22px; border-radius:6px; overflow:hidden; display:flex; background:#e2e8f0;">
-                    <div style="width:${pctP1}%; background:#2563eb; color:white; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center;">D 8070 UE (${pctP1}%)</div>
-                    <div style="width:${pctP2}%; background:#ea580c; color:white; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center;">D 8142 UK (${pctP2}%)</div>
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; font-size:11px; color:#475569;">
-                    <div>• <b>D 8070 UE:</b> ${nf.format(p1Kg)} Kg | ${p1Km} Km</div>
-                    <div>• <b>D 8142 UK:</b> ${nf.format(p2Kg)} Kg | ${p2Km} Km</div>
-                </div>
-            </div>
-        `;
-    }
-
-    // 2. Render Kartu Monitoring Armada
-    if (containerCards) {
-        if (trips.length === 0) {
-            containerCards.innerHTML = `<div style="text-align:center; padding:30px; color:#94a3b8; font-style:italic;">Belum ada armada yang berangkat hari ini.</div>`;
-            return;
+    (trips || []).forEach(tr => {
+        let arm = (tr.armada || '').toUpperCase();
+        if (arm.includes('D 8707 UE') || arm.includes('D 8070 UE')) {
+            p1Kg += (parseFloat(tr.total_kg) || 0);
+            p1Km += (parseFloat(tr.jarak_tempuh_km) || 0);
+            p1Trips++;
+        } else if (arm.includes('D 8142 UK')) {
+            p2Kg += (parseFloat(tr.total_kg) || 0);
+            p2Km += (parseFloat(tr.jarak_tempuh_km) || 0);
+            p2Trips++;
         }
+    });
 
-        containerCards.innerHTML = trips.map(tr => {
-            let isSelesai = (tr.status_trip === 'SELESAI');
-            let kruText = '';
-            let badgeBg = isSelesai ? '#dcfce7' : '#dbeafe';
-            let badgeColor = isSelesai ? '#15803d' : '#1e40af';
-            let badgeText = isSelesai ? '✅ SELESAI' : '🚚 DI JALAN';
+    let totalKg = p1Kg + p2Kg;
+    let pctP1 = totalKg > 0 ? Math.round((p1Kg / totalKg) * 100) : 50;
+    let pctP2 = totalKg > 0 ? (100 - pctP1) : 50;
+    let isSeimbang = (totalKg === 0) || (pctP1 >= 40 && pctP1 <= 60);
 
-            if (tr.armada === 'Ambil Mandiri') {
-                let namaPekerja = (tr.pekerja_muat_ids && tr.pekerja_muat_ids.length > 0)
-                    ? tr.pekerja_muat_ids.map(id => userDict[id] || `ID ${id}`).join(', ')
-                    : 'Customer Sendiri (Tanpa Insentif)';
-                kruText = `🏪 <b>Ambil di Gudang</b> | <b>Bantu Muat:</b> ${namaPekerja}`;
-                badgeBg = '#fef3c7';
-                badgeColor = '#b45309';
-                badgeText = '🏪 AMBIL MANDIRI';
-            } else if (tr.armada === 'Truk') {
-                let namaPekerja = (tr.pekerja_muat_ids || []).map(id => userDict[id] || `ID ${id}`).join(', ');
-                kruText = `🚚 <b>Truk:</b> Solar Rp 100rb | <b>Kru Muat:</b> ${namaPekerja}`;
-            } else {
-                kruText = `👨‍✈️ <b>Sopir:</b> ${userDict[tr.sopir_user_id] || '-'} | 👷 <b>Kernek:</b> ${userDict[tr.kernek_1_user_id] || '-'}`;
-            }
+    let badgeHtml = (totalKg === 0)
+        ? `<span style="font-size:10px; font-weight:800; padding:3px 8px; border-radius:12px; background:#f1f5f9; color:#64748b;">⚖️ BELUM ADA PENGIRIMAN</span>`
+        : isSeimbang
+            ? `<span style="font-size:10px; font-weight:800; padding:3px 8px; border-radius:12px; background:#dcfce7; color:#15803d;">✅ SEIMBANG (40-60%)</span>`
+            : `<span style="font-size:10px; font-weight:800; padding:3px 8px; border-radius:12px; background:#fef3c7; color:#b45309;">⚠️ KURANG SEIMBANG</span>`;
 
-            let fotoBtn = '';
-            if (tr.armada === 'Ambil Mandiri') {
-                fotoBtn = `<span style="color:#64748b; font-size:10px; font-weight:600;">🏪 Selesai di Gudang</span>`;
-            } else if (tr.foto_bukti_url) {
-                fotoBtn = `<a href="${tr.foto_bukti_url}" target="_blank" style="background:#eff6ff; color:#2563eb; padding:4px 8px; border-radius:4px; font-size:10px; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:2px;">📸 Lihat Foto Bukti</a>`;
-            } else {
-                fotoBtn = `<span style="color:#94a3b8; font-size:10px;">Belum ada foto</span>`;
-            }
-
-            let infoJarakMuatan = (tr.armada === 'Ambil Mandiri')
-                ? `Muatan: <b>${nf.format(tr.total_kg)} Kg</b> (Ambil Mandiri)`
-                : `Muatan: <b>${nf.format(tr.total_kg)} Kg</b> (${tr.jarak_tempuh_km || 0} Km)`;
-
-            return `
-                <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:10px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <span style="font-size:13px; font-weight:800; color:#1e293b;">${tr.armada}</span>
-                            <span style="font-size:11px; color:#64748b; margin-left:6px;">(${tr.catatan || 'Pengiriman'})</span>
-                        </div>
-                        <span style="font-size:10px; font-weight:800; padding:2px 8px; border-radius:10px; background:${badgeBg}; color:${badgeColor};">
-                            ${badgeText}
-                        </span>
-                    </div>
-                    <div style="font-size:11px; color:#475569; margin:6px 0;">${kruText}</div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#64748b; border-top:1px dashed #f1f5f9; padding-top:6px;">
-                        <span>${infoJarakMuatan}</span>
-                        <div>${fotoBtn}</div>
-                    </div>
+    containerBarometer.innerHTML = `
+        <div style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; padding:15px; margin-bottom:15px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="font-size:13px; font-weight:800; color:#1e293b;">⚖️ Barometer Keseimbangan Pengiriman Pick-Up</span>
+                    <span style="font-size:11px; color:#64748b; font-weight:600;">(${labelPeriode || 'Periode Ini'})</span>
                 </div>
-            `;
-        }).join('');
-    }
+                ${badgeHtml}
+            </div>
+            <div style="height:22px; border-radius:6px; overflow:hidden; display:flex; background:#e2e8f0;">
+                <div style="width:${pctP1}%; background:#2563eb; color:white; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; transition:width 0.3s ease;">D 8707 UE (${pctP1}%)</div>
+                <div style="width:${pctP2}%; background:#ea580c; color:white; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; transition:width 0.3s ease;">D 8142 UK (${pctP2}%)</div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; font-size:11px; color:#475569;">
+                <div>• <b>D 8707 UE (Hilman):</b> ${nf.format(p1Kg)} Kg | ${p1Km} Km | ${p1Trips} Rit</div>
+                <div>• <b>D 8142 UK (Adi):</b> ${nf.format(p2Kg)} Kg | ${p2Km} Km | ${p2Trips} Rit</div>
+            </div>
+        </div>
+    `;
+}
+
+// Wrapper backward compatible untuk sinkronisasi live
+async function loadMonitoringArmadaAdmin() {
+    await loadLogBBMAdmin();
 }
 
 // Rekap Payroll & Tombol Tutup Periode Insentif
@@ -3650,30 +3602,9 @@ async function tutupPeriodeDanCairkanToples() {
 }
 
 function switchAdminTripTab(tab) {
-    const tabs = ['antrean', 'monitor', 'payroll', 'bbm'];
-    tabs.forEach(t => {
-        let btn = document.getElementById(`tab-adm-${t}`);
-        let view = document.getElementById(`view-adm-${t}`);
-        if (btn) {
-            btn.style.background = (t === tab) ? '#2563eb' : '#f1f5f9';
-            btn.style.color = (t === tab) ? '#ffffff' : '#475569';
-        }
-        if (view) {
-            if (t === tab) view.classList.remove('hidden');
-            else view.classList.add('hidden');
-        }
-    });
-
-    if (tab === 'antrean') {
-        let today = new Date().toISOString().split('T')[0];
-        renderAdminAntreanDanMuatTruk(today);
-    } else if (tab === 'monitor') {
-        loadMonitoringArmadaAdmin();
-    } else if (tab === 'payroll') {
-        renderRekapPayrollAdmin();
-    } else if (tab === 'bbm') {
-        loadLogBBMAdmin();
-    }
+    let viewBbm = document.getElementById('view-adm-bbm');
+    if (viewBbm) viewBbm.classList.remove('hidden');
+    loadLogBBMAdmin();
 }
 
 // ====================================================================
@@ -3681,13 +3612,65 @@ function switchAdminTripTab(tab) {
 // ====================================================================
 
 window._armadaActiveFilter = 'all';
+window._armadaActivePeriod = 'bulanan';
 window._armadaActiveSubtab = 'biaya';
-window._cacheArmadaData = { expenses: [], trips: [] };
+window._armadaTujuanFilter = '';
+window._cacheArmadaData = { expenses: [], trips: [], labelPeriode: 'Bulan Ini' };
+
+function setArmadaPeriodFilter(mode) {
+    window._armadaActivePeriod = mode;
+    ['mingguan', 'bulanan', 'tahunan'].forEach(m => {
+        let btn = document.getElementById(`btn-period-${m}`);
+        if (btn) {
+            btn.style.background = (m === mode) ? '#2563eb' : 'transparent';
+            btn.style.color = (m === mode) ? '#ffffff' : '#64748b';
+        }
+    });
+    loadLogBBMAdmin();
+}
+
+function onTujuanFilterChange(val) {
+    window._armadaTujuanFilter = (val || '').trim().toLowerCase();
+    // Otomatis pindah ke subtab Riwayat Perjalanan jika sedang memfilter tujuan
+    if (window._armadaTujuanFilter && window._armadaActiveSubtab !== 'rute') {
+        switchSubTabArmada('rute');
+    }
+    renderArmadaLogViews();
+}
+
+function clearTujuanFilter() {
+    let inp = document.getElementById('filter-armada-tujuan');
+    if (inp) inp.value = '';
+    window._armadaTujuanFilter = '';
+    renderArmadaLogViews();
+}
+
+function updateDatalistTujuan() {
+    let dl = document.getElementById('list-tujuan-armada');
+    if (!dl) return;
+
+    let setTujuan = new Set();
+    if (Array.isArray(window.globalRelasi)) {
+        window.globalRelasi.forEach(r => { if (r && r.nama) setTujuan.add(r.nama.trim()); });
+    }
+    if (window.tripState && window.tripState.cachedRelasiMap) {
+        Object.keys(window.tripState.cachedRelasiMap).forEach(k => { if (k) setTujuan.add(k.trim()); });
+    }
+    if (Array.isArray(window._cacheArmadaData.trips)) {
+        window._cacheArmadaData.trips.forEach(tr => {
+            (tr.manifest_items || []).forEach(m => { if (m && m.relasi) setTujuan.add(m.relasi.trim()); });
+            if (tr.catatan) setTujuan.add(tr.catatan.trim());
+        });
+    }
+
+    let arr = Array.from(setTujuan).filter(Boolean).sort((a, b) => a.localeCompare(b));
+    dl.innerHTML = arr.map(item => `<option value="${item}"></option>`).join('');
+}
 
 async function loadLogBBMAdmin() {
     let tbodyExpenses = document.getElementById('admin-bbm-tbody');
     let tbodyTrips = document.getElementById('admin-armada-rute-tbody');
-    let summaryBox = document.getElementById('admin-bbm-summary');
+    let badgePeriode = document.getElementById('badge-armada-period-label');
     if (!tbodyExpenses) return;
 
     tbodyExpenses.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat data operasional armada...</td></tr>`;
@@ -3695,21 +3678,46 @@ async function loadLogBBMAdmin() {
         tbodyTrips.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat riwayat perjalanan armada...</td></tr>`;
     }
 
+    let now = new Date();
+    let pad = n => String(n).padStart(2, '0');
+    let startDate, endDate, labelPeriode;
+
+    if (window._armadaActivePeriod === 'mingguan') {
+        let dStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+        startDate = `${dStart.getFullYear()}-${pad(dStart.getMonth() + 1)}-${pad(dStart.getDate())}`;
+        endDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        labelPeriode = `7 Hari Terakhir (${dStart.getDate()}/${dStart.getMonth() + 1} - ${now.getDate()}/${now.getMonth() + 1})`;
+    } else if (window._armadaActivePeriod === 'tahunan') {
+        startDate = `${now.getFullYear()}-01-01`;
+        endDate = `${now.getFullYear()}-12-31`;
+        labelPeriode = `Tahun ${now.getFullYear()}`;
+    } else {
+        // bulanan
+        let lastDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        startDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+        endDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(lastDate.getDate())}`;
+        labelPeriode = now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    }
+
+    if (badgePeriode) badgePeriode.innerText = labelPeriode;
+
     try {
         // 1. Ambil data pengeluaran armada (BBM, Servis, Ban, Cuci) dari cashflow
-        let p1 = fetch(`${SUPA_URL}/rest/v1/cashflow?jenis=eq.Keluar&order=tanggal.desc,created_at.desc&limit=150`, {
+        let p1 = fetch(`${SUPA_URL}/rest/v1/cashflow?jenis=eq.Keluar&order=tanggal.desc,created_at.desc&limit=250`, {
             headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
         }).then(r => r.json());
 
-        // 2. Ambil riwayat perjalanan/rit dari trip_pengiriman
-        let p2 = fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?order=tanggal.desc,created_at.desc&limit=100`, {
-            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
-        }).then(r => r.json());
+        // 2. Ambil riwayat perjalanan/rit dari trip_pengiriman via fetchTripsByDateRange
+        let p2 = fetchTripsByDateRange(startDate, endDate);
 
         let [rawCF, rawTrips] = await Promise.all([p1, p2]);
 
         // Filter cashflow yang relevan dengan armada (BBM, Ban, Servis, Cuci, atau ada sebutan plat)
         let armadaExpenses = (Array.isArray(rawCF) ? rawCF : []).filter(item => {
+            let tgl = item.tanggal || '';
+            // Pastikan tanggal cashflow dalam rentang periode aktif
+            if (tgl && (tgl < startDate || tgl > endDate)) return false;
+
             let kat = (item.kategori || '').toLowerCase();
             let rel = (item.relasi || '').toLowerCase();
             let ket = (item.keterangan || '').toLowerCase();
@@ -3718,17 +3726,27 @@ async function loadLogBBMAdmin() {
                                   kat.includes('kendaraan') || kat.includes('servis') || 
                                   kat.includes('operasional') || rel.includes('armada') || 
                                   rel.includes('spbu') || rel.includes('bengkel') ||
-                                  ket.includes('d 8070 ue') || ket.includes('d 8142 uk') || 
-                                  ket.includes('truk') || ket.includes('ban') || 
-                                  ket.includes('angin') || ket.includes('oli');
+                                  ket.includes('d 8707 ue') || ket.includes('d 8070 ue') || 
+                                  ket.includes('d 8142 uk') || ket.includes('truk') || 
+                                  ket.includes('ban') || ket.includes('angin') || ket.includes('oli');
             return isArmadaRelated;
+        });
+
+        // Filter trip HANYA armada pengantaran (Ambil Mandiri / Ambil Sendiri DIKELUARKAN!)
+        let fleetTrips = (Array.isArray(rawTrips) ? rawTrips : []).filter(tr => {
+            let arm = (tr.armada || '').toLowerCase();
+            let cat = (tr.catatan || '').toLowerCase();
+            let isAmbil = arm === 'ambil mandiri' || arm.includes('ambil') || cat.includes('ambil sendiri') || cat.includes('ambil di gudang');
+            return !isAmbil;
         });
 
         window._cacheArmadaData = {
             expenses: armadaExpenses,
-            trips: Array.isArray(rawTrips) ? rawTrips : []
+            trips: fleetTrips,
+            labelPeriode: labelPeriode
         };
 
+        updateDatalistTujuan();
         renderArmadaLogViews();
     } catch (e) {
         if (tbodyExpenses) tbodyExpenses.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:25px; color:#dc2626;">Gagal memuat log armada: ${e.message}</td></tr>`;
@@ -3776,6 +3794,9 @@ function renderArmadaLogViews() {
     let allExpenses = window._cacheArmadaData.expenses || [];
     let allTrips = window._cacheArmadaData.trips || [];
 
+    // 0. Update Barometer Keseimbangan Pick-Up untuk armada pick-up pada periode aktif
+    renderBarometerArmada(allTrips, window._cacheArmadaData.labelPeriode);
+
     // Helper match armada plat
     function matchArmada(targetArmada, itemArmada, relasi, keterangan) {
         if (targetArmada === 'all') return true;
@@ -3788,15 +3809,27 @@ function renderArmadaLogViews() {
     });
 
     let filteredTrips = allTrips.filter(t => {
-        if (filter === 'all') return true;
-        let arm = (t.armada || '').toUpperCase();
-        return arm.includes(filter.toUpperCase());
+        // 1. Filter Armada
+        if (filter !== 'all') {
+            let arm = (t.armada || '').toUpperCase();
+            if (!arm.includes(filter.toUpperCase())) return false;
+        }
+
+        // 2. Filter Pencarian Tujuan (Autocomplete / Rekomendasi Ketik)
+        if (window._armadaTujuanFilter) {
+            let manifest = t.manifest_items || [];
+            let relasiList = [...new Set(manifest.map(m => m.relasi).filter(Boolean))].join(' ').toLowerCase();
+            let searchTarget = `${relasiList} ${t.catatan || ''}`.toLowerCase();
+            if (!searchTarget.includes(window._armadaTujuanFilter)) return false;
+        }
+
+        return true;
     });
 
     // 1. KPI Aggregation & Data per Armada Tetap
-    let expensesHilman = allExpenses.filter(i => matchArmada('D 8070 UE', i.armada, i.relasi, i.keterangan));
+    let expensesHilman = allExpenses.filter(i => matchArmada('D 8707 UE', i.armada, i.relasi, i.keterangan) || matchArmada('D 8070 UE', i.armada, i.relasi, i.keterangan));
     let expensesAdi = allExpenses.filter(i => matchArmada('D 8142 UK', i.armada, i.relasi, i.keterangan));
-    let tripsHilman = allTrips.filter(t => (t.armada || '').toUpperCase().includes('D 8070 UE'));
+    let tripsHilman = allTrips.filter(t => (t.armada || '').toUpperCase().includes('D 8707 UE') || (t.armada || '').toUpperCase().includes('D 8070 UE'));
     let tripsAdi = allTrips.filter(t => (t.armada || '').toUpperCase().includes('D 8142 UK'));
 
     let biayaHilman = expensesHilman.reduce((sum, item) => sum + (parseFloat(item.nominal) || 0), 0);
@@ -3805,14 +3838,14 @@ function renderArmadaLogViews() {
     let lastNoteAdi = expensesAdi[0] || null;
 
     let totalBiaya = filteredExpenses.reduce((sum, item) => sum + (parseFloat(item.nominal) || 0), 0);
-    let lastOdoMap = { 'D 8070 UE': '-', 'D 8142 UK': '-', 'Truk': '-' };
+    let lastOdoMap = { 'D 8707 UE': '-', 'D 8142 UK': '-', 'Truk': '-' };
 
     allExpenses.forEach(item => {
         let ket = item.keterangan || '';
         let odoMatch = ket.match(/Spido:\s*([0-9]+)\s*KM/i);
         let arm = (item.relasi || '').replace('SPBU (', '').replace('Bengkel / Perawatan (', '').replace(')', '').trim();
         if (!arm || arm === 'SPBU' || arm === 'Bengkel / Perawatan') {
-            if (ket.includes('D 8070 UE')) arm = 'D 8070 UE';
+            if (ket.includes('D 8707 UE') || ket.includes('D 8070 UE')) arm = 'D 8707 UE';
             else if (ket.includes('D 8142 UK')) arm = 'D 8142 UK';
             else if (ket.includes('Truk')) arm = 'Truk';
         }
@@ -3831,8 +3864,8 @@ function renderArmadaLogViews() {
                     <div style="font-size:10px; color:#64748b; margin-top:2px;">BBM, Servis, Ban, Angin, Cuci</div>
                 </div>
                 <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px;">
-                    <span style="font-size:11px; color:#15803d; font-weight:700;">KM Odometer D 8070 UE</span>
-                    <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#16a34a;">${lastOdoMap['D 8070 UE']}</h3>
+                    <span style="font-size:11px; color:#15803d; font-weight:700;">KM Odometer D 8707 UE</span>
+                    <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#16a34a;">${lastOdoMap['D 8707 UE']}</h3>
                     <div style="font-size:10px; color:#15803d; margin-top:2px;">Grand Max Pick-up (Hilman)</div>
                 </div>
                 <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:10px; padding:12px;">
@@ -3843,7 +3876,7 @@ function renderArmadaLogViews() {
                 <div style="background:#f5f3ff; border:1px solid #ddd6fe; border-radius:10px; padding:12px;">
                     <span style="font-size:11px; color:#6d28d9; font-weight:700;">Total Rit Pengiriman</span>
                     <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#7c3aed;">${filteredTrips.length} Pengantaran</h3>
-                    <div style="font-size:10px; color:#6d28d9; margin-top:2px;">Tercatat di sistem logistik</div>
+                    <div style="font-size:10px; color:#6d28d9; margin-top:2px;">Armada CBL (${window._cacheArmadaData.labelPeriode})</div>
                 </div>
             </div>
         `;
@@ -3861,7 +3894,7 @@ function renderArmadaLogViews() {
 
                 // Deteksi armada & supir badge
                 let armName = 'Armada';
-                if (ket.includes('D 8070 UE') || (item.relasi || '').includes('D 8070 UE')) armName = 'D 8070 UE (Hilman)';
+                if (ket.includes('D 8707 UE') || ket.includes('D 8070 UE') || (item.relasi || '').includes('D 8707 UE') || (item.relasi || '').includes('D 8070 UE')) armName = 'D 8707 UE (Hilman)';
                 else if (ket.includes('D 8142 UK') || (item.relasi || '').includes('D 8142 UK')) armName = 'D 8142 UK (Adi)';
                 else if (ket.includes('Truk') || (item.relasi || '').includes('Truk')) armName = 'Truk';
 
@@ -3939,7 +3972,7 @@ function renderArmadaLogViews() {
                 let kruStr = `<b>${sopirNama}</b>${kernekNama !== '-' ? ` & ${kernekNama}` : ''}`;
 
                 let armLabel = tr.armada || '-';
-                if (armLabel.includes('D 8070 UE')) armLabel = 'D 8070 UE (Hilman)';
+                if (armLabel.includes('D 8707 UE') || armLabel.includes('D 8070 UE')) armLabel = 'D 8707 UE (Hilman)';
                 else if (armLabel.includes('D 8142 UK')) armLabel = 'D 8142 UK (Adi)';
 
                 return `
@@ -4014,6 +4047,11 @@ window.loadLogBBMAdmin = loadLogBBMAdmin;
 window.filterLogArmada = filterLogArmada;
 window.switchSubTabArmada = switchSubTabArmada;
 window.renderArmadaLogViews = renderArmadaLogViews;
+window.setArmadaPeriodFilter = setArmadaPeriodFilter;
+window.onTujuanFilterChange = onTujuanFilterChange;
+window.clearTujuanFilter = clearTujuanFilter;
+window.renderBarometerArmada = renderBarometerArmada;
+window.updateDatalistTujuan = updateDatalistTujuan;
 window.setAdminPayrollFilter = setAdminPayrollFilter;
 window.cetakFormKlaimDariAdmin = cetakFormKlaimDariAdmin;
 window.renderRekapPayrollAdmin = renderRekapPayrollAdmin;
