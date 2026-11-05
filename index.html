@@ -6576,10 +6576,10 @@ async function prosesAntreanBackground() {
             }
 
             // ===============================================
-            // 3. JIKA ADA ONGKIR (KHUSUS KELUAR)
+            // 3. JIKA ADA ONGKIR (KHUSUS KELUAR & NOMINAL > 0)
             // ===============================================
             let ongkirVal = parseFloat(String(pl.ongkir || "0").replace(/[^0-9]/g, ''));
-            if (pl.ongkir !== "" && pl.ongkir !== undefined && pl.ongkir !== null && pl.status === "Keluar") {
+            if (ongkirVal > 0 && pl.status === "Keluar") {
                 supabaseRows.push({
                     tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
                     waktu_input: new Date().toISOString(),
@@ -11110,10 +11110,31 @@ function renderLiveStokDiInput() {
                 });
             }
 
-            // Rumus Otomatis Ongkir (Kelipatan 1.500 Kg = 50rb)
+            // Cek alamat pengiriman untuk menentukan tarif dasar per rit
+            let inputAlamat = document.getElementById('ekor') ? document.getElementById('ekor').value.trim() : '';
+            let lokasiTerpilih = typeof getLokasiAktif === 'function' ? getLokasiAktif() : '';
+            let isKandang = (lokasiTerpilih === '/kandang' || lokasiTerpilih === '/spn_kandang');
+            let inputRelasi = isKandang 
+                ? (document.getElementById('relasi_kandang') ? document.getElementById('relasi_kandang').value.trim() : '')
+                : (document.getElementById('relasi') ? document.getElementById('relasi').value.trim() : '');
+            
+            let relDataObj = (Array.isArray(globalRelasi) ? globalRelasi : []).find(r => (r.nama || '').toLowerCase() === inputRelasi.toLowerCase());
+            let masterAlamat = relDataObj && relDataObj.alamat ? relDataObj.alamat : '';
+            let gabunganAlamat = `${inputAlamat} ${masterAlamat}`.toLowerCase();
+
+            // Default: 50.000 / rit
+            // Pengecualian alamat: Cisarua -> 100.000 / rit, Cisaroni -> 25.000 / rit
+            let tarifPerRit = 50000;
+            if (gabunganAlamat.includes('cisarua')) {
+                tarifPerRit = 100000;
+            } else if (gabunganAlamat.includes('cisaroni')) {
+                tarifPerRit = 25000;
+            }
+
+            // Rumus Otomatis Ongkir (Kelipatan 1.500 Kg = 1 rit)
             let multiples = Math.ceil(grandTotalKg / 1500);
             if (multiples < 1) multiples = 1; // Minimal hitungan 1 rit
-            let calculatedOngkir = multiples * 50000;
+            let calculatedOngkir = multiples * tarifPerRit;
 
             let inputOngkirEl = document.getElementById('ongkir');
             if (inputOngkirEl) {
@@ -11130,10 +11151,10 @@ function renderLiveStokDiInput() {
             window.tempSelectedArmada = 'Ambil Mandiri';
             window.tempIsAmbilMandiri = true;
 
-            // Ongkir = 0
+            // Kosongkan Ongkir jika Diambil Mandiri
             let inputOngkirEl = document.getElementById('ongkir');
             if (inputOngkirEl) {
-                inputOngkirEl.value = 0;
+                inputOngkirEl.value = '';
                 if (typeof formatOngkir === 'function') formatOngkir(inputOngkirEl);
             }
 
@@ -11368,7 +11389,7 @@ function renderLiveStokDiInput() {
                     teksWA = `*LAPORAN PAKAN ${payload.status.toUpperCase()}, ${tglFormatWA}*\n`;
                     teksWA += `*GUDANG ${locLabel} | ${relasiLabel}: ${payload.relasi}*\n`;
                     if (infoAlamat !== "-") teksWA += `Alamat: ${infoAlamat}\n`;
-                    if (payload.ongkir) teksWA += `Ongkir: ${payload.ongkir}\n`;
+                    if (cekOngkir > 0) teksWA += `Ongkir: ${payload.ongkir}\n`;
                     teksWA += `${ringkasanItem}`;
                     teksWA += `Total: ${Number(grandTotal).toLocaleString('id-ID')} Kg\n\n`;
                     teksWA += `Petugas: ${payload.petugas}\n`;
