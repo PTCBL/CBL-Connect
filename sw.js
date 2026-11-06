@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pakan-cbl-v16';
+const CACHE_NAME = 'pakan-cbl-v20';
 const urlsToCache = [
   './',
   './index.html',
@@ -13,15 +13,22 @@ self.addEventListener('install', event => {
   );
 });
 
-// Bersihkan memori versi lama (v1, v2) otomatis
+// Bersihkan memori versi lama (v1, v2) otomatis & claim clients
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.filter(name => name !== CACHE_NAME).map(name => caches.delete(name))
       );
-    })
+    }).then(() => self.clients.claim())
   );
+});
+
+// Tangkap pesan dari aplikasi jika tombol "Perbarui" ditekan
+self.addEventListener('message', event => {
+  if (event.data && event.data.action === 'skipWaiting') {
+    self.skipWaiting();
+  }
 });
 
 // Strategi: Jaringan Utama, Offline sebagai Cadangan (Network First)

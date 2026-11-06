@@ -2113,7 +2113,7 @@
                 <span class="material-symbols-outlined" style="font-size:26px;">edit_document</span> Laporan Harian
             </h2>
 
-            <div id="koneksi-badge" onclick="hapusAntreanMacet()" style="cursor:pointer;"></div>
+            <div id="koneksi-badge" onclick="bukaModalPusatDarurat()" style="cursor:pointer;" title="Klik untuk cek status antrean & cadangan"></div>
 
     <div class="form-group" style="margin-top: 15px;">
                 <div class="mode-toggle">
@@ -4494,6 +4494,139 @@
             </div>
         </div>
 
+        <!-- ======================================================== -->
+        <!-- MODAL: PUSAT ANTREAN, RADAR PETUGAS & BRANKAS BACKUP      -->
+        <!-- ======================================================== -->
+        <div id="modal-pusat-darurat" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.7); z-index:99999; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px); padding:15px; box-sizing:border-box;">
+            <div style="background:#ffffff; width:100%; max-width:540px; max-height:90vh; border-radius:16px; box-shadow:0 20px 40px rgba(0,0,0,0.3); display:flex; flex-direction:column; overflow:hidden;">
+                <!-- Header Modal -->
+                <div style="background:#0f172a; color:#ffffff; padding:16px 20px; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="material-symbols-outlined" style="color:#38bdf8; font-size:22px;">dns</span>
+                        <div>
+                            <h3 style="margin:0; font-size:15px; font-weight:800; color:#ffffff; letter-spacing:-0.2px;">Pusat Antrean & Cadangan Data</h3>
+                            <div id="pd-status-koneksi-text" style="font-size:10px; color:#94a3b8; margin-top:2px;">Memeriksa status perangkat...</div>
+                        </div>
+                    </div>
+                    <button onclick="tutupModalPusatDarurat()" style="background:#1e293b; border:1px solid #334155; color:#ffffff; width:28px; height:28px; border-radius:50%; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center;">✕</button>
+                </div>
+
+                <!-- Sub-tab Switcher (Clean Minimalist, No Emojis) -->
+                <div style="display:flex; border-bottom:1px solid #e2e8f0; background:#f8fafc; overflow-x:auto;">
+                    <button id="btn-tab-pd-antrean" onclick="switchTabPusatDarurat('antrean')" style="flex:1; min-width:85px; padding:11px 6px; border:none; background:#ffffff; font-weight:700; font-size:11px; color:#0284c7; border-bottom:2px solid #0284c7; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                        <span class="material-symbols-outlined" style="font-size:15px;">inbox</span> Antrean (<span id="pd-badge-count-antrean">0</span>)
+                    </button>
+                    <button id="btn-tab-pd-radar" onclick="switchTabPusatDarurat('radar')" style="flex:1; min-width:90px; padding:11px 6px; border:none; background:#f8fafc; font-weight:700; font-size:11px; color:#64748b; border-bottom:2px solid transparent; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                        <span class="material-symbols-outlined" style="font-size:15px;">radar</span> Radar Tim
+                    </button>
+                    <button id="btn-tab-pd-blackbox" onclick="switchTabPusatDarurat('blackbox')" style="flex:1; min-width:85px; padding:11px 6px; border:none; background:#f8fafc; font-weight:700; font-size:11px; color:#64748b; border-bottom:2px solid transparent; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                        <span class="material-symbols-outlined" style="font-size:15px;">history</span> Riwayat HP
+                    </button>
+                    <button id="btn-tab-pd-master" onclick="switchTabPusatDarurat('master')" style="flex:1; min-width:95px; padding:11px 6px; border:none; background:#f8fafc; font-weight:700; font-size:11px; color:#64748b; border-bottom:2px solid transparent; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                        <span class="material-symbols-outlined" style="font-size:15px;">cloud_sync</span> Brankas
+                    </button>
+                </div>
+
+                <!-- Isi Tab 1: Antrean Tertunda di HP Ini -->
+                <div id="view-pd-antrean" style="padding:16px; overflow-y:auto; flex:1;">
+                    <div id="pd-list-antrean-container" style="display:flex; flex-direction:column; gap:10px;">
+                        <div style="text-align:center; padding:30px; color:#94a3b8;">Memuat antrean...</div>
+                    </div>
+                </div>
+
+                <!-- Isi Tab 2: Radar Antrean Petugas Lapangan (Remote Monitoring & Solve) -->
+                <div id="view-pd-radar" class="hidden" style="padding:16px; overflow-y:auto; flex:1;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <div style="display:flex; align-items:center; gap:4px; font-size:11px; font-weight:800; color:#334155;">
+                            <span class="material-symbols-outlined" style="font-size:16px; color:#0284c7;">cell_tower</span>
+                            <span>Radar Perangkat Lapangan:</span>
+                        </div>
+                        <button onclick="loadRadarPetugas(true)" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:4px 8px; border-radius:6px; font-size:10px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                            <span class="material-symbols-outlined" style="font-size:13px;">refresh</span> Segarkan
+                        </button>
+                    </div>
+                    <div id="pd-list-radar-container" style="display:flex; flex-direction:column; gap:8px;">
+                        <div style="text-align:center; padding:30px; color:#94a3b8;">Memuat status radar perangkat...</div>
+                    </div>
+                </div>
+
+                <!-- Isi Tab 3: Black Box (100 Riwayat Lokal) -->
+                <div id="view-pd-blackbox" class="hidden" style="padding:16px; overflow-y:auto; flex:1;">
+                    <div style="font-size:11px; color:#475569; margin-bottom:10px; background:#f8fafc; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0; display:flex; align-items:center; gap:6px;">
+                        <span class="material-symbols-outlined" style="font-size:16px; color:#0284c7;">info</span>
+                        <div><b>Black Box HP:</b> Arsip darurat 100 transaksi terakhir yang diinput dari perangkat ini.</div>
+                    </div>
+                    <div id="pd-list-blackbox-container" style="display:flex; flex-direction:column; gap:8px;">
+                        <div style="text-align:center; padding:30px; color:#94a3b8;">Memuat riwayat lokal...</div>
+                    </div>
+                </div>
+
+                <!-- Isi Tab 4: Brankas Master Cloud (Khusus Admin Pusat PIN 1234) -->
+                <div id="view-pd-master" class="hidden" style="padding:16px; overflow-y:auto; flex:1;">
+                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:12px;">
+                        <div style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:800; color:#0f172a; margin-bottom:4px;">
+                            <span class="material-symbols-outlined" style="font-size:16px; color:#15803d;">verified_user</span>
+                            <span>Brankas Master Database CBL (Admin)</span>
+                        </div>
+                        <div style="font-size:11px; color:#64748b; line-height:1.5;">
+                            Unduh seluruh database (transaksi pakan, cashflow, trip armada, dan relasi) langsung menjadi 1 file arsip JSON utuh.
+                        </div>
+                    </div>
+
+                    <button onclick="unduhMasterDatabaseSupabase()" id="btn-unduh-master-db" class="btn-submit" style="background:#15803d; padding:11px; font-size:12px; font-weight:800; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:6px;">
+                        <span class="material-symbols-outlined" style="font-size:16px;">cloud_download</span> Download Master Backup (.JSON)
+                    </button>
+                    <div id="pd-master-progress" style="font-size:11px; color:#0284c7; text-align:center; font-weight:700; margin-bottom:10px;"></div>
+
+                    <!-- Pemulihan / Restore Safe Merge -->
+                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-top:8px; margin-bottom:12px;">
+                        <div style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:800; color:#0f172a; margin-bottom:4px;">
+                            <span class="material-symbols-outlined" style="font-size:16px; color:#0284c7;">settings_backup_restore</span>
+                            <span>Pemulihan Database (Safe Merge)</span>
+                        </div>
+                        <div style="font-size:11px; color:#64748b; line-height:1.5;">
+                            Pulihkan data dari file backup JSON. Hanya data yang hilang/terhapus yang akan dimasukkan kembali ke Supabase tanpa merusak transaksi baru yang ada.
+                        </div>
+                    </div>
+
+                    <input type="file" id="input-file-restore-db" accept=".json" style="display:none;" onchange="handlePilihFileRestore(event)">
+                    <button onclick="bukaFilePickerRestore()" id="btn-restore-master-db" class="btn-submit" style="background:#0284c7; padding:11px; font-size:12px; font-weight:800; margin-bottom:10px; display:flex; align-items:center; justify-content:center; gap:6px;">
+                        <span class="material-symbols-outlined" style="font-size:16px;">restore_page</span> Pulihkan Database dari Backup (.JSON)
+                    </button>
+                    <div id="pd-restore-progress" style="font-size:11px; color:#0284c7; text-align:center; font-weight:700;"></div>
+                </div>
+
+                <!-- Action Footer (Clean Minimalist, No Emojis) -->
+                <div style="background:#f8fafc; padding:12px 16px; border-top:1px solid #e2e8f0; display:flex; flex-wrap:wrap; gap:8px; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; gap:8px; width:100%;">
+                        <button onclick="paksaSinkronSekarang()" style="flex:1; background:#0284c7; color:#ffffff; border:none; padding:10px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                            <span class="material-symbols-outlined" style="font-size:16px;">sync</span> Sync Sekarang
+                        </button>
+                        <button onclick="kirimCadanganAntreanWA()" style="flex:1; background:#16a34a; color:#ffffff; border:none; padding:10px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                            <span class="material-symbols-outlined" style="font-size:16px;">chat</span> Kirim ke WA
+                        </button>
+                    </div>
+                    <div style="display:flex; gap:8px; width:100%; margin-top:2px;">
+                        <button onclick="unduhCadanganAntreanJSON()" style="flex:1; background:#ffffff; color:#475569; border:1px solid #cbd5e1; padding:8px; border-radius:8px; font-weight:600; font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                            <span class="material-symbols-outlined" style="font-size:14px;">download</span> Unduh Antrean (.JSON)
+                        </button>
+                        <button onclick="hapusAntreanMacet()" style="background:#fee2e2; color:#dc2626; border:1px solid #fca5a5; padding:8px 12px; border-radius:8px; font-weight:600; font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                            <span class="material-symbols-outlined" style="font-size:14px;">delete</span> Bersihkan
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- FLOATING TOAST: NOTIFIKASI AUTO UPDATE PWA                -->
+        <!-- ======================================================== -->
+        <div id="pwa-update-toast" class="hidden" style="position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#0f172a; color:#ffffff; padding:10px 18px; border-radius:50px; box-shadow:0 10px 25px rgba(0,0,0,0.3); z-index:999999; display:flex; align-items:center; gap:12px; font-size:12px; font-weight:700; border:1px solid #334155;">
+            <span class="material-symbols-outlined" style="color:#38bdf8; font-size:18px;">rocket_launch</span>
+            <span>Versi baru tersedia!</span>
+            <button onclick="terapkanUpdatePWA()" style="background:#0284c7; color:#fff; border:none; padding:5px 12px; border-radius:20px; font-weight:800; cursor:pointer; font-size:11px;">Perbarui</button>
+        </div>
+
         <!-- MULAI: HALAMAN JURNAL & KARTU PIUTANG -->
         <div id="page-jurnal" class="container hidden">
             <div class="header">
@@ -6333,6 +6466,28 @@
             
             antrian.push(payload);
 
+            // 📦 SULAP BLACK BOX: Catat ke arsip lokal 100 transaksi terakhir (tanpa base64 gambar)
+            try {
+                let bb = JSON.parse(localStorage.getItem('cbl_blackbox_transaksi') || '[]');
+                let itemCopy = {};
+                if (payload.items) {
+                    for (let k in payload.items) { itemCopy[k] = payload.items[k]; }
+                }
+                bb.unshift({
+                    waktu: new Date().toISOString(),
+                    petugas: payload.petugas || 'Admin',
+                    cabang: payload.lokasi || 'PM',
+                    status: payload.status || 'Keluar',
+                    relasi: payload.relasi || '-',
+                    armada: payload.armada || '-',
+                    ongkir: payload.ongkir || 0,
+                    items: itemCopy,
+                    catatan: payload.catatan || ''
+                });
+                if (bb.length > 100) bb = bb.slice(0, 100);
+                localStorage.setItem('cbl_blackbox_transaksi', JSON.stringify(bb));
+            } catch (eBB) {}
+
             // PENGAMAN 1: Tangkap error jika memori HP penuh (QuotaExceededError)
             try {
                 localStorage.setItem('antrian_pakan', JSON.stringify(antrian));
@@ -6341,7 +6496,7 @@
                 console.warn("Memori sesak! Mengaktifkan Auto-Vacuum...");
                 
                 // Daftar kunci memori yang HARUS diselamatkan
-                let safeKeys = ['antrian_pakan', 'cbl_app_version', 'history_input_v2', 'stok_live_ptcbl', 'pending_master_data'];
+                let safeKeys = ['antrian_pakan', 'cbl_blackbox_transaksi', 'cbl_app_version', 'history_input_v2', 'stok_live_ptcbl', 'pending_master_data'];
                 
                 for (let i = localStorage.length - 1; i >= 0; i--) {
                     let key = localStorage.key(i);
@@ -6372,6 +6527,8 @@
         }
 
         let uploadAbortController = null;
+        let backoffDelayPWA = 1000;
+        let backoffAttemptsPWA = 0;
 async function prosesAntreanBackground() {
     if (!navigator.onLine) return;
     let antrian = [];
@@ -6696,6 +6853,8 @@ async function prosesAntreanBackground() {
 
         // BERHASIL! HAPUS DARI ANTREAN LOKAL
         clearTimeout(timeoutId);
+        backoffAttemptsPWA = 0;
+        backoffDelayPWA = 1000;
         let currentAntrian = JSON.parse(localStorage.getItem('antrian_pakan')) || [];
         currentAntrian.splice(0, itemsToShift);
         localStorage.setItem('antrian_pakan', JSON.stringify(currentAntrian));
@@ -6704,15 +6863,58 @@ async function prosesAntreanBackground() {
             badge.innerHTML = `<span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">wifi</span> ONLINE: Sinkronisasi Aktif`;
             badge.style.background = "#8AA624";
             badge.classList.remove('offline-badge');
+            try { kirimTelemetriStatusPerangkat(0, null, []); } catch (eTel) {}
         }
 
     } catch (e) {
         clearTimeout(timeoutId);
         console.log("Jaringan terputus atau gagal sync:", e);
-        // Tampilkan pesan error di PWA agar tidak bingung (opsional, biarkan silent agar PWA mencoba lagi nanti)
+        backoffAttemptsPWA++;
+        if (backoffAttemptsPWA === 1) backoffDelayPWA = 3000;
+        else if (backoffAttemptsPWA === 2) backoffDelayPWA = 10000;
+        else if (backoffAttemptsPWA === 3) backoffDelayPWA = 30000;
+        else backoffDelayPWA = 60000;
+
+        // 🔍 DIAGNOSIS ERROR MANUSIAWI
+        let diagnosaTeks = "Koneksi terputus / sinyal lemah";
+        if (!navigator.onLine) {
+            diagnosaTeks = "Perangkat Offline (Tidak ada sinyal/kuota)";
+        } else if (e.name === 'AbortError') {
+            diagnosaTeks = "Koneksi Timeout >60d (Sinyal drop di jalan / sangat lambat)";
+        } else if (e.message && (e.message.includes('500') || e.message.includes('503'))) {
+            diagnosaTeks = "Server Supabase Sibuk (HTTP 500 Overload)";
+        } else if (e.message && e.message.includes('400')) {
+            diagnosaTeks = "Data ditolak server (Format tidak valid / HTTP 400)";
+        } else if (e.message) {
+            diagnosaTeks = e.message;
+        }
+
+        // Rekam diagnosis ke antrean lokal agar tampak di Pusat Antrean PWA
+        try {
+            let antrianLive = JSON.parse(localStorage.getItem('antrian_pakan') || "[]");
+            if (antrianLive.length > 0) {
+                let nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                antrianLive[0].last_error = diagnosaTeks;
+                antrianLive[0].last_attempt = nowStr;
+                localStorage.setItem('antrian_pakan', JSON.stringify(antrianLive));
+            }
+        } catch (eDiag) {}
+
+        let badge = document.getElementById('koneksi-badge');
+        let antrianCount = (JSON.parse(localStorage.getItem('antrian_pakan') || "[]")).length;
+        if (badge && !badge.classList.contains('offline-badge')) {
+            if (antrianCount > 0) {
+                badge.innerHTML = `<span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">sync_problem</span> ${antrianCount} Mengantre (Coba lagi ${Math.round(backoffDelayPWA / 1000)}d)`;
+                badge.style.background = "#d97706";
+            }
+        }
+        try {
+            let antrianLive = JSON.parse(localStorage.getItem('antrian_pakan') || "[]");
+            kirimTelemetriStatusPerangkat(antrianCount, diagnosaTeks, antrianLive);
+        } catch (eTel) {}
     } finally {
         isProsesUploadPWA = false;
-        setTimeout(prosesAntreanBackground, 1000);
+        setTimeout(prosesAntreanBackground, backoffDelayPWA);
     }
 }
 
@@ -6723,8 +6925,42 @@ async function prosesAntreanBackground() {
             }
         }
 
-        if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
-        window.addEventListener('online', updateStatusKoneksi); window.addEventListener('offline', updateStatusKoneksi);
+        let newWorkerPWA = null;
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').then(reg => {
+                reg.addEventListener('updatefound', () => {
+                    newWorkerPWA = reg.installing;
+                    if (newWorkerPWA) {
+                        newWorkerPWA.addEventListener('statechange', () => {
+                            if (newWorkerPWA.state === 'installed' && navigator.serviceWorker.controller) {
+                                tampilkanBannerUpdatePWA();
+                            }
+                        });
+                    }
+                });
+            });
+
+            // Cek update berkala setiap aplikasi aktif kembali
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    navigator.serviceWorker.getRegistration().then(reg => {
+                        if (reg) reg.update();
+                    });
+                }
+            });
+
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                window.location.reload();
+            });
+        }
+
+        window.addEventListener('online', () => {
+            backoffAttemptsPWA = 0;
+            backoffDelayPWA = 1000;
+            updateStatusKoneksi();
+            prosesAntreanBackground();
+        });
+        window.addEventListener('offline', updateStatusKoneksi);
 
         // ==========================================
         // PWA INSTALLATION HANDLER & DOWNLOAD HELPER
@@ -6880,6 +7116,10 @@ async function prosesAntreanBackground() {
 
         document.getElementById('login-screen').style.setProperty('display', 'none', 'important');
         document.getElementById('app-screen').classList.remove('hidden');
+        try {
+            let curAntrian = JSON.parse(localStorage.getItem('antrian_pakan') || '[]');
+            kirimTelemetriStatusPerangkat(curAntrian.length, null, curAntrian);
+        } catch (ePing) {}
 
         aturAksesMenu(user.role);
         if (typeof updatePwaInstallVisibility === 'function') {
@@ -15251,6 +15491,608 @@ async function uploadGambarKeSupabase(base64Data, mimeType, folderName, fileName
                 }
             });
         }
-    </script>
 
-    
+        // ========================================================
+        // LOGIKA: PUSAT ANTREAN, RADAR PETUGAS & UPDATE PWA
+        // ========================================================
+        function tampilkanBannerUpdatePWA() {
+            let toast = document.getElementById('pwa-update-toast');
+            if (toast) toast.classList.remove('hidden');
+        }
+
+        function terapkanUpdatePWA() {
+            let toast = document.getElementById('pwa-update-toast');
+            if (toast) toast.innerHTML = `<span class="material-symbols-outlined icon-spin" style="font-size:16px;">sync</span> Memperbarui...`;
+            if (newWorkerPWA) {
+                newWorkerPWA.postMessage({ action: 'skipWaiting' });
+            } else {
+                window.location.reload();
+            }
+        }
+
+        function bukaModalPusatDarurat() {
+            let modal = document.getElementById('modal-pusat-darurat');
+            if (!modal) return;
+            modal.classList.remove('hidden');
+
+            // Proteksi Role: Tab Brankas Cloud HANYA untuk Admin Pusat (PIN 1234)
+            let isAdmin = (typeof currentLoggedPin !== 'undefined' && currentLoggedPin === "1234");
+            let tabMaster = document.getElementById('btn-tab-pd-master');
+            if (tabMaster) {
+                tabMaster.style.display = isAdmin ? 'flex' : 'none';
+            }
+
+            renderIsiPusatDarurat();
+            try {
+                let curAntrian = JSON.parse(localStorage.getItem('antrian_pakan') || '[]');
+                kirimTelemetriStatusPerangkat(curAntrian.length, null, curAntrian);
+            } catch (ePing) {}
+        }
+
+        function tutupModalPusatDarurat() {
+            let modal = document.getElementById('modal-pusat-darurat');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function switchTabPusatDarurat(tab) {
+            let tabs = ['antrean', 'radar', 'blackbox', 'master'];
+            tabs.forEach(t => {
+                let v = document.getElementById(`view-pd-${t}`);
+                let b = document.getElementById(`btn-tab-pd-${t}`);
+                if (t === tab) {
+                    if (v) v.classList.remove('hidden');
+                    if (b) { b.style.background = '#ffffff'; b.style.color = '#0284c7'; b.style.borderBottom = '2px solid #0284c7'; }
+                } else {
+                    if (v) v.classList.add('hidden');
+                    if (b) { b.style.background = '#f8fafc'; b.style.color = '#64748b'; b.style.borderBottom = '2px solid transparent'; }
+                }
+            });
+
+            if (tab === 'radar') {
+                loadRadarPetugas(false);
+            }
+        }
+
+        // ========================================================
+        // TELEMETRI STATUS ANTRIAN PERANGKAT KE SUPABASE
+        // ========================================================
+        async function kirimTelemetriStatusPerangkat(jumlahAntrean, lastError, payloads) {
+            if (!navigator.onLine) return;
+            try {
+                let petugasAktif = (typeof activeUser !== 'undefined' && activeUser) ? activeUser : 'Admin';
+                let telemetriPayload = {
+                    petugas: petugasAktif,
+                    cabang: (typeof getCabangAktif === 'function') ? getCabangAktif() : 'PM',
+                    jumlah_antrean: jumlahAntrean || 0,
+                    last_error: lastError || null,
+                    antrean_payload: payloads || [],
+                    updated_at: new Date().toISOString()
+                };
+
+                await fetch(`${SUPA_URL}/rest/v1/telemetri_antrean?on_conflict=petugas`, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': SUPA_ANON_KEY,
+                        'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'resolution=merge-duplicates, return=minimal'
+                    },
+                    body: JSON.stringify(telemetriPayload)
+                });
+            } catch (errTele) {
+                // Silent catch jika tabel telemetri_antrean belum dibuat di Supabase
+            }
+        }
+
+        function renderIsiPusatDarurat() {
+            let antrian = JSON.parse(localStorage.getItem('antrian_pakan') || '[]');
+            let blackbox = JSON.parse(localStorage.getItem('cbl_blackbox_transaksi') || '[]');
+            let badgeCount = document.getElementById('pd-badge-count-antrean');
+            if (badgeCount) badgeCount.innerText = antrian.length;
+
+            let statusText = document.getElementById('pd-status-koneksi-text');
+            if (statusText) {
+                let statusKoneksi = navigator.onLine ? 'Online' : 'Offline';
+                statusText.innerText = `Sinyal: ${statusKoneksi} | ${antrian.length} Tertunda di HP`;
+            }
+
+            // Render Antrean (Clean Minimalist, No Emojis)
+            let cAntrean = document.getElementById('pd-list-antrean-container');
+            if (cAntrean) {
+                if (antrian.length === 0) {
+                    cAntrean.innerHTML = `
+                        <div style="text-align:center; padding:30px 15px; color:#16a34a; background:#f0fdf4; border-radius:12px; border:1px solid #bbf7d0;">
+                            <span class="material-symbols-outlined" style="font-size:32px; margin-bottom:4px; color:#16a34a;">check_circle</span>
+                            <div style="font-weight:800; font-size:13px;">Semua Data Beres</div>
+                            <div style="font-size:11px; color:#64748b; margin-top:2px;">Tidak ada transaksi yang tertunda di HP ini.</div>
+                        </div>
+                    `;
+                } else {
+                    cAntrean.innerHTML = antrian.map((it, idx) => {
+                        let payloads = it.isBatch ? it.items : [it];
+                        let errReason = it.last_error || (payloads[0] && payloads[0].last_error) || null;
+                        let errTime = it.last_attempt || (payloads[0] && payloads[0].last_attempt) || null;
+
+                        let diagnosaHtml = '';
+                        if (errReason) {
+                            diagnosaHtml = `
+                                <div style="margin-top:6px; background:#fff7ed; border:1px solid #fed7aa; border-radius:6px; padding:5px 8px; font-size:10px; color:#c2410c; display:flex; align-items:center; gap:4px;">
+                                    <span class="material-symbols-outlined" style="font-size:13px;">error_outline</span>
+                                    <span><b>Diagnosa:</b> ${errReason} ${errTime ? `<span style="color:#9a3412;">(${errTime})</span>` : ''}</span>
+                                </div>
+                            `;
+                        }
+
+                        let innerItemsHtml = payloads.map((p, pIdx) => {
+                            let itemsList = [];
+                            if (p.items) {
+                                for (let k in p.items) { itemsList.push(`${k}: ${p.items[k]} Kg`); }
+                            }
+                            let strItems = itemsList.join(', ') || 'Pakan';
+                            return `
+                                <div style="margin-bottom:4px;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                                        <b style="color:#1e293b; font-size:12px;">#${idx + 1}.${pIdx + 1} ${p.relasi || 'Umum'}</b>
+                                        <span style="background:#fef3c7; color:#b45309; padding:2px 6px; border-radius:4px; font-size:9px; font-weight:700;">Menunggu Kirim</span>
+                                    </div>
+                                    <div style="color:#475569; margin-top:3px; display:flex; align-items:center; gap:4px;">
+                                        <span class="material-symbols-outlined" style="font-size:13px; color:#64748b;">inventory_2</span>
+                                        <span>${strItems}</span>
+                                    </div>
+                                    <div style="display:flex; justify-content:space-between; color:#64748b; font-size:10px; margin-top:3px;">
+                                        <span>Petugas: ${p.petugas || 'Admin'} | ${p.lokasi || 'PM'}</span>
+                                        <span>${p.armada || 'Ambil Mandiri'}</span>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('<hr style="border:none; border-top:1px dashed #e2e8f0; margin:6px 0;">');
+
+                        return `
+                            <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px; font-size:11px; box-shadow:0 1px 2px rgba(0,0,0,0.03);">
+                                ${innerItemsHtml}
+                                ${diagnosaHtml}
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+
+            // Render Blackbox (Clean Minimalist)
+            let cBlackbox = document.getElementById('pd-list-blackbox-container');
+            if (cBlackbox) {
+                if (blackbox.length === 0) {
+                    cBlackbox.innerHTML = `<div style="text-align:center; padding:30px; color:#94a3b8;">Belum ada rekaman blackbox di HP ini.</div>`;
+                } else {
+                    cBlackbox.innerHTML = blackbox.map((b, i) => {
+                        let waktuStr = b.waktu ? new Date(b.waktu).toLocaleString('id-ID') : '-';
+                        let itemsList = [];
+                        if (b.items) {
+                            for (let k in b.items) { itemsList.push(`${k}: ${b.items[k]} Kg`); }
+                        }
+                        return `
+                            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px; font-size:10px;">
+                                <div style="display:flex; justify-content:space-between; font-weight:700; color:#334155;">
+                                    <span>${i + 1}. ${b.relasi} (${b.status})</span>
+                                    <span style="font-size:9px; color:#64748b;">${waktuStr}</span>
+                                </div>
+                                <div style="color:#64748b; margin-top:3px;">${itemsList.join(', ')} | ${b.armada}</div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+        }
+
+        // ========================================================
+        // TAB RADAR TIM: DETEKSI STATUS ANTRIAN SEMUA DEVICE
+        // ========================================================
+        let cacheRadarData = null;
+
+        async function loadRadarPetugas(force = false) {
+            let container = document.getElementById('pd-list-radar-container');
+            if (!container) return;
+
+            if (!navigator.onLine) {
+                container.innerHTML = `
+                    <div style="text-align:center; padding:30px; color:#dc2626;">
+                        <span class="material-symbols-outlined" style="font-size:28px;">wifi_off</span>
+                        <div style="font-size:11px; margin-top:4px;">Tidak ada internet untuk memuat radar petugas.</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div style="text-align:center; padding:30px; color:#0284c7;">
+                    <span class="material-symbols-outlined icon-spin" style="font-size:22px;">sync</span>
+                    <div style="font-size:11px; margin-top:4px;">Memindai status perangkat...</div>
+                </div>
+            `;
+
+            try {
+                let res = await fetch(`${SUPA_URL}/rest/v1/telemetri_antrean?select=*&order=updated_at.desc`, {
+                    headers: {
+                        'apikey': SUPA_ANON_KEY,
+                        'Authorization': `Bearer ${SUPA_ANON_KEY}`
+                    }
+                });
+
+                if (res.status === 404 || !res.ok) {
+                    // Tabel belum dibuat di Supabase
+                    container.innerHTML = `
+                        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px; font-size:11px; color:#1e40af; line-height:1.5;">
+                            <div style="font-weight:800; margin-bottom:4px; display:flex; align-items:center; gap:4px;">
+                                <span class="material-symbols-outlined" style="font-size:16px;">cell_tower</span>
+                                <span>Radar Siap Diaktifkan!</span>
+                            </div>
+                            Tabel <code>telemetri_antrean</code> belum dibuat di database Supabase. Jalankan perintah SQL berikut di Supabase SQL Editor untuk mengaktifkan radar otomatis:
+                            <pre style="background:#0f172a; color:#38bdf8; padding:8px; border-radius:6px; font-size:10px; overflow-x:auto; margin-top:6px;">CREATE TABLE telemetri_antrean (
+    id SERIAL PRIMARY KEY,
+    petugas TEXT UNIQUE NOT NULL,
+    cabang TEXT,
+    jumlah_antrean INT DEFAULT 0,
+    last_error TEXT,
+    antrean_payload JSONB,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);</pre>
+                        </div>
+                    `;
+                    return;
+                }
+
+                let data = await res.json();
+                cacheRadarData = data;
+                renderListRadar(data);
+            } catch (err) {
+                container.innerHTML = `<div style="text-align:center; padding:25px; color:#dc2626; font-size:11px;">Gagal memuat radar: ${err.message}</div>`;
+            }
+        }
+
+        function renderListRadar(devices) {
+            let container = document.getElementById('pd-list-radar-container');
+            if (!container) return;
+
+            if (!devices || devices.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align:center; padding:30px; color:#16a34a; background:#f0fdf4; border-radius:10px; border:1px solid #bbf7d0;">
+                        <span class="material-symbols-outlined" style="font-size:28px;">check_circle</span>
+                        <div style="font-size:12px; font-weight:700; margin-top:4px;">Semua Perangkat Bersih</div>
+                        <div style="font-size:10px; color:#64748b; margin-top:2px;">Tidak ada laporan macet di HP petugas lapangan.</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = devices.map(d => {
+                let hasStuck = (d.jumlah_antrean > 0);
+                let waktuStr = d.updated_at ? new Date(d.updated_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-';
+
+                let statusBadge = hasStuck
+                    ? `<span style="background:#fee2e2; color:#dc2626; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:800;">${d.jumlah_antrean} Laporan Macet</span>`
+                    : `<span style="background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:800;">Normal (0 Antrean)</span>`;
+
+                let borderColor = hasStuck ? '#fca5a5' : '#e2e8f0';
+                let bgColor = hasStuck ? '#fff5f5' : '#ffffff';
+
+                let actionSolveBtn = '';
+                if (hasStuck && (typeof currentLoggedPin !== 'undefined' && currentLoggedPin === "1234")) {
+                    actionSolveBtn = `
+                        <button onclick="selesaikanAntreanRemote(${d.id})" style="margin-top:8px; width:100%; background:#0284c7; color:#ffffff; border:none; padding:8px; border-radius:6px; font-weight:700; font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                            <span class="material-symbols-outlined" style="font-size:14px;">publish</span> Selesaikan & Masukkan ke Supabase
+                        </button>
+                    `;
+                }
+
+                return `
+                    <div style="background:${bgColor}; border:1px solid ${borderColor}; border-radius:10px; padding:10px 12px; font-size:11px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <b style="color:#0f172a; font-size:12px;">${d.petugas} (${d.cabang || 'PM'})</b>
+                            ${statusBadge}
+                        </div>
+                        <div style="color:#64748b; font-size:10px; margin-top:2px;">Terakhir sinkron: ${waktuStr}</div>
+                        ${d.last_error ? `<div style="margin-top:4px; color:#b91c1c; font-size:10px; background:#fef2f2; padding:4px 6px; border-radius:4px;"><b>Diagnosa:</b> ${d.last_error}</div>` : ''}
+                        ${actionSolveBtn}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ========================================================
+        // REMOTE SOLVE: ADMIN SELESAIKAN DATA MACET PETUGAS
+        // ========================================================
+        async function selesaikanAntreanRemote(telemetriId) {
+            let record = (cacheRadarData || []).find(r => r.id === telemetriId);
+            if (!record || !record.antrean_payload || record.antrean_payload.length === 0) {
+                alert("Data payload antrean tidak ditemukan.");
+                return;
+            }
+
+            let konfirmasi = confirm(
+                `SELESAIKAN ANTREAN REMOTE:\n\n` +
+                `Petugas: ${record.petugas}\n` +
+                `Jumlah Data: ${record.antrean_payload.length} transaksi\n\n` +
+                `Kirim dan masukkan seluruh data yang tertahan ini ke database Supabase sekarang?`
+            );
+            if (!konfirmasi) return;
+
+            let payloads = record.antrean_payload;
+            let rowsToInsert = [];
+
+            payloads.forEach(pl => {
+                let itemsList = pl.items || {};
+                for (let pakanName in itemsList) {
+                    rowsToInsert.push({
+                        tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
+                        waktu_input: new Date().toISOString(),
+                        petugas: pl.petugas || record.petugas,
+                        cabang: pl.lokasi || record.cabang || 'PM',
+                        status: pl.status || 'Keluar',
+                        relasi: pl.relasi || '-',
+                        alamat: pl.alamat || '-',
+                        ekor: pl.ekor || 0,
+                        pakan: pakanName,
+                        qty: itemsList[pakanName],
+                        satuan: 'Kg',
+                        catatan: pl.catatan || '',
+                        armada: pl.armada || '-'
+                    });
+                }
+            });
+
+            try {
+                let res = await fetch(`${SUPA_URL}/rest/v1/transaksi_pakan`, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': SUPA_ANON_KEY,
+                        'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'resolution=ignore-duplicates, return=minimal',
+                        'x-pin-karyawan': '1234'
+                    },
+                    body: JSON.stringify(rowsToInsert)
+                });
+
+                if (!res.ok) throw new Error(await res.text());
+
+                // Update status di telemetri
+                await fetch(`${SUPA_URL}/rest/v1/telemetri_antrean?id=eq.${telemetriId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': SUPA_ANON_KEY,
+                        'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ jumlah_antrean: 0, last_error: null, antrean_payload: [] })
+                });
+
+                alert("✅ Berhasil! Data macet petugas berhasil diselesaikan dan masuk ke Supabase.");
+                loadRadarPetugas(true);
+            } catch (e) {
+                alert("Gagal menyelesaikan: " + e.message);
+            }
+        }
+
+        function paksaSinkronSekarang() {
+            backoffAttemptsPWA = 0;
+            backoffDelayPWA = 1000;
+            let statusText = document.getElementById('pd-status-koneksi-text');
+            if (statusText) statusText.innerText = "Mencoba mengirim antrean sekarang...";
+            prosesAntreanBackground();
+            setTimeout(renderIsiPusatDarurat, 1500);
+        }
+
+        function kirimCadanganAntreanWA() {
+            let antrian = JSON.parse(localStorage.getItem('antrian_pakan') || '[]');
+            if (antrian.length === 0) {
+                alert("Tidak ada antrean tertunda untuk dikirim.");
+                return;
+            }
+
+            let lines = [`*CADANGAN DARURAT ANTREAN PAKAN CBL*`, `Waktu Ekspor: ${new Date().toLocaleString('id-ID')}`, `Total Laporan: ${antrian.length} Data\n`];
+            let counter = 1;
+
+            antrian.forEach(it => {
+                let payloads = it.isBatch ? it.items : [it];
+                let diag = it.last_error || (payloads[0] && payloads[0].last_error) || null;
+
+                payloads.forEach(p => {
+                    let itemsList = [];
+                    if (p.items) {
+                        for (let k in p.items) { itemsList.push(`${k}: ${p.items[k]} Kg`); }
+                    }
+                    lines.push(`${counter}. *${p.relasi || 'Umum'}* (${p.status || 'Keluar'})`);
+                    lines.push(`   Tgl: ${p.tanggal || '-'} | Petugas: ${p.petugas || 'Admin'}`);
+                    lines.push(`   Barang: ${itemsList.join(', ')}`);
+                    if (p.armada) lines.push(`   Armada: ${p.armada}`);
+                    if (p.ongkir) lines.push(`   Ongkir: Rp ${p.ongkir}`);
+                    if (diag) lines.push(`   Diagnosa: ${diag}`);
+                    lines.push(``);
+                    counter++;
+                });
+            });
+
+            let fullText = lines.join('\n');
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(fullText);
+            }
+            let waUrl = `https://wa.me/?text=${encodeURIComponent(fullText)}`;
+            window.open(waUrl, '_blank');
+        }
+
+        function unduhCadanganAntreanJSON() {
+            let antrian = JSON.parse(localStorage.getItem('antrian_pakan') || '[]');
+            let blackbox = JSON.parse(localStorage.getItem('cbl_blackbox_transaksi') || '[]');
+            let bundle = {
+                waktu_ekspor: new Date().toISOString(),
+                antrian_tertunda: antrian,
+                blackbox_lokal_100: blackbox
+            };
+            let blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+            let url = URL.createObjectURL(blob);
+            let a = document.createElement('a');
+            a.href = url;
+            a.download = `CADANGAN_ANTREAN_CBL_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        async function unduhMasterDatabaseSupabase() {
+            if (!navigator.onLine) {
+                alert("Wajib online untuk mengunduh master database dari Supabase!");
+                return;
+            }
+            let btn = document.getElementById('btn-unduh-master-db');
+            let prog = document.getElementById('pd-master-progress');
+            if (btn) btn.disabled = true;
+
+            try {
+                if (prog) prog.innerText = "Mengambil data Transaksi Pakan...";
+                let tPakan = await fetchSupabaseAll(`${SUPA_URL}/rest/v1/transaksi_pakan?select=*`);
+
+                if (prog) prog.innerText = "Mengambil data Cashflow & Arus Kas...";
+                let tCashflow = await fetchSupabaseAll(`${SUPA_URL}/rest/v1/cashflow?select=*`);
+
+                if (prog) prog.innerText = "Mengambil data Trip Armada...";
+                let tTrip = await fetchSupabaseAll(`${SUPA_URL}/rest/v1/trip_pengiriman?select=*`);
+
+                if (prog) prog.innerText = "Mengambil data Master Relasi...";
+                let tRelasi = await fetchSupabaseAll(`${SUPA_URL}/rest/v1/master_relasi?select=*`);
+
+                let masterBackup = {
+                    nama_perusahaan: "PT Cita Benggala Lestari",
+                    tipe: "Master Backup Database Cloud (Full Export)",
+                    waktu_ekspor: new Date().toISOString(),
+                    total_transaksi_pakan: tPakan.length,
+                    total_cashflow: tCashflow.length,
+                    total_trip: tTrip.length,
+                    total_relasi: tRelasi.length,
+                    transaksi_pakan: tPakan,
+                    cashflow: tCashflow,
+                    trip_pengiriman: tTrip,
+                    master_relasi: tRelasi
+                };
+
+                let blob = new Blob([JSON.stringify(masterBackup, null, 2)], { type: 'application/json' });
+                let url = URL.createObjectURL(blob);
+                let a = document.createElement('a');
+                a.href = url;
+                a.download = `MASTER_BACKUP_CBL_${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                if (prog) prog.innerHTML = `<span class="material-symbols-outlined" style="font-size:15px; vertical-align:middle; color:#15803d;">check_circle</span> <b>Berhasil!</b> ${tPakan.length} transaksi pakan, ${tCashflow.length} cashflow berhasil di-download.`;
+            } catch (err) {
+                if (prog) prog.innerHTML = `<span style="color:#dc2626;">Gagal unduh master: ${err.message}</span>`;
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        // ========================================================
+        // RESTORE DATABASE: METODE SAFE MERGE KHUSUS ADMIN (PIN 1234)
+        // ========================================================
+        function bukaFilePickerRestore() {
+            let isAdmin = (typeof currentLoggedPin !== 'undefined' && currentLoggedPin === "1234");
+            if (!isAdmin) {
+                let pin = prompt("PERINGATAN KEAMANAN TINGKAT TINGGI!\n\nAnda akan memulihkan data database Supabase.\nMasukkan PIN Admin Pusat untuk melanjutkan:");
+                if (pin !== "1234") {
+                    alert("Akses Ditolak: PIN Admin Pusat salah!");
+                    return;
+                }
+            }
+            let input = document.getElementById('input-file-restore-db');
+            if (input) input.click();
+        }
+
+        async function handlePilihFileRestore(event) {
+            let file = event.target.files && event.target.files[0];
+            if (!file) return;
+
+            // Reset input agar bisa dipilih ulang
+            event.target.value = '';
+
+            let prog = document.getElementById('pd-restore-progress');
+            let btn = document.getElementById('btn-restore-master-db');
+
+            let reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    let backupData = JSON.parse(e.target.result);
+
+                    let tPakan = backupData.transaksi_pakan || [];
+                    let tCashflow = backupData.cashflow || [];
+                    let tTrip = backupData.trip_pengiriman || [];
+                    let tRelasi = backupData.master_relasi || [];
+
+                    if (tPakan.length === 0 && tCashflow.length === 0 && tTrip.length === 0 && tRelasi.length === 0) {
+                        alert("File JSON tidak dikenali sebagai Master Backup CBL!");
+                        return;
+                    }
+
+                    let konfirmasi = confirm(
+                        `FILE BACKUP DIKENALI:\n\n` +
+                        `• Transaksi Pakan: ${tPakan.length} baris\n` +
+                        `• Cashflow: ${tCashflow.length} baris\n` +
+                        `• Trip Pengiriman: ${tTrip.length} baris\n` +
+                        `• Master Relasi: ${tRelasi.length} baris\n\n` +
+                        `METODE: Safe Merge (Data yang hilang akan dimasukkan kembali, data yang sudah ada TIDAK AKAN dirusak/dihapus).\n\n` +
+                        `Lanjutkan proses pemulihan ke Supabase?`
+                    );
+
+                    if (!konfirmasi) return;
+
+                    if (btn) btn.disabled = true;
+
+                    // Helper upload chunk Safe Merge
+                    async function uploadChunkSafeMerge(tableName, rows) {
+                        if (!rows || rows.length === 0) return;
+                        let chunkSize = 50;
+                        for (let i = 0; i < rows.length; i += chunkSize) {
+                            let chunk = rows.slice(i, i + chunkSize);
+                            if (prog) prog.innerText = `Memulihkan ${tableName} (${Math.min(i + chunkSize, rows.length)}/${rows.length})...`;
+
+                            let res = await fetch(`${SUPA_URL}/rest/v1/${tableName}`, {
+                                method: 'POST',
+                                headers: {
+                                    'apikey': SUPA_ANON_KEY,
+                                    'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                                    'Content-Type': 'application/json',
+                                    'Prefer': 'resolution=ignore-duplicates, return=minimal',
+                                    'x-pin-karyawan': '1234'
+                                },
+                                body: JSON.stringify(chunk)
+                            });
+
+                            if (!res.ok) {
+                                let errText = await res.text();
+                                console.warn(`Peringatan restore ${tableName} chunk ${i}:`, errText);
+                            }
+                        }
+                    }
+
+                    if (prog) prog.innerText = "Memulai pemulihan Relasi...";
+                    await uploadChunkSafeMerge('master_relasi', tRelasi);
+
+                    if (prog) prog.innerText = "Memulai pemulihan Trip Pengiriman...";
+                    await uploadChunkSafeMerge('trip_pengiriman', tTrip);
+
+                    if (prog) prog.innerText = "Memulai pemulihan Transaksi Pakan...";
+                    await uploadChunkSafeMerge('transaksi_pakan', tPakan);
+
+                    if (prog) prog.innerText = "Memulai pemulihan Cashflow...";
+                    await uploadChunkSafeMerge('cashflow', tCashflow);
+
+                    if (prog) prog.innerHTML = `<span class="material-symbols-outlined" style="font-size:15px; vertical-align:middle; color:#15803d;">check_circle</span> <b>Pemulihan Berhasil!</b> Seluruh data berhasil dipulihkan secara Safe Merge.`;
+                    alert("Sukses! Database berhasil dipulihkan tanpa merusak data yang ada.");
+                } catch (err) {
+                    if (prog) prog.innerHTML = `<span style="color:#dc2626;">Gagal pulihkan: ${err.message}</span>`;
+                    alert(`Gagal memulihkan database: ${err.message}`);
+                } finally {
+                    if (btn) btn.disabled = false;
+                }
+            };
+            reader.readAsText(file);
+        }
+    </script>
+</body>
+</html>
