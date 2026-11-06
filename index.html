@@ -10235,14 +10235,20 @@ function aturAksesMenu(role) {
                 }
             });
 
-            // LOGIKA PEMBAGIAN HALAMAN (50/50 SPLIT)
+            // LOGIKA PEMBAGIAN HALAMAN ADAPTIF (SMART THRESHOLD)
             let totalBaris = allTrs.length;
             let finalHtmlItems = "";
             let splitIndex = -1;
             let isSplit = false;
             
-            // Jika lebih dari 10 baris, kita bagi 2 agar proporsional dan tidak ada halaman yg isinya cuma 1 baris
-            if (totalBaris > 10) {
+            // Cek apakah ada baris dengan deskripsi panjang / rincian DP bertingkat (menggunakan colspan=4 atau ada <br>)
+            let isAdaDeskripsiPanjang = allTrs.length > 0 && (allTrs[0].includes('<br>') || allTrs[0].includes('colspan="4"'));
+            
+            // Jika baris 1 panjang (ada rincian DP tebal), batasnya 7 baris (sehingga 8 baris jadi 4 & 4, 10 baris jadi 5 & 5).
+            // Jika semua baris normal, ambang batas tetap di sweet spot 10 baris!
+            let ambangBatasSplit = isAdaDeskripsiPanjang ? 7 : 10;
+            
+            if (totalBaris > ambangBatasSplit) {
                 splitIndex = Math.floor(totalBaris / 2);
                 isSplit = true;
             }
