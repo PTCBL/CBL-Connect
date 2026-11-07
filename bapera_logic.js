@@ -204,8 +204,11 @@ function kalkulasiDataBapera(tahun) {
             if (!infoPakan) return;
 
             let tgl = row.tanggal || '';
-            // Silase Jagung mulai dihitung sharing BAPERA per Agustus 2026
+            // Silase Jagung mulai dihitung sharing BAPERA per 1 Agustus 2026
             if (infoPakan.key === 'Silase Jagung Manis' && tgl < '2026-08-01') return;
+
+            // Pongkol Singkong mulai dihitung sharing BAPERA per 1 Juli 2025 (historis)
+            if (infoPakan.key === 'Pongkol Singkong' && tgl < '2025-07-01') return;
 
             let y = parseInt(tgl.substring(0, 4));
             if (isNaN(y) || y < 2026) return;
@@ -309,7 +312,7 @@ function kalkulasiDataBapera(tahun) {
     }
 
     // -------------------------------------------------------------------------
-    // B. KALKULASI TAHUNAN TERTENTU (MISAL 2026)
+    // B. KALKULASI TAHUNAN TERTENTU (MISAL 2025 ATAU 2026)
     // -------------------------------------------------------------------------
     let cfSebelumTahunIni = baperaCashflowRaw.filter(cf => {
         let tgl = cf.tanggal || '';
@@ -327,7 +330,7 @@ function kalkulasiDataBapera(tahun) {
     if (tahun === 2025) {
         baperaSaldoAwalTahun = netCfSebelum > 0 ? netCfSebelum : BAPERA_HISTORIS_2025.saldoAwal2024;
     } else if (tahun === 2026) {
-        baperaSaldoAwalTahun = BAPERA_HISTORIS_2025.saldoAkhir2025;
+        baperaSaldoAwalTahun = BAPERA_HISTORIS_2025.saldoAkhir2025; // Rp 9.409.880
     } else {
         baperaSaldoAwalTahun = netCfSebelum > 0 ? netCfSebelum : 0;
     }
@@ -373,8 +376,13 @@ function kalkulasiDataBapera(tahun) {
         if (!infoPakan) return;
 
         let tgl = row.tanggal || '';
-        // Silase Jagung mulai dihitung sharing BAPERA per Agustus 2026
+        // Silase Jagung mulai dihitung sharing BAPERA per 1 Agustus 2026
         if (infoPakan.key === 'Silase Jagung Manis' && tgl < '2026-08-01') {
+            return;
+        }
+
+        // Pongkol Singkong mulai dihitung sharing BAPERA per 1 Juli 2025 (sesuai kesepakatan historis spreadsheet)
+        if (infoPakan.key === 'Pongkol Singkong' && tgl < '2025-07-01') {
             return;
         }
 
@@ -965,7 +973,7 @@ function cetakLaporanBaperaA4() {
                     margin-bottom: 10px;
                 }
                 .kop-title {
-                    font-size: 15px;
+                    font-size: 16px;
                     font-weight: 800;
                     color: #0f172a;
                     letter-spacing: 0.5px;
@@ -1028,23 +1036,23 @@ function cetakLaporanBaperaA4() {
             </div>
 
             <div id="printable-doc">
-                <!-- KOP SURAT DENGAN LOGO PT CBL -->
+                <!-- KOP SURAT DENGAN LOGO PT CBL (DIPERBESAR & ELEGAN) -->
                 <div class="kop-header">
-                    <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="display:flex; align-items:center; gap:16px;">
                         <img src="https://raw.githubusercontent.com/wildansyif/pakan-cbl/2e732398572a6ac7d3512559c4344d40ab0902f9/Logo%20CBL.png" 
                              alt="Logo PT CBL" 
                              onerror="this.onerror=null; this.src='Logo%20CBL.png';"
-                             style="height:44px; width:auto; object-fit:contain;" />
+                             style="height:65px; width:auto; max-width:180px; object-fit:contain;" />
                         <div>
                             <div class="kop-title">LAPORAN REKAPITULASI KAS BAPERA</div>
-                            <div style="font-size:11px; font-weight:800; color:#0f172a; margin-top:2px;">${periodeDocText}</div>
-                            <div style="font-size:9.5px; color:#475569; margin-top:1px; font-weight:600;">
+                            <div style="font-size:12px; font-weight:800; color:#0f172a; margin-top:3px;">${periodeDocText}</div>
+                            <div style="font-size:10px; color:#475569; margin-top:2px; font-weight:600;">
                                 Rentang Data: <span style="color:#0f172a;">${rentangDataText}</span>
                             </div>
                         </div>
                     </div>
                     <div style="text-align:right;">
-                        <div style="background:#0f172a; color:#ffffff; font-size:9px; font-weight:800; padding:3px 7px; border-radius:4px; display:inline-block; margin-bottom:2px;">
+                        <div style="background:#0f172a; color:#ffffff; font-size:9.5px; font-weight:800; padding:4px 8px; border-radius:4px; display:inline-block; margin-bottom:3px;">
                             DOKUMEN RESMI
                         </div>
                         <div style="font-size:9.5px; color:#64748b;">Tanggal Cetak: ${tglCetak}</div>
@@ -1130,7 +1138,7 @@ function cetakLaporanBaperaA4() {
                 <div class="qr-box">
                     <div style="flex-shrink:0; background:#ffffff; padding:3px; border:1px solid #cbd5e1; border-radius:5px;">
                         <img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&margin=0&data=${encodeURIComponent(auditUrl)}" 
-                             alt="QR Code Audit Kas BAPERA" 
+                             alt="QR Code Cashflow Kas BAPERA" 
                              width="72" height="72" 
                              style="display:block; width:72px; height:72px;" />
                     </div>
@@ -1138,7 +1146,7 @@ function cetakLaporanBaperaA4() {
                         <div style="display:inline-block; background:#0f172a; color:#ffffff; font-size:8.5px; font-weight:800; padding:2px 5px; border-radius:3px; margin-bottom:2px;">
                             SCAN UNTUK AUDIT DIGITAL LENGKAP
                         </div>
-                        <div style="font-size:11px; font-weight:800; color:#0f172a; margin-bottom:2px;">Verifikasi Rincian Kas Operasional Per Tanggal ${isAll ? '(Semua Periode)' : ''}</div>
+                        <div style="font-size:11px; font-weight:800; color:#0f172a; margin-bottom:2px;">Verifikasi Cashflow Kas Operasional Per Tanggal ${isAll ? '(Semua Periode)' : ''}</div>
                         <div style="font-size:9.5px; color:#64748b; line-height:1.3; margin-bottom:3px;">
                             Arahkan kamera HP ke barcode untuk melihat rincian tanggal transaksi pengeluaran dan pemasukan lain-lain beserta foto kuitansi/nota belanja dari brankas cloud.
                         </div>
@@ -1182,7 +1190,7 @@ function cetakLaporanBaperaA4() {
 }
 
 // -----------------------------------------------------------------------------
-// 7. Halaman Tamu / Publik Verifikasi Audit QR Code
+// 7. Halaman Tamu / Publik Verifikasi Audit QR Code (Tampilan Ala BCA Activity)
 // -----------------------------------------------------------------------------
 async function bukaLayarAuditBaperaPublik(tahun) {
     let appScreen = document.getElementById('app-screen');
@@ -1199,23 +1207,23 @@ async function bukaLayarAuditBaperaPublik(tahun) {
     screenEl.id = 'screen-audit-bapera-digital';
     screenEl.style.cssText = `
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: #f8fafc; z-index: 999999; overflow-y: auto; padding: 20px 14px;
-        box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #f8fafc; z-index: 999999; overflow-y: auto; padding: 16px 12px;
+        box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     `;
 
     let subJudulAudit = isAll
-        ? `Rincian Seluruh Mutasi Operasional Sejak Awal Transaksi (Semua Periode)`
-        : `Rincian Mutasi Operasional Tahun Buku <b>${tahun}</b>`;
+        ? `Rincian Mutasi Cashflow Lain-lain (Semua Tahun)`
+        : `Rincian Mutasi Cashflow Lain-lain Tahun Buku <b>${tahun}</b>`;
 
     screenEl.innerHTML = `
-        <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(0,0,0,0.06); padding: 20px;">
+        <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(0,0,0,0.06); padding: 18px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid #e2e8f0; padding-bottom:12px; margin-bottom:14px;">
                 <div>
                     <span style="background:#0284c7; color:#fff; font-size:10px; font-weight:800; padding:3px 8px; border-radius:4px;">VERIFIKASI RESMI CLOUD</span>
-                    <h2 style="font-size:16px; font-weight:800; color:#0f172a; margin:6px 0 2px 0;">Audit Digital Kas BAPERA</h2>
+                    <h2 style="font-size:17px; font-weight:800; color:#0f172a; margin:6px 0 2px 0;">Cashflow Kas BAPERA</h2>
                     <div style="font-size:11px; color:#64748b;">${subJudulAudit}</div>
                 </div>
-                <button onclick="tutupLayarAuditBaperaPublik()" style="background:#f1f5f9; border:none; color:#64748b; padding:6px 10px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer;">
+                <button onclick="tutupLayarAuditBaperaPublik()" style="background:#f1f5f9; border:none; color:#64748b; padding:6px 12px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer;">
                     ✕ Tutup
                 </button>
             </div>
@@ -1236,11 +1244,14 @@ async function bukaLayarAuditBaperaPublik(tahun) {
     try {
         let fnFetch = (typeof fetchSupabaseAll === 'function') ? fetchSupabaseAll : null;
         let url = isAll
-            ? `${SUPA_URL}/rest/v1/cashflow?relasi=ilike.*BAPERA*&order=tanggal.asc,id.asc`
-            : `${SUPA_URL}/rest/v1/cashflow?relasi=ilike.*BAPERA*&tanggal=gte.${tahun}-01-01&tanggal=lte.${tahun}-12-31&order=tanggal.asc,id.asc`;
+            ? `${SUPA_URL}/rest/v1/cashflow?relasi=ilike.*BAPERA*&order=tanggal.desc,id.desc`
+            : `${SUPA_URL}/rest/v1/cashflow?relasi=ilike.*BAPERA*&tanggal=gte.${tahun}-01-01&tanggal=lte.${tahun}-12-31&order=tanggal.desc,id.desc`;
         
         let rawData = fnFetch ? await fnFetch(url) : await fetch(url, { headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` } }).then(r => r.json());
         let data = (rawData || []).filter(row => String(row.kategori || '').trim() !== 'Saldo Awal');
+
+        // Urutkan transaksi secara kronologis terbalik (terbaru di atas seperti di BCA Activity)
+        data.sort((a,b) => (b.tanggal || '').localeCompare(a.tanggal || '') || (b.id || 0) - (a.id || 0));
 
         let loader = document.getElementById('audit-bapera-loader');
         let content = document.getElementById('audit-bapera-content');
@@ -1248,49 +1259,97 @@ async function bukaLayarAuditBaperaPublik(tahun) {
         if (content) content.classList.remove('hidden');
 
         let nf = new Intl.NumberFormat('id-ID');
-        let listHtml = "";
         let totMasuk = 0;
         let totKeluar = 0;
 
+        const namaBulanIndo = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+        const namaBulanShort = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"];
+
+        // Kelompokkan data per Bulan (YYYY-MM)
+        let monthGroups = {};
         data.forEach(row => {
             let nom = parseFloat(row.nominal) || 0;
             let isMasuk = String(row.jenis || '').toLowerCase().includes('masuk');
             if (isMasuk) totMasuk += nom; else totKeluar += nom;
 
-            let badgeJenis = isMasuk 
-                ? `<span style="background:#dcfce7; color:#15803d; padding:2px 6px; border-radius:4px; font-size:9.5px; font-weight:800;">MASUK</span>`
-                : `<span style="background:#fee2e2; color:#b91c1c; padding:2px 6px; border-radius:4px; font-size:9.5px; font-weight:800;">KELUAR</span>`;
+            let tgl = row.tanggal || '';
+            let [y, m, d] = tgl.split('-');
+            let key = `${y}-${m}`;
+            if (!monthGroups[key]) monthGroups[key] = [];
+            monthGroups[key].push({ ...row, y, m, d, nom, isMasuk });
+        });
 
-            let btnBukti = (row.bukti_url && row.bukti_url !== '-') 
-                ? `<a href="${row.bukti_url}" target="_blank" style="background:#eff6ff; color:#1d4ed8; text-decoration:none; padding:3px 7px; border-radius:5px; font-size:10px; font-weight:700; display:inline-flex; align-items:center; gap:2px;">
-                    <span class="material-symbols-outlined" style="font-size:12px;">visibility</span> Foto Nota
-                   </a>`
-                : '';
+        // Susun HTML riwayat transaksi ala BCA Activity
+        let listHtml = "";
+        let groupKeys = Object.keys(monthGroups);
+
+        groupKeys.forEach((key, gIdx) => {
+            let [y, m] = key.split('-');
+            let mIdx = parseInt(m) - 1;
+            let monthTitle = (mIdx >= 0 && mIdx < 12) ? namaBulanIndo[mIdx] : m;
+            let mShort = (mIdx >= 0 && mIdx < 12) ? namaBulanShort[mIdx] : m;
+            let headerMonthText = isAll ? `${monthTitle} ${y}` : monthTitle;
 
             listHtml += `
-                <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:8px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <span style="font-size:11px; font-weight:700; color:#64748b;">${formatTanggalIndo(row.tanggal)}</span>
-                        ${badgeJenis}
-                    </div>
-                    <div style="font-size:13px; font-weight:800; color:#0f172a; margin-bottom:3px;">${row.keterangan || '-'}</div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
-                        <span style="font-size:10.5px; color:#64748b; background:#f1f5f9; padding:2px 6px; border-radius:4px;">${row.kategori || 'Operasional'}</span>
-                        <div style="text-align:right;">
-                            <span style="font-size:13px; font-weight:800; ${isMasuk ? 'color:#15803d;' : 'color:#dc2626;'}">
-                                ${isMasuk ? '+' : '-'} Rp ${nf.format(nom)}
-                            </span>
-                        </div>
-                    </div>
-                    ${btnBukti ? `<div style="margin-top:6px; text-align:right;">${btnBukti}</div>` : ''}
+                <div style="font-size:14px; font-weight:800; color:#003366; padding:14px 0 6px 0; ${gIdx > 0 ? 'border-top:1px solid #e2e8f0; margin-top:10px;' : ''}">
+                    ${headerMonthText}
                 </div>
             `;
+
+            monthGroups[key].forEach(row => {
+                let warnaNominal = row.isMasuk ? "color:#15803d;" : "color:#dc2626;";
+                let tandaNominal = row.isMasuk ? "+ " : "- ";
+                
+                // Badge Masuk / Keluar (Pengganti 'Successful' di BCA)
+                let badgePill = row.isMasuk
+                    ? `<span style="display:inline-block; margin-top:5px; background:#dcfce7; color:#15803d; padding:2px 10px; border-radius:12px; font-size:10.5px; font-weight:700;">Masuk</span>`
+                    : `<span style="display:inline-block; margin-top:5px; background:#fee2e2; color:#dc2626; padding:2px 10px; border-radius:12px; font-size:10.5px; font-weight:700;">Keluar</span>`;
+
+                // Tombol Nota atau Chevron ala BCA
+                let btnBukti = (row.bukti_url && row.bukti_url !== '-')
+                    ? `<a href="${row.bukti_url}" target="_blank" onclick="event.stopPropagation();" style="display:inline-flex; align-items:center; gap:3px; background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; text-decoration:none; padding:4px 8px; border-radius:6px; font-size:10.5px; font-weight:700;">
+                        <span class="material-symbols-outlined" style="font-size:14px;">image</span> Nota
+                       </a>`
+                    : `<span class="material-symbols-outlined" style="font-size:20px; color:#0052cc; font-weight:700;">chevron_right</span>`;
+
+                listHtml += `
+                    <div style="display:flex; align-items:flex-start; padding:12px 0; border-bottom:1px solid #f1f5f9;">
+                        <!-- Kolom Tanggal Kiri (Ala BCA) -->
+                        <div style="width:48px; flex-shrink:0; text-align:left;">
+                            <div style="font-size:22px; font-weight:700; color:#475569; line-height:1;">${row.d}</div>
+                            <div style="font-size:11px; font-weight:600; color:#64748b; margin-top:3px;">${mShort}</div>
+                            <div style="font-size:10px; color:#94a3b8; margin-top:1px;">${row.y}</div>
+                        </div>
+
+                        <!-- Kolom Tengah: Deskripsi, Nominal, Kategori, Badge -->
+                        <div style="flex:1; padding:0 10px;">
+                            <div style="font-size:12.5px; font-weight:800; color:#003366; text-transform:uppercase; line-height:1.3; margin-bottom:3px;">
+                                ${row.keterangan || '-'}
+                            </div>
+                            <div style="font-size:13.5px; font-weight:800; ${warnaNominal} margin-bottom:2px;">
+                                ${tandaNominal}IDR ${nf.format(row.nom)}
+                            </div>
+                            <div style="font-size:11px; color:#64748b; margin-bottom:4px;">
+                                ${row.kategori || 'Operasional'}
+                            </div>
+                            <div>
+                                ${badgePill}
+                            </div>
+                        </div>
+
+                        <!-- Kolom Kanan: Tombol Nota atau Chevron -->
+                        <div style="flex-shrink:0; display:flex; align-items:center; justify-content:center; padding-top:6px;">
+                            ${btnBukti}
+                        </div>
+                    </div>
+                `;
+            });
         });
 
         content.innerHTML = `
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
                 <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px;">
-                    <div style="font-size:10px; color:#15803d; font-weight:700;">TOTAL PEMASUKAN LAIN:</div>
+                    <div style="font-size:10px; color:#15803d; font-weight:700;">TOTAL PEMASUKAN:</div>
                     <div style="font-size:14px; font-weight:800; color:#166534; margin-top:2px;">Rp ${nf.format(totMasuk)}</div>
                 </div>
                 <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:10px;">
@@ -1299,7 +1358,7 @@ async function bukaLayarAuditBaperaPublik(tahun) {
                 </div>
             </div>
 
-            <div style="font-size:11.5px; font-weight:800; color:#0f172a; margin-bottom:8px;">
+            <div style="font-size:11.5px; font-weight:800; color:#0f172a; margin-bottom:4px;">
                 Riwayat Transaksi Kronologis (${data.length} Transaksi):
             </div>
             ${listHtml || '<div style="text-align:center; padding:20px; color:#94a3b8;">Tidak ada data operasional lain.</div>'}
@@ -1313,9 +1372,34 @@ async function bukaLayarAuditBaperaPublik(tahun) {
 function tutupLayarAuditBaperaPublik() {
     let el = document.getElementById('screen-audit-bapera-digital');
     if (el) el.remove();
-    let params = new URLSearchParams(window.location.search);
-    if (params.get('audit_bapera')) {
-        window.location.href = window.location.pathname;
+
+    // Hapus parameter URL tanpa memicu reload halaman
+    if (window.history && window.history.replaceState) {
+        let cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+        window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
+    }
+
+    // Jika pengguna adalah tamu / scan dari luar PWA (belum login),
+    // tampilkan layar selesai bersih agar tidak nyasar ke form login CBL Connect
+    let isLoggedIn = (typeof activeUser !== 'undefined' && activeUser);
+    if (!isLoggedIn) {
+        let exitScreen = document.createElement('div');
+        exitScreen.id = 'screen-audit-selesai';
+        exitScreen.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:#f8fafc; z-index:999999; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; box-sizing:border-box; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;';
+        exitScreen.innerHTML = `
+            <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:32px 24px; max-width:320px; box-shadow:0 4px 20px rgba(0,0,0,0.06);">
+                <div style="background:#f0fdf4; border:1px solid #bbf7d0; width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px auto;">
+                    <span class="material-symbols-outlined" style="font-size:32px; color:#16a34a;">check_circle</span>
+                </div>
+                <h3 style="font-size:16px; font-weight:800; color:#0f172a; margin:0 0 6px 0;">Pemeriksaan Selesai</h3>
+                <p style="font-size:12px; color:#64748b; margin:0 0 18px 0; line-height:1.4;">Dokumen verifikasi cashflow telah ditutup. Anda dapat menutup tab browser ini.</p>
+                <button onclick="window.close()" style="background:#0f172a; color:#ffffff; border:none; padding:9px 20px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer;">
+                    Tutup Tab
+                </button>
+            </div>
+        `;
+        document.body.appendChild(exitScreen);
+        try { window.close(); } catch(e) {}
     }
 }
 
