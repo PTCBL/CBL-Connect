@@ -1193,6 +1193,10 @@ function cetakLaporanBaperaA4() {
 // 7. Halaman Tamu / Publik Verifikasi Audit QR Code (Tampilan Ala BCA Activity)
 // -----------------------------------------------------------------------------
 async function bukaLayarAuditBaperaPublik(tahun) {
+    window.baperaCurrentAuditYear = tahun;
+    let selesaiEl = document.getElementById('screen-audit-selesai');
+    if (selesaiEl) selesaiEl.remove();
+
     let appScreen = document.getElementById('app-screen');
     let loginScreen = document.getElementById('login-screen');
     if (loginScreen) loginScreen.style.setProperty('display', 'none', 'important');
@@ -1321,16 +1325,16 @@ async function bukaLayarAuditBaperaPublik(tahun) {
                             <div style="font-size:10px; color:#94a3b8; margin-top:1px;">${row.y}</div>
                         </div>
 
-                        <!-- Kolom Tengah: Deskripsi, Nominal, Kategori, Badge -->
+                        <!-- Kolom Tengah: Kategori (Header), Nominal, Deskripsi (di bawah nominal), Badge -->
                         <div style="flex:1; padding:0 10px;">
                             <div style="font-size:12.5px; font-weight:800; color:#003366; text-transform:uppercase; line-height:1.3; margin-bottom:3px;">
-                                ${row.keterangan || '-'}
+                                ${row.kategori || 'Operasional'}
                             </div>
                             <div style="font-size:13.5px; font-weight:800; ${warnaNominal} margin-bottom:2px;">
                                 ${tandaNominal}IDR ${nf.format(row.nom)}
                             </div>
-                            <div style="font-size:11px; color:#64748b; margin-bottom:4px;">
-                                ${row.kategori || 'Operasional'}
+                            <div style="font-size:11px; color:#64748b; line-height:1.3; margin-bottom:4px;">
+                                ${row.keterangan || '-'}
                             </div>
                             <div>
                                 ${badgePill}
@@ -1369,6 +1373,18 @@ async function bukaLayarAuditBaperaPublik(tahun) {
     }
 }
 
+function aksiTutupTabBrowser() {
+    try { window.close(); } catch(e) {}
+    try { window.open('', '_self').close(); } catch(e) {}
+    if (window.history && window.history.length > 1) {
+        window.history.back();
+    }
+    // Safari / iOS memblokir window.close() via script untuk keamanan jika tab dibuka dari kamera/QR
+    setTimeout(() => {
+        alert("Sistem keamanan browser ponsel (iOS/Safari) membatasi penutupan tab secara otomatis.\n\nSilakan ketuk tulisan 'Close' warna biru di pojok kiri atas layar Anda untuk menutup.");
+    }, 250);
+}
+
 function tutupLayarAuditBaperaPublik() {
     let el = document.getElementById('screen-audit-bapera-digital');
     if (el) el.remove();
@@ -1386,16 +1402,26 @@ function tutupLayarAuditBaperaPublik() {
         let exitScreen = document.createElement('div');
         exitScreen.id = 'screen-audit-selesai';
         exitScreen.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:#f8fafc; z-index:999999; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; box-sizing:border-box; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;';
+        
+        let tahunKembali = window.baperaCurrentAuditYear || 'ALL';
         exitScreen.innerHTML = `
-            <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:32px 24px; max-width:320px; box-shadow:0 4px 20px rgba(0,0,0,0.06);">
-                <div style="background:#f0fdf4; border:1px solid #bbf7d0; width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px auto;">
+            <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:28px 22px; max-width:330px; box-shadow:0 4px 20px rgba(0,0,0,0.06); text-align:center;">
+                <div style="background:#f0fdf4; border:1px solid #bbf7d0; width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 14px auto;">
                     <span class="material-symbols-outlined" style="font-size:32px; color:#16a34a;">check_circle</span>
                 </div>
                 <h3 style="font-size:16px; font-weight:800; color:#0f172a; margin:0 0 6px 0;">Pemeriksaan Selesai</h3>
-                <p style="font-size:12px; color:#64748b; margin:0 0 18px 0; line-height:1.4;">Dokumen verifikasi cashflow telah ditutup. Anda dapat menutup tab browser ini.</p>
-                <button onclick="window.close()" style="background:#0f172a; color:#ffffff; border:none; padding:9px 20px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer;">
-                    Tutup Tab
-                </button>
+                <p style="font-size:12px; color:#64748b; margin:0 0 16px 0; line-height:1.5;">
+                    Dokumen verifikasi cashflow telah ditutup.<br>
+                    Silakan ketuk <b style="color:#0284c7;">"Close"</b> di pojok kiri atas (atau tutup tab browser Anda).
+                </p>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <button onclick="aksiTutupTabBrowser()" style="background:#0f172a; color:#ffffff; border:none; padding:10px 18px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer;">
+                        Tutup Tab
+                    </button>
+                    <button onclick="document.getElementById('screen-audit-selesai').remove(); bukaLayarAuditBaperaPublik('${tahunKembali}');" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:9px 18px; border-radius:8px; font-weight:700; font-size:11.5px; cursor:pointer;">
+                        Lihat Kembali Dokumen
+                    </button>
+                </div>
             </div>
         `;
         document.body.appendChild(exitScreen);
@@ -1516,4 +1542,5 @@ window.tutupModalFotoBuktiBapera = tutupModalFotoBuktiBapera;
 window.cetakLaporanBaperaA4 = cetakLaporanBaperaA4;
 window.bukaLayarAuditBaperaPublik = bukaLayarAuditBaperaPublik;
 window.tutupLayarAuditBaperaPublik = tutupLayarAuditBaperaPublik;
+window.aksiTutupTabBrowser = aksiTutupTabBrowser;
 window.importDataHistorisBapera = importDataHistorisBapera;
