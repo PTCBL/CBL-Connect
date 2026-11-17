@@ -4864,19 +4864,13 @@
                                 (kemana aja), pengisian BBM, tambal ban/isi angin, dan servis berkala.</p>
                         </div>
                         <div style="display:flex; gap:8px;">
-                            <button type="button" onclick="bukaShortcutCashflow()"
-                                title="Buka Form Pencatatan Cashflow Kantor (Uang Keluar)"
-                                style="background:#f0fdfa; color:#0f766e; border:1px solid #99f6e4; padding:8px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px;">
-                                <span class="material-symbols-outlined" style="font-size:16px; color:#0d9488;">payments</span> Menu Cashflow
-                            </button>
                             <button type="button" onclick="loadLogBBMAdmin()"
                                 style="background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; padding:8px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px;">
                                 <span class="material-symbols-outlined" style="font-size:15px;">refresh</span> Segarkan
                             </button>
-                            <button type="button" onclick="bukaModalCatatBBM()"
+                            <button type="button" onclick="bukaShortcutCashflow()"
                                 style="background:#d97706; color:white; border:none; padding:8px 14px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(217,119,6,0.25);">
-                                <span class="material-symbols-outlined" style="font-size:16px;">add</span> + Laporan
-                                Operasional / Servis
+                                <span class="material-symbols-outlined" style="font-size:16px;">add</span> + Laporan Operasional / Servis
                             </button>
                         </div>
                     </div>
@@ -5015,15 +5009,126 @@
                                     <th style="padding:10px 8px; text-align:left;">Kru (Supir & Kernek)</th>
                                     <th style="padding:10px 8px; text-align:right;">Jarak PP</th>
                                     <th style="padding:10px 8px; text-align:center;">Status</th>
+                                    <th style="padding:10px 8px; text-align:center;">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody id="admin-armada-rute-tbody">
                                 <tr>
-                                    <td colspan="8" style="text-align:center; padding:25px; color:#94a3b8;">Memuat
+                                    <td colspan="9" style="text-align:center; padding:25px; color:#94a3b8;">Memuat
                                         riwayat perjalanan armada...</td>
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL KELOLA TRIP ARMADA OLEH ADMIN (PINDAH ARMADA / GABUNG RIT) -->
+            <div id="modal-kelola-trip-admin" class="hidden"
+                style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; display:flex; justify-content:center; align-items:center; padding:15px; box-sizing:border-box;">
+                <div style="background:#ffffff; border-radius:16px; max-width:440px; width:100%; max-height:90vh; overflow-y:auto; padding:20px; box-sizing:border-box; box-shadow:0 12px 30px rgba(0,0,0,0.25);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:10px; margin-bottom:14px;">
+                        <div style="font-size:15px; font-weight:800; color:#1e293b; display:flex; align-items:center; gap:6px;">
+                            <span class="material-symbols-outlined" style="color:#0f766e; font-size:22px;">tune</span>
+                            Kelola Pengiriman & Rit Armada
+                        </div>
+                        <button type="button" onclick="tutupModalKelolaTripAdmin()"
+                            style="background:none; border:none; font-size:22px; cursor:pointer; color:#64748b;">&times;</button>
+                    </div>
+
+                    <!-- Ringkasan Info Trip Terpilih -->
+                    <div id="kelola-trip-info-box" style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:10px; padding:12px; margin-bottom:14px; font-size:11px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                            <span style="color:#64748b;">Tanggal:</span>
+                            <b id="kelola-trip-tgl" style="color:#1e293b;">-</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                            <span style="color:#64748b;">Armada Aktif:</span>
+                            <b id="kelola-trip-armada" style="color:#0f766e;">-</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                            <span style="color:#64748b;">Tujuan / Konsumen:</span>
+                            <b id="kelola-trip-tujuan" style="color:#1e3a8a; text-align:right; max-width:65%;">-</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between;">
+                            <span style="color:#64748b;">Total Beban Fisik:</span>
+                            <b id="kelola-trip-kg" style="color:#15803d; font-size:12px;">0 Kg</b>
+                        </div>
+                    </div>
+
+                    <input type="hidden" id="kelola-trip-id">
+
+                    <!-- BAGIAN 1: PINDAH ARMADA -->
+                    <div style="margin-bottom:16px;">
+                        <label style="font-size:11px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">
+                            🚚 Pindahkan ke Armada Lain:
+                        </label>
+                        <div style="display:flex; gap:6px;">
+                            <button type="button" id="btn-kelola-arm-8707" class="btn-kelola-armada" onclick="pindahArmadaTripAdmin('D 8707 UE')"
+                                style="flex:1; padding:8px 4px; border:1.5px solid #cbd5e1; border-radius:8px; background:#fff; font-size:11px; font-weight:800; color:#1e293b; cursor:pointer; text-align:center;">
+                                D 8707 UE<br><span style="font-size:9.5px; font-weight:600; color:#2563eb;">(Hilman)</span>
+                            </button>
+                            <button type="button" id="btn-kelola-arm-8142" class="btn-kelola-armada" onclick="pindahArmadaTripAdmin('D 8142 UK')"
+                                style="flex:1; padding:8px 4px; border:1.5px solid #cbd5e1; border-radius:8px; background:#fff; font-size:11px; font-weight:800; color:#1e293b; cursor:pointer; text-align:center;">
+                                D 8142 UK<br><span style="font-size:9.5px; font-weight:600; color:#ea580c;">(Adi)</span>
+                            </button>
+                            <button type="button" id="btn-kelola-arm-8749" class="btn-kelola-armada" onclick="pindahArmadaTripAdmin('D 8749 UA')"
+                                style="flex:1; padding:8px 4px; border:1.5px solid #cbd5e1; border-radius:8px; background:#fff; font-size:11px; font-weight:800; color:#1e293b; cursor:pointer; text-align:center;">
+                                D 8749 UA<br><span style="font-size:9.5px; font-weight:600; color:#0f766e;">(Truk Agus)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- BAGIAN 2: PENYESUAIAN URUTAN RIT & TITIK DROP -->
+                    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px; margin-bottom:16px;">
+                        <label style="font-size:11px; font-weight:800; color:#166534; display:block; margin-bottom:6px;">
+                            🔢 Atur Urutan Rit & Titik Drop:
+                        </label>
+                        <div style="display:flex; gap:10px; margin-bottom:8px;">
+                            <div style="flex:1;">
+                                <label style="font-size:10px; font-weight:700; color:#15803d; display:block; margin-bottom:2px;">Urutan Rit:</label>
+                                <input type="number" id="kelola-trip-input-rit" min="1"
+                                    style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #86efac; font-size:12px; font-weight:800; box-sizing:border-box; text-align:center; background:#fff;">
+                            </div>
+                            <div style="flex:1;">
+                                <label style="font-size:10px; font-weight:700; color:#15803d; display:block; margin-bottom:2px;">Jumlah Titik Drop:</label>
+                                <input type="number" id="kelola-trip-input-titik" min="1"
+                                    style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #86efac; font-size:12px; font-weight:800; box-sizing:border-box; text-align:center; background:#fff;">
+                            </div>
+                        </div>
+                        <button type="button" id="btn-simpan-rit-admin" onclick="simpanRitTripAdmin()"
+                            style="width:100%; background:#16a34a; color:white; border:none; padding:8px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                            <span class="material-symbols-outlined" style="font-size:15px;">save</span> Simpan Perubahan Rit & Titik
+                        </button>
+                    </div>
+
+                    <!-- BAGIAN 3: GABUNGKAN KE RIT LAIN (MULTI-DROP) -->
+                    <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px; margin-bottom:16px;">
+                        <label style="font-size:11px; font-weight:800; color:#1e40af; display:block; margin-bottom:4px;">
+                            🔗 Gabungkan ke Trip Lain (Jadikan 1 Rit):
+                        </label>
+                        <div style="font-size:10px; color:#64748b; line-height:1.4; margin-bottom:8px;">
+                            Jika pengiriman ini berangkat bersamaan dalam 1 mobil dengan pengiriman lain hari ini, leburkan ke trip tersebut:
+                        </div>
+                        <select id="kelola-trip-select-target"
+                            style="width:100%; padding:8px; border-radius:6px; border:1px solid #93c5fd; font-size:11px; font-weight:600; color:#1e3a8a; background:#fff; margin-bottom:8px;">
+                            <option value="">-- Pilih Trip Utama Tujuan Gabung --</option>
+                        </select>
+                        <button type="button" id="btn-gabung-trip-admin" onclick="eksekusiGabungTripAdmin()"
+                            style="width:100%; background:#2563eb; color:white; border:none; padding:8px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                            <span class="material-symbols-outlined" style="font-size:15px;">merge</span> Gabung Menjadi 1 Rit
+                        </button>
+                    </div>
+
+                    <!-- BAGIAN 4: HAPUS DARI LOG TRIP (BILA DOBEL) -->
+                    <div style="border-top:1px dashed #e2e8f0; padding-top:10px; text-align:center;">
+                        <button type="button" onclick="hapusTripAdminDariLog()"
+                            style="background:none; border:none; color:#ef4444; font-size:11px; font-weight:700; cursor:pointer; text-decoration:underline;">
+                            Hapus Baris Trip Ini dari Log Armada
+                        </button>
+                        <div style="font-size:9.5px; color:#94a3b8; margin-top:2px;">
+                            *Hanya menghapus dari catatan perjalanan. Data penjualan di tabel transaksi pakan tetap aman.
+                        </div>
                     </div>
                 </div>
             </div>
