@@ -3390,49 +3390,62 @@ function renderBarometerArmada(trips, labelPeriode) {
     if (!containerBarometer) return;
 
     let nf = new Intl.NumberFormat('id-ID');
-    let p1Kg = 0, p2Kg = 0, p1Km = 0, p2Km = 0;
-    let p1Trips = 0, p2Trips = 0;
+    let p1Kg = 0, p2Kg = 0, trukKg = 0;
+    let p1Km = 0, p2Km = 0, trukKm = 0;
+    let p1Trips = 0, p2Trips = 0, trukTrips = 0;
 
     (trips || []).forEach(tr => {
         let arm = (tr.armada || '').toUpperCase();
+        let kg = parseFloat(tr.total_kg) || 0;
+        let km = parseFloat(tr.jarak_tempuh_km) || 0;
         if (arm.includes('D 8707 UE') || arm.includes('D 8070 UE')) {
-            p1Kg += (parseFloat(tr.total_kg) || 0);
-            p1Km += (parseFloat(tr.jarak_tempuh_km) || 0);
+            p1Kg += kg;
+            p1Km += km;
             p1Trips++;
         } else if (arm.includes('D 8142 UK')) {
-            p2Kg += (parseFloat(tr.total_kg) || 0);
-            p2Km += (parseFloat(tr.jarak_tempuh_km) || 0);
+            p2Kg += kg;
+            p2Km += km;
             p2Trips++;
+        } else if (arm.includes('D 8749 UA') || arm.includes('8749') || arm.includes('TRUK')) {
+            trukKg += kg;
+            trukKm += km;
+            trukTrips++;
         }
     });
 
-    let totalKg = p1Kg + p2Kg;
-    let pctP1 = totalKg > 0 ? Math.round((p1Kg / totalKg) * 100) : 50;
-    let pctP2 = totalKg > 0 ? (100 - pctP1) : 50;
-    let isSeimbang = (totalKg === 0) || (pctP1 >= 40 && pctP1 <= 60);
+    let totalKg = p1Kg + p2Kg + trukKg;
+    let pctP1 = totalKg > 0 ? Math.round((p1Kg / totalKg) * 100) : 0;
+    let pctP2 = totalKg > 0 ? Math.round((p2Kg / totalKg) * 100) : 0;
+    let pctTruk = totalKg > 0 ? (100 - pctP1 - pctP2) : 0;
+
+    let totalPickupKg = p1Kg + p2Kg;
+    let pctPU1 = totalPickupKg > 0 ? Math.round((p1Kg / totalPickupKg) * 100) : 50;
+    let isPickupSeimbang = (totalPickupKg === 0) || (pctPU1 >= 40 && pctPU1 <= 60);
 
     let badgeHtml = (totalKg === 0)
         ? `<span style="font-size:10px; font-weight:800; padding:3px 8px; border-radius:12px; background:#f1f5f9; color:#64748b;">⚖️ BELUM ADA PENGIRIMAN</span>`
-        : isSeimbang
-            ? `<span style="font-size:10px; font-weight:800; padding:3px 8px; border-radius:12px; background:#dcfce7; color:#15803d;">✅ SEIMBANG (40-60%)</span>`
-            : `<span style="font-size:10px; font-weight:800; padding:3px 8px; border-radius:12px; background:#fef3c7; color:#b45309;">⚠️ KURANG SEIMBANG</span>`;
+        : isPickupSeimbang
+            ? `<span style="font-size:10px; font-weight:800; padding:3px 8px; border-radius:12px; background:#dcfce7; color:#15803d;">✅ PICK-UP SEIMBANG (40-60%)</span>`
+            : `<span style="font-size:10px; font-weight:800; padding:3px 8px; border-radius:12px; background:#fef3c7; color:#b45309;">⚠️ PICK-UP KURANG SEIMBANG</span>`;
 
     containerBarometer.innerHTML = `
         <div style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; padding:15px; margin-bottom:15px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;">
                 <div style="display:flex; align-items:center; gap:6px;">
-                    <span style="font-size:13px; font-weight:800; color:#1e293b;">⚖️ Barometer Keseimbangan Pengiriman Pick-Up</span>
+                    <span style="font-size:13px; font-weight:800; color:#1e293b;">⚖️ Barometer & Distribusi Muatan Armada CBL</span>
                     <span style="font-size:11px; color:#64748b; font-weight:600;">(${labelPeriode || 'Periode Ini'})</span>
                 </div>
                 ${badgeHtml}
             </div>
             <div style="height:22px; border-radius:6px; overflow:hidden; display:flex; background:#e2e8f0;">
-                <div style="width:${pctP1}%; background:#2563eb; color:white; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; transition:width 0.3s ease;">D 8707 UE (${pctP1}%)</div>
-                <div style="width:${pctP2}%; background:#ea580c; color:white; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; transition:width 0.3s ease;">D 8142 UK (${pctP2}%)</div>
+                ${pctP1 > 0 ? `<div style="width:${pctP1}%; background:#2563eb; color:white; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; transition:width 0.3s ease;" title="D 8707 UE (Hilman): ${pctP1}%">D 8707 UE (${pctP1}%)</div>` : ''}
+                ${pctP2 > 0 ? `<div style="width:${pctP2}%; background:#ea580c; color:white; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; transition:width 0.3s ease;" title="D 8142 UK (Adi): ${pctP2}%">D 8142 UK (${pctP2}%)</div>` : ''}
+                ${pctTruk > 0 ? `<div style="width:${pctTruk}%; background:#0f766e; color:white; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; transition:width 0.3s ease;" title="D 8749 UA (Truk Agus): ${pctTruk}%">D 8749 UA (${pctTruk}%)</div>` : ''}
             </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; font-size:11px; color:#475569;">
-                <div>• <b>D 8707 UE (Hilman):</b> ${nf.format(p1Kg)} Kg | ${p1Km} Km | ${p1Trips} Rit</div>
-                <div>• <b>D 8142 UK (Adi):</b> ${nf.format(p2Kg)} Kg | ${p2Km} Km | ${p2Trips} Rit</div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-top:10px; font-size:11px; color:#475569;">
+                <div>• <b style="color:#2563eb;">D 8707 UE (Hilman):</b> ${nf.format(p1Kg)} Kg | ${p1Km} Km | ${p1Trips} Rit</div>
+                <div>• <b style="color:#ea580c;">D 8142 UK (Adi):</b> ${nf.format(p2Kg)} Kg | ${p2Km} Km | ${p2Trips} Rit</div>
+                <div>• <b style="color:#0f766e;">D 8749 UA (Truk Agus):</b> ${nf.format(trukKg)} Kg | ${trukKm} Km | ${trukTrips} Rit</div>
             </div>
         </div>
     `;
@@ -3683,7 +3696,7 @@ async function loadLogBBMAdmin() {
 
     tbodyExpenses.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat data operasional armada...</td></tr>`;
     if (tbodyTrips) {
-        tbodyTrips.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat riwayat perjalanan armada...</td></tr>`;
+        tbodyTrips.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat riwayat perjalanan armada...</td></tr>`;
     }
 
     let now = new Date();
@@ -3718,7 +3731,12 @@ async function loadLogBBMAdmin() {
         // 2. Ambil riwayat perjalanan/rit dari trip_pengiriman via fetchTripsByDateRange
         let p2 = fetchTripsByDateRange(startDate, endDate);
 
-        let [rawCF, rawTrips] = await Promise.all([p1, p2]);
+        // 3. Ambil data pendapatan ongkir dari transaksi_pakan dalam periode aktif
+        let p3 = fetch(`${SUPA_URL}/rest/v1/transaksi_pakan?pakan=eq.Ongkir Pengiriman&tanggal=gte.${startDate}&tanggal=lte.${endDate}&select=id,tanggal,harga_satuan,qty,armada,trip_id,relasi`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        }).then(r => r.json()).catch(() => []);
+
+        let [rawCF, rawTrips, rawOngkir] = await Promise.all([p1, p2, p3]);
 
         // Filter cashflow yang relevan dengan armada (BBM, Ban, Servis, Cuci, atau ada sebutan plat)
         let armadaExpenses = (Array.isArray(rawCF) ? rawCF : []).filter(item => {
@@ -3752,6 +3770,7 @@ async function loadLogBBMAdmin() {
         window._cacheArmadaData = {
             expenses: armadaExpenses,
             trips: fleetTrips,
+            ongkirRows: Array.isArray(rawOngkir) ? rawOngkir : [],
             labelPeriode: labelPeriode
         };
 
@@ -3777,19 +3796,28 @@ function switchSubTabArmada(subtab) {
     window._armadaActiveSubtab = subtab;
     let btnBiaya = document.getElementById('subtab-btn-biaya');
     let btnRute = document.getElementById('subtab-btn-rute');
+    let btnRapor = document.getElementById('subtab-btn-rapor');
     let viewBiaya = document.getElementById('subview-armada-biaya');
     let viewRute = document.getElementById('subview-armada-rute');
+    let viewRapor = document.getElementById('subview-armada-rapor');
+
+    [btnBiaya, btnRute, btnRapor].forEach(b => {
+        if (b) { b.style.background = '#f8fafc'; b.style.color = '#475569'; b.style.borderColor = '#cbd5e1'; }
+    });
+    [viewBiaya, viewRute, viewRapor].forEach(v => {
+        if (v) v.classList.add('hidden');
+    });
 
     if (subtab === 'biaya') {
         if (btnBiaya) { btnBiaya.style.background = '#2563eb'; btnBiaya.style.color = '#ffffff'; btnBiaya.style.borderColor = '#2563eb'; }
-        if (btnRute) { btnRute.style.background = '#f8fafc'; btnRute.style.color = '#475569'; btnRute.style.borderColor = '#cbd5e1'; }
         if (viewBiaya) viewBiaya.classList.remove('hidden');
-        if (viewRute) viewRute.classList.add('hidden');
-    } else {
-        if (btnBiaya) { btnBiaya.style.background = '#f8fafc'; btnBiaya.style.color = '#475569'; btnBiaya.style.borderColor = '#cbd5e1'; }
+    } else if (subtab === 'rute') {
         if (btnRute) { btnRute.style.background = '#0f766e'; btnRute.style.color = '#ffffff'; btnRute.style.borderColor = '#0f766e'; }
-        if (viewBiaya) viewBiaya.classList.add('hidden');
         if (viewRute) viewRute.classList.remove('hidden');
+    } else if (subtab === 'rapor') {
+        if (btnRapor) { btnRapor.style.background = '#7c3aed'; btnRapor.style.color = '#ffffff'; btnRapor.style.borderColor = '#7c3aed'; }
+        if (viewRapor) viewRapor.classList.remove('hidden');
+        renderRaporArmadaView();
     }
 }
 
@@ -3964,11 +3992,38 @@ function renderArmadaLogViews() {
     // 3. Render Tabel Riwayat Perjalanan (Tracking Kemana Aja)
     if (tbodyTrips) {
         if (filteredTrips.length === 0) {
-            tbodyTrips.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada riwayat pengantaran untuk armada ini.</td></tr>`;
+            tbodyTrips.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada riwayat pengantaran untuk armada ini.</td></tr>`;
         } else {
             let users = window.tripState.cachedUsers || [];
             let userMap = {};
             users.forEach(u => { userMap[u.id] = u.nama; });
+
+            // Hitung nomor urutan rit otomatis kronologis per armada per tanggal
+            let tripRitAutoMap = {};
+            let tripGroups = {};
+
+            allTrips.forEach(tr => {
+                let armStd = 'D 8707 UE';
+                let a = (tr.armada || '').toUpperCase();
+                if (a.includes('8142')) armStd = 'D 8142 UK';
+                else if (a.includes('8749') || a.includes('TRUK')) armStd = 'D 8749 UA';
+                
+                let key = `${tr.tanggal || ''}_${armStd}`;
+                if (!tripGroups[key]) tripGroups[key] = [];
+                tripGroups[key].push(tr);
+            });
+
+            Object.keys(tripGroups).forEach(key => {
+                tripGroups[key].sort((a, b) => {
+                    let tA = a.waktu_berangkat || a.created_at || a.id || 0;
+                    let tB = b.waktu_berangkat || b.created_at || b.id || 0;
+                    return tA > tB ? 1 : (tA < tB ? -1 : 0);
+                });
+                tripGroups[key].forEach((tr, idx) => {
+                    tripRitAutoMap[tr.id] = idx + 1;
+                });
+            });
+            window._tripRitAutoMap = tripRitAutoMap;
 
             tbodyTrips.innerHTML = filteredTrips.map(tr => {
                 let waktuStr = tr.waktu_berangkat 
@@ -4003,15 +4058,19 @@ function renderArmadaLogViews() {
                 else if (armLabel.includes('D 8142 UK')) armLabel = 'D 8142 UK (Adi)';
                 else if (armLabel.includes('D 8749 UA') || armLabel.includes('8749') || armLabel.includes('Truk')) armLabel = 'D 8749 UA (Agus)';
 
-                let ritBadge = `<span style="background:#e0f2fe; color:#0369a1; font-size:10px; font-weight:700; padding:1px 5px; border-radius:4px; margin-left:4px;">Rit ${tr.urutan_rit || 1}</span>`;
+                let autoRit = tripRitAutoMap[tr.id] || tr.urutan_rit || 1;
                 let titikBadge = (parseInt(tr.jumlah_titik) > 1) 
-                    ? `<span style="background:#fef3c7; color:#92400e; font-size:10px; font-weight:700; padding:1px 5px; border-radius:4px; margin-left:3px;">${tr.jumlah_titik} Titik</span>` 
+                    ? `<div style="margin-top:2px;"><span style="background:#fef3c7; color:#92400e; font-size:9.5px; font-weight:700; padding:1px 5px; border-radius:4px;">${tr.jumlah_titik} Titik Drop</span></div>` 
                     : '';
 
                 return `
                     <tr style="border-bottom:1px solid #e2e8f0; font-size:11px;">
                         <td style="padding:10px 8px; font-weight:700; color:#1e293b;">${tglDisplay}</td>
-                        <td style="padding:10px 8px; font-weight:800; color:#0f766e;">${armLabel} ${ritBadge} ${titikBadge}</td>
+                        <td style="padding:10px 8px; text-align:center; white-space:nowrap;">
+                            <span style="background:#e0f2fe; color:#0369a1; font-size:11px; font-weight:800; padding:3px 8px; border-radius:10px; display:inline-block;">Rit ${autoRit}</span>
+                            ${titikBadge}
+                        </td>
+                        <td style="padding:10px 8px; font-weight:800; color:#0f766e;">${armLabel}</td>
                         <td style="padding:10px 8px; font-weight:700; color:#1e3a8a;">${relasiList} ${mapsBtn}</td>
                         <td style="padding:10px 8px; color:#334155; font-size:10px; max-width:200px;">${pakanList}</td>
                         <td style="padding:10px 8px; text-align:right; font-weight:800; color:#15803d;">${nf.format(tr.total_kg || 0)} Kg</td>
@@ -4030,10 +4089,15 @@ function renderArmadaLogViews() {
             }).join('');
         }
     }
+
+    // Sinkronkan data Rapor Kinerja & Biaya Armada CBL jika tampilan aktif
+    if (typeof renderRaporArmadaView === 'function') {
+        renderRaporArmadaView();
+    }
 }
 
 // ====================================================================
-// MODAL KELOLA TRIP PENGIRIMAN & MULTI-DROP OLEH ADMIN
+// MODAL KELOLA TRIP PENGIRIMAN, PECAH MUATAN & GABUNG RIT OLEH ADMIN
 // ====================================================================
 
 function bukaModalKelolaTripAdmin(tripId) {
@@ -4053,8 +4117,6 @@ function bukaModalKelolaTripAdmin(tripId) {
     let elArm = document.getElementById('kelola-trip-armada');
     let elTuj = document.getElementById('kelola-trip-tujuan');
     let elKg = document.getElementById('kelola-trip-kg');
-    let elRit = document.getElementById('kelola-trip-input-rit');
-    let elTitik = document.getElementById('kelola-trip-input-titik');
 
     if (elId) elId.value = tr.id;
     if (elTgl) elTgl.innerText = tr.tanggal || '-';
@@ -4068,10 +4130,37 @@ function bukaModalKelolaTripAdmin(tripId) {
     let manifest = tr.manifest_items || [];
     let relasiList = [...new Set(manifest.map(m => m.relasi).filter(Boolean))].join(', ') || tr.catatan || 'Konsumen';
     if (elTuj) elTuj.innerText = relasiList;
-    if (elKg) elKg.innerText = `${nf.format(tr.total_kg || 0)} Kg`;
+    let curKgVal = parseFloat(tr.total_kg) || 0;
+    if (elKg) elKg.innerText = `${nf.format(curKgVal)} Kg`;
 
-    if (elRit) elRit.value = tr.urutan_rit || 1;
-    if (elTitik) elTitik.value = tr.jumlah_titik || 1;
+    // Saran split otomatis & sinkronisasi input sisa Kg dan split Kg
+    let sisaInput = document.getElementById('kelola-trip-input-sisa-kg');
+    let splitInput = document.getElementById('kelola-trip-input-split-kg');
+    let splitSel = document.getElementById('kelola-trip-select-split-armada');
+    if (splitInput) {
+        let isTruk = (tr.armada || '').includes('8749') || (tr.armada || '').includes('Truk');
+        let defaultSplit = (isTruk && curKgVal > 7500)
+            ? (curKgVal - 7500)
+            : (!isTruk && curKgVal > 1500 ? (curKgVal - 1500) : '');
+
+        if (defaultSplit && defaultSplit > 0 && defaultSplit < curKgVal) {
+            splitInput.value = defaultSplit;
+            if (sisaInput) sisaInput.value = curKgVal - defaultSplit;
+        } else {
+            splitInput.value = '';
+            if (sisaInput) sisaInput.value = curKgVal;
+        }
+
+        if (splitSel) {
+            if (isTruk) {
+                splitSel.value = 'D 8707 UE';
+            } else if ((tr.armada || '').includes('8707') || (tr.armada || '').includes('8070')) {
+                splitSel.value = 'D 8142 UK';
+            } else {
+                splitSel.value = 'D 8707 UE';
+            }
+        }
+    }
 
     // Reset dan aktifkan highlight button armada
     document.querySelectorAll('.btn-kelola-armada').forEach(b => {
@@ -4092,6 +4181,7 @@ function bukaModalKelolaTripAdmin(tripId) {
 
     // Populate dropdown target gabung trip pada tanggal yang sama
     let selTarget = document.getElementById('kelola-trip-select-target');
+    let autoRitMap = window._tripRitAutoMap || {};
     if (selTarget) {
         selTarget.innerHTML = `<option value="">-- Pilih Trip Utama Tujuan Gabung --</option>`;
         let otherTrips = trips.filter(t => t.id != tr.id && t.tanggal === tr.tanggal);
@@ -4105,7 +4195,8 @@ function bukaModalKelolaTripAdmin(tripId) {
                 if (otArm.includes('8707')) otArm = 'D 8707 UE';
                 else if (otArm.includes('8142')) otArm = 'D 8142 UK';
                 else if (otArm.includes('8749')) otArm = 'D 8749 UA';
-                selTarget.innerHTML += `<option value="${ot.id}">[Rit ${ot.urutan_rit || 1}] ${otArm} - ${otRelasi} (${nf.format(ot.total_kg || 0)} Kg)</option>`;
+                let otRit = autoRitMap[ot.id] || ot.urutan_rit || 1;
+                selTarget.innerHTML += `<option value="${ot.id}">[Rit ${otRit}] ${otArm} - ${otRelasi} (${nf.format(ot.total_kg || 0)} Kg)</option>`;
             });
         }
     }
@@ -4191,19 +4282,98 @@ async function pindahArmadaTripAdmin(armadaTujuan) {
     }
 }
 
-async function simpanRitTripAdmin() {
+// ✂️ PECAH MUATAN KE ARMADA LAIN (CUSTOM TONASE RATIO)
+function onInputSisaKgChange(val) {
+    let tripId = document.getElementById('kelola-trip-id')?.value;
+    let trips = window._cacheArmadaData?.trips || window.tripState?.cachedTrips || [];
+    let tr = trips.find(t => t.id == tripId);
+    let totalKg = tr ? (parseFloat(tr.total_kg) || 0) : 0;
+    let sisa = parseFloat(val) || 0;
+    let splitInput = document.getElementById('kelola-trip-input-split-kg');
+    if (splitInput && totalKg > 0) {
+        let split = totalKg - sisa;
+        splitInput.value = (split > 0) ? split : 0;
+    }
+}
+
+function onInputSplitKgChange(val) {
+    let tripId = document.getElementById('kelola-trip-id')?.value;
+    let trips = window._cacheArmadaData?.trips || window.tripState?.cachedTrips || [];
+    let tr = trips.find(t => t.id == tripId);
+    let totalKg = tr ? (parseFloat(tr.total_kg) || 0) : 0;
+    let split = parseFloat(val) || 0;
+    let sisaInput = document.getElementById('kelola-trip-input-sisa-kg');
+    if (sisaInput && totalKg > 0) {
+        let sisa = totalKg - split;
+        sisaInput.value = (sisa > 0) ? sisa : 0;
+    }
+}
+
+async function eksekusiPecahTripAdmin() {
     let tripId = document.getElementById('kelola-trip-id')?.value;
     if (!tripId) return;
 
-    let ritVal = parseInt(document.getElementById('kelola-trip-input-rit')?.value) || 1;
-    let titikVal = parseInt(document.getElementById('kelola-trip-input-titik')?.value) || 1;
+    let trips = window._cacheArmadaData?.trips || window.tripState?.cachedTrips || [];
+    let tr = trips.find(t => t.id == tripId);
+    if (!tr) {
+        alert("Data trip tidak ditemukan.");
+        return;
+    }
 
-    let btn = document.getElementById('btn-simpan-rit-admin');
+    let splitKg = parseFloat(document.getElementById('kelola-trip-input-split-kg')?.value) || 0;
+    let sisaKg = parseFloat(document.getElementById('kelola-trip-input-sisa-kg')?.value) || 0;
+    let targetArmada = document.getElementById('kelola-trip-select-split-armada')?.value;
+    let curKg = parseFloat(tr.total_kg) || 0;
+
+    if (splitKg <= 0 && sisaKg > 0 && sisaKg < curKg) {
+        splitKg = curKg - sisaKg;
+    }
+    if (sisaKg <= 0 && splitKg > 0 && splitKg < curKg) {
+        sisaKg = curKg - splitKg;
+    }
+
+    if (splitKg <= 0 || sisaKg <= 0) {
+        alert("Masukkan jumlah pembagian Kg yang valid untuk kedua armada!");
+        return;
+    }
+
+    if (splitKg >= curKg || sisaKg >= curKg) {
+        alert(`Jumlah Kg muatan harus dibagi dua armada (tidak boleh salah satunya 0 atau melebihi ${curKg} Kg).\nJika ingin memindahkan seluruh muatan, gunakan tombol 'Pindahkan ke Armada Lain' di atas.`);
+        return;
+    }
+
+    if (!targetArmada || targetArmada === tr.armada) {
+        alert("Pilih armada penerima muatan yang berbeda dengan armada asal!");
+        return;
+    }
+
+    let nf = new Intl.NumberFormat('id-ID');
+
+    let msg = `Pecah muatan pengiriman ini?\n\n`
+            + `• Muatan di armada sekarang (${tr.armada}): disesuaikan jadi ${nf.format(sisaKg)} Kg\n`
+            + `• Pengiriman baru di ${targetArmada}: dibuat sebesar ${nf.format(splitKg)} Kg\n\n`
+            + `Lanjutkan pemecahan muatan?`;
+
+    if (!confirm(msg)) return;
+
+    let btn = document.getElementById('btn-pecah-trip-admin');
     let origText = btn ? btn.innerHTML : '';
-    if (btn) { btn.disabled = true; btn.innerText = "Menyimpan..."; }
+    if (btn) { btn.disabled = true; btn.innerText = "Memproses..."; }
 
     try {
-        let res = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${tripId}`, {
+        // 1. Tentukan supir penerima
+        let targetSopirId = null;
+        if (targetArmada.includes('8707') || targetArmada.includes('8070')) targetSopirId = 6; // Hilman
+        else if (targetArmada.includes('8142')) targetSopirId = 7; // Adi
+        else if (targetArmada.includes('8749')) {
+            let users = window.tripState?.cachedUsers || [];
+            let agusUser = users.find(u => (u.nama || '').toLowerCase().includes('agus') && (u.role || '').toLowerCase() === 'sopir');
+            if (agusUser) targetSopirId = agusUser.id;
+        }
+
+        // 2. Update trip sumber (dikurangi splitKg)
+        let catatanSumber = `${tr.catatan || ''} [Pecah: ${nf.format(splitKg)} Kg dioper ke ${targetArmada}]`.trim();
+        let resPatch = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${tripId}`, {
             method: 'PATCH',
             headers: {
                 'apikey': SUPA_ANON_KEY,
@@ -4212,21 +4382,60 @@ async function simpanRitTripAdmin() {
                 'Prefer': 'return=representation'
             },
             body: JSON.stringify({
-                urutan_rit: ritVal,
-                jumlah_titik: titikVal
+                total_kg: sisaKg,
+                catatan: catatanSumber
             })
         });
 
-        if (!res.ok) {
-            let err = await res.json();
-            throw new Error(err.message || 'Gagal menyimpan perubahan');
+        if (!resPatch.ok) {
+            let err = await resPatch.json();
+            throw new Error(err.message || 'Gagal memperbarui trip sumber');
         }
 
-        alert(`✅ Rit berhasil diatur ke Rit ${ritVal} (${titikVal} Titik Drop)!`);
+        // 3. Buat trip baru untuk armada penerima
+        let manifestSumber = tr.manifest_items || [];
+        let splitManifest = manifestSumber.map(m => {
+            let porsi = curKg > 0 ? (m.qty / curKg) : 1;
+            return {
+                ...m,
+                qty: Math.round(splitKg * porsi)
+            };
+        });
+
+        let newTripPayload = {
+            tanggal: tr.tanggal || new Date().toISOString().split('T')[0],
+            cabang: tr.cabang || 'PM',
+            armada: targetArmada,
+            sopir_user_id: targetSopirId,
+            total_kg: splitKg,
+            jarak_tempuh_km: 0,
+            status_trip: tr.status_trip || 'SELESAI',
+            jumlah_titik: 1,
+            catatan: `(Pecahan ${nf.format(splitKg)} Kg dari ${tr.armada}) Antar ke ${tr.catatan || 'Konsumen'}`,
+            manifest_items: splitManifest.length > 0 ? splitManifest : manifestSumber
+        };
+
+        let resInsert = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman`, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPA_ANON_KEY,
+                'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify(newTripPayload)
+        });
+
+        if (!resInsert.ok) {
+            let err = await resInsert.json();
+            throw new Error(err.message || 'Gagal membuat trip pecahan');
+        }
+
+        alert(`✅ Sukses memecah muatan!\n\n• ${tr.armada}: ${nf.format(sisaKg)} Kg\n• ${targetArmada}: ${nf.format(splitKg)} Kg`);
         tutupModalKelolaTripAdmin();
         if (typeof loadLogBBMAdmin === 'function') await loadLogBBMAdmin();
     } catch (e) {
-        alert("Gagal mengubah rit: " + e.message);
+        alert("Gagal memecah trip: " + e.message);
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = origText; }
     }
@@ -4376,6 +4585,997 @@ async function hapusTripAdminDariLog() {
     }
 }
 
+// ====================================================================
+// RAPOR KINERJA & BIAYA PENGIRIMAN ARMADA CBL (EXECUTIVE REPORT)
+// ====================================================================
+
+window._raporSettings = window._raporSettings || {
+    showPendapatan: true,
+    printPendapatan: false,
+    autoSolarTruk: true
+};
+
+function toggleRaporSetting(key, val) {
+    window._raporSettings[key] = val;
+    renderRaporArmadaView();
+}
+
+function getFleetReportMetrics(targetArmada, allTrips, allExpenses, ongkirRows, autoSolarTruk = true) {
+    let trips = (allTrips || []).filter(t => {
+        let arm = (t.armada || '').toUpperCase();
+        if (targetArmada === 'D 8707 UE') return arm.includes('8707') || arm.includes('8070');
+        if (targetArmada === 'D 8142 UK') return arm.includes('8142');
+        if (targetArmada === 'D 8749 UA') return arm.includes('8749') || arm.includes('TRUK');
+        return false;
+    });
+
+    let tripIdSet = new Set(trips.map(t => t.id));
+
+    let expenses = (allExpenses || []).filter(item => {
+        let str = `${item.armada || ''} ${item.relasi || ''} ${item.keterangan || ''}`.toUpperCase();
+        if (targetArmada === 'D 8707 UE') return str.includes('8707') || str.includes('8070');
+        if (targetArmada === 'D 8142 UK') return str.includes('8142');
+        if (targetArmada === 'D 8749 UA') return str.includes('8749') || str.includes('TRUK');
+        return false;
+    });
+
+    let totalRit = trips.length;
+    let totalTitik = trips.reduce((sum, t) => sum + (parseInt(t.jumlah_titik) || 1), 0);
+    let totalKg = trips.reduce((sum, t) => sum + (parseFloat(t.total_kg) || 0), 0);
+    let totalKm = trips.reduce((sum, t) => sum + (parseFloat(t.jarak_tempuh_km) || 0), 0);
+    let avgKgPerRit = totalRit > 0 ? Math.round(totalKg / totalRit) : 0;
+
+    let bbm = 0, servis = 0, ban = 0, cuci = 0, lainnya = 0;
+    expenses.forEach(item => {
+        let nom = parseFloat(item.nominal) || 0;
+        let text = `${item.kategori || ''} ${item.keterangan || ''}`.toLowerCase();
+        if (text.includes('bbm') || text.includes('solar') || text.includes('bensin') || text.includes('pertalite') || text.includes('dexlite')) {
+            bbm += nom;
+        } else if (text.includes('servis') || text.includes('service') || text.includes('oli') || text.includes('tune up') || text.includes('perbaikan') || text.includes('bengkel') || text.includes('sparepart')) {
+            servis += nom;
+        } else if (text.includes('ban') || text.includes('angin') || text.includes('velg') || text.includes('tambal')) {
+            ban += nom;
+        } else if (text.includes('cuci')) {
+            cuci += nom;
+        } else {
+            lainnya += nom;
+        }
+    });
+
+    // Otomatisasi Solar Truk (Pak Agus): Standar Rp 100.000 per titik pengantaran jika tidak ada catatan SPBU manual
+    let isSolarTrukAuto = false;
+    if (targetArmada === 'D 8749 UA' && autoSolarTruk) {
+        if (bbm === 0 && totalTitik > 0) {
+            bbm = totalTitik * 100000;
+            isSolarTrukAuto = true;
+        }
+    }
+
+    let totalBiaya = bbm + servis + ban + cuci + lainnya;
+    let costPerKg = totalKg > 0 ? (totalBiaya / totalKg) : 0;
+    let costPerKm = totalKm > 0 ? (totalBiaya / totalKm) : 0;
+
+    // Hitung Pendapatan Ongkir yang diperoleh armada ini
+    let armadaOngkir = (ongkirRows || []).filter(row => {
+        let arm = (row.armada || '').toUpperCase();
+        if (arm) {
+            if (targetArmada === 'D 8707 UE') return arm.includes('8707') || arm.includes('8070');
+            if (targetArmada === 'D 8142 UK') return arm.includes('8142');
+            if (targetArmada === 'D 8749 UA') return arm.includes('8749') || arm.includes('TRUK');
+        }
+        if (row.trip_id && tripIdSet.has(row.trip_id)) return true;
+        return false;
+    });
+
+    let pendapatanOngkir = armadaOngkir.reduce((sum, row) => sum + ((parseFloat(row.harga_satuan) || 0) * (parseFloat(row.qty) || 1)), 0);
+    let marginLogistik = pendapatanOngkir - totalBiaya;
+
+    return {
+        totalRit,
+        totalTitik,
+        totalKg,
+        totalKm,
+        avgKgPerRit,
+        bbm,
+        isSolarTrukAuto,
+        servis,
+        ban,
+        cuci,
+        lainnya,
+        totalBiaya,
+        costPerKg,
+        costPerKm,
+        pendapatanOngkir,
+        marginLogistik
+    };
+}
+
+function renderRaporArmadaView() {
+    let container = document.getElementById('admin-rapor-armada-content');
+    if (!container) return;
+
+    let nf = new Intl.NumberFormat('id-ID');
+    let allExpenses = window._cacheArmadaData?.expenses || [];
+    let allTrips = window._cacheArmadaData?.trips || [];
+    let ongkirRows = window._cacheArmadaData?.ongkirRows || [];
+    let labelPeriode = window._cacheArmadaData?.labelPeriode || 'Periode Aktif';
+
+    let settings = window._raporSettings || { showPendapatan: true, printPendapatan: false, autoSolarTruk: true };
+
+    let mHilman = getFleetReportMetrics('D 8707 UE', allTrips, allExpenses, ongkirRows, settings.autoSolarTruk);
+    let mAdi = getFleetReportMetrics('D 8142 UK', allTrips, allExpenses, ongkirRows, settings.autoSolarTruk);
+    let mTruk = getFleetReportMetrics('D 8749 UA', allTrips, allExpenses, ongkirRows, settings.autoSolarTruk);
+
+    let totRit = mHilman.totalRit + mAdi.totalRit + mTruk.totalRit;
+    let totTitik = mHilman.totalTitik + mAdi.totalTitik + mTruk.totalTitik;
+    let totKg = mHilman.totalKg + mAdi.totalKg + mTruk.totalKg;
+    let totKm = mHilman.totalKm + mAdi.totalKm + mTruk.totalKm;
+    let totBbm = mHilman.bbm + mAdi.bbm + mTruk.bbm;
+    let totServis = mHilman.servis + mAdi.servis + mTruk.servis;
+    let totBan = mHilman.ban + mAdi.ban + mTruk.ban;
+    let totCuciLain = (mHilman.cuci + mHilman.lainnya) + (mAdi.cuci + mAdi.lainnya) + (mTruk.cuci + mTruk.lainnya);
+    let totBiaya = mHilman.totalBiaya + mAdi.totalBiaya + mTruk.totalBiaya;
+    let totCostPerKg = totKg > 0 ? (totBiaya / totKg) : 0;
+    let totCostPerKm = totKm > 0 ? (totBiaya / totKm) : 0;
+
+    let totPendapatan = mHilman.pendapatanOngkir + mAdi.pendapatanOngkir + mTruk.pendapatanOngkir;
+    let totMargin = totPendapatan - totBiaya;
+
+    let showPendapatan = settings.showPendapatan;
+
+    container.innerHTML = `
+        <div style="background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+            <!-- Header Rapor -->
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #f1f5f9; padding-bottom:12px; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+                <div>
+                    <h3 style="margin:0; font-size:16px; font-weight:800; color:#1e293b;">
+                        Rapor Kinerja & Biaya Pengiriman Armada PT CBL
+                    </h3>
+                    <div style="font-size:12px; color:#64748b; margin-top:3px;">
+                        Periode: <b style="color:#1e293b;">${labelPeriode}</b> | Evaluasi Rit, Tonase, Kilometer & Biaya Operasional
+                    </div>
+                </div>
+                <button type="button" onclick="cetakRaporArmada()" style="background:#1e293b; color:white; border:none; padding:8px 14px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                    Cetak Rapor
+                </button>
+            </div>
+
+            <!-- Opsi Pengaturan Rapor & Tampilan -->
+            <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; background:#f8fafc; border:1px solid #e2e8f0; padding:9px 12px; border-radius:8px; margin-bottom:16px; font-size:11px; color:#334155;">
+                <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:600;">
+                    <input type="checkbox" ${settings.autoSolarTruk ? 'checked' : ''} onchange="toggleRaporSetting('autoSolarTruk', this.checked)">
+                    Hitung Solar Truk Standar (Rp 100.000 / titik)
+                </label>
+                <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:600;">
+                    <input type="checkbox" ${settings.showPendapatan ? 'checked' : ''} onchange="toggleRaporSetting('showPendapatan', this.checked)">
+                    Tampilkan Pendapatan Ongkir & Margin di Layar
+                </label>
+                <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:600;">
+                    <input type="checkbox" ${settings.printPendapatan ? 'checked' : ''} onchange="toggleRaporSetting('printPendapatan', this.checked)">
+                    Sertakan Pendapatan Ongkir saat Cetak PDF
+                </label>
+            </div>
+
+            <!-- 3 Comparative Cards -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:14px; margin-bottom:20px;">
+                <!-- KARTU 1: D 8707 UE (Hilman) -->
+                <div style="background:#f8fafc; border:1px solid #cbd5e1; border-top:4px solid #2563eb; border-radius:10px; padding:14px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                        <div>
+                            <span style="font-size:10px; font-weight:700; color:#2563eb; background:#eff6ff; padding:2px 6px; border-radius:4px;">PICK-UP UTAMA</span>
+                            <h4 style="margin:4px 0 0 0; font-size:15px; font-weight:800; color:#1e293b;">D 8707 UE</h4>
+                            <div style="font-size:11px; color:#64748b;">Grand Max • Supir: Hilman</div>
+                        </div>
+                        <span style="font-size:10px; font-weight:700; color:#475569; background:#ffffff; border:1px solid #cbd5e1; padding:3px 8px; border-radius:6px;">1.5 TON</span>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; background:#ffffff; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+                        <div>
+                            <div style="font-size:10px; color:#64748b;">Total Rit</div>
+                            <div style="font-size:16px; font-weight:800; color:#1e293b;">${mHilman.totalRit} <span style="font-size:10px; font-weight:600;">Rit</span></div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b;">Total Muatan</div>
+                            <div style="font-size:16px; font-weight:800; color:#2563eb;">${nf.format(mHilman.totalKg)} <span style="font-size:10px; font-weight:600;">Kg</span></div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b;">Jarak Tempuh</div>
+                            <div style="font-size:14px; font-weight:800; color:#475569;">${nf.format(mHilman.totalKm)} <span style="font-size:10px; font-weight:600;">Km</span></div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b;">Rata-rata/Rit</div>
+                            <div style="font-size:14px; font-weight:800; color:#475569;">${nf.format(mHilman.avgKgPerRit)} <span style="font-size:10px; font-weight:600;">Kg</span></div>
+                        </div>
+                    </div>
+
+                    <div style="background:#ffffff; padding:10px; border-radius:8px; border:1px solid #e2e8f0; font-size:11px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px; color:#475569;">
+                            <span>Bensin / BBM:</span>
+                            <b>Rp ${nf.format(mHilman.bbm)}</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px; color:#475569;">
+                            <span>Servis & Oli:</span>
+                            <b>Rp ${nf.format(mHilman.servis)}</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px; color:#475569;">
+                            <span>Ban & Angin:</span>
+                            <b>Rp ${nf.format(mHilman.ban)}</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px; color:#475569;">
+                            <span>Cuci, Tol & Parkir:</span>
+                            <b>Rp ${nf.format(mHilman.cuci + mHilman.lainnya)}</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-top:6px; padding-top:6px; border-top:1px dashed #cbd5e1; font-weight:700; color:#1e293b;">
+                            <span>Total Pengeluaran:</span>
+                            <span style="color:#b91c1c;">Rp ${nf.format(mHilman.totalBiaya)}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-top:3px; font-size:10.5px; color:#475569;">
+                            <span>Biaya per Kg Pakan:</span>
+                            <span style="font-weight:700;">Rp ${mHilman.costPerKg.toFixed(1)} / Kg</span>
+                        </div>
+                        ${showPendapatan ? `
+                            <div style="display:flex; justify-content:space-between; margin-top:6px; padding-top:6px; border-top:1px solid #e2e8f0; color:#1e40af; font-weight:700;">
+                                <span>Pendapatan Ongkir:</span>
+                                <span>Rp ${nf.format(mHilman.pendapatanOngkir)}</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; margin-top:3px; font-weight:800; color:${mHilman.marginLogistik >= 0 ? '#15803d' : '#b91c1c'};">
+                                <span>Margin Bersih:</span>
+                                <span>Rp ${nf.format(mHilman.marginLogistik)}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+
+                <!-- KARTU 2: D 8142 UK (Adi) -->
+                <div style="background:#f8fafc; border:1px solid #cbd5e1; border-top:4px solid #ea580c; border-radius:10px; padding:14px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                        <div>
+                            <span style="font-size:10px; font-weight:700; color:#ea580c; background:#fff7ed; padding:2px 6px; border-radius:4px;">PICK-UP CADANGAN</span>
+                            <h4 style="margin:4px 0 0 0; font-size:15px; font-weight:800; color:#1e293b;">D 8142 UK</h4>
+                            <div style="font-size:11px; color:#64748b;">Pick-up Putih • Supir: Adi</div>
+                        </div>
+                        <span style="font-size:10px; font-weight:700; color:#475569; background:#ffffff; border:1px solid #cbd5e1; padding:3px 8px; border-radius:6px;">1.5 TON</span>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; background:#ffffff; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+                        <div>
+                            <div style="font-size:10px; color:#64748b;">Total Rit</div>
+                            <div style="font-size:16px; font-weight:800; color:#1e293b;">${mAdi.totalRit} <span style="font-size:10px; font-weight:600;">Rit</span></div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b;">Total Muatan</div>
+                            <div style="font-size:16px; font-weight:800; color:#ea580c;">${nf.format(mAdi.totalKg)} <span style="font-size:10px; font-weight:600;">Kg</span></div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b;">Jarak Tempuh</div>
+                            <div style="font-size:14px; font-weight:800; color:#475569;">${nf.format(mAdi.totalKm)} <span style="font-size:10px; font-weight:600;">Km</span></div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b;">Rata-rata/Rit</div>
+                            <div style="font-size:14px; font-weight:800; color:#475569;">${nf.format(mAdi.avgKgPerRit)} <span style="font-size:10px; font-weight:600;">Kg</span></div>
+                        </div>
+                    </div>
+
+                    <div style="background:#ffffff; padding:10px; border-radius:8px; border:1px solid #e2e8f0; font-size:11px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px; color:#475569;">
+                            <span>Bensin / BBM:</span>
+                            <b>Rp ${nf.format(mAdi.bbm)}</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px; color:#475569;">
+                            <span>Servis & Oli:</span>
+                            <b>Rp ${nf.format(mAdi.servis)}</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px; color:#475569;">
+                            <span>Ban & Angin:</span>
+                            <b>Rp ${nf.format(mAdi.ban)}</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px; color:#475569;">
+                            <span>Cuci, Tol & Parkir:</span>
+                            <b>Rp ${nf.format(mAdi.cuci + mAdi.lainnya)}</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-top:6px; padding-top:6px; border-top:1px dashed #cbd5e1; font-weight:700; color:#1e293b;">
+                            <span>Total Pengeluaran:</span>
+                            <span style="color:#b91c1c;">Rp ${nf.format(mAdi.totalBiaya)}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-top:3px; font-size:10.5px; color:#475569;">
+                            <span>Biaya per Kg Pakan:</span>
+                            <span style="font-weight:700;">Rp ${mAdi.costPerKg.toFixed(1)} / Kg</span>
+                        </div>
+                        ${showPendapatan ? `
+                            <div style="display:flex; justify-content:space-between; margin-top:6px; padding-top:6px; border-top:1px solid #e2e8f0; color:#1e40af; font-weight:700;">
+                                <span>Pendapatan Ongkir:</span>
+                                <span>Rp ${nf.format(mAdi.pendapatanOngkir)}</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; margin-top:3px; font-weight:800; color:${mAdi.marginLogistik >= 0 ? '#15803d' : '#b91c1c'};">
+                                <span>Margin Bersih:</span>
+                                <span>Rp ${nf.format(mAdi.marginLogistik)}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+
+                <!-- KARTU 3: D 8749 UA (Truk Pak Agus) -->
+                <div style="background:#f8fafc; border:1px solid #cbd5e1; border-top:4px solid #0f766e; border-radius:10px; padding:14px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                        <div>
+                            <span style="font-size:10px; font-weight:700; color:#0f766e; background:#f0fdfa; padding:2px 6px; border-radius:4px;">HEAVY TRUCK</span>
+                            <h4 style="margin:4px 0 0 0; font-size:15px; font-weight:800; color:#1e293b;">D 8749 UA</h4>
+                            <div style="font-size:11px; color:#64748b;">Truk Colt Diesel • Supir: Pak Agus</div>
+                        </div>
+                        <span style="font-size:10px; font-weight:700; color:#475569; background:#ffffff; border:1px solid #cbd5e1; padding:3px 8px; border-radius:6px;">7.5 TON</span>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; background:#ffffff; padding:10px; border-radius:8px; border:1px solid #e2e8f0;">
+                        <div>
+                            <div style="font-size:10px; color:#64748b;">Total Rit</div>
+                            <div style="font-size:16px; font-weight:800; color:#1e293b;">${mTruk.totalRit} <span style="font-size:10px; font-weight:600;">Rit</span></div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b;">Total Muatan</div>
+                            <div style="font-size:16px; font-weight:800; color:#0f766e;">${nf.format(mTruk.totalKg)} <span style="font-size:10px; font-weight:600;">Kg</span></div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b;">Jarak Tempuh</div>
+                            <div style="font-size:14px; font-weight:800; color:#475569;">${nf.format(mTruk.totalKm)} <span style="font-size:10px; font-weight:600;">Km</span></div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px; color:#64748b;">Rata-rata/Rit</div>
+                            <div style="font-size:14px; font-weight:800; color:#475569;">${nf.format(mTruk.avgKgPerRit)} <span style="font-size:10px; font-weight:600;">Kg</span></div>
+                        </div>
+                    </div>
+
+                    <div style="background:#ffffff; padding:10px; border-radius:8px; border:1px solid #e2e8f0; font-size:11px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px; color:#475569;">
+                            <span>Solar / BBM:</span>
+                            <b>Rp ${nf.format(mTruk.bbm)} ${mTruk.isSolarTrukAuto ? '<span style="font-size:9.5px; color:#a16207; font-weight:600;">(Standar Titik)</span>' : ''}</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px; color:#475569;">
+                            <span>Servis & Oli:</span>
+                            <b>Rp ${nf.format(mTruk.servis)}</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px; color:#475569;">
+                            <span>Ban & Angin:</span>
+                            <b>Rp ${nf.format(mTruk.ban)}</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px; color:#475569;">
+                            <span>Cuci, Tol & Parkir:</span>
+                            <b>Rp ${nf.format(mTruk.cuci + mTruk.lainnya)}</b>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-top:6px; padding-top:6px; border-top:1px dashed #cbd5e1; font-weight:700; color:#1e293b;">
+                            <span>Total Pengeluaran:</span>
+                            <span style="color:#b91c1c;">Rp ${nf.format(mTruk.totalBiaya)}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-top:3px; font-size:10.5px; color:#475569;">
+                            <span>Biaya per Kg Pakan:</span>
+                            <span style="font-weight:700;">Rp ${mTruk.costPerKg.toFixed(1)} / Kg</span>
+                        </div>
+                        ${showPendapatan ? `
+                            <div style="display:flex; justify-content:space-between; margin-top:6px; padding-top:6px; border-top:1px solid #e2e8f0; color:#1e40af; font-weight:700;">
+                                <span>Pendapatan Ongkir:</span>
+                                <span>Rp ${nf.format(mTruk.pendapatanOngkir)}</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; margin-top:3px; font-weight:800; color:${mTruk.marginLogistik >= 0 ? '#15803d' : '#b91c1c'};">
+                                <span>Margin Bersih:</span>
+                                <span>Rp ${nf.format(mTruk.marginLogistik)}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabel Komparasi Head-to-Head 3 Armada + Total CBL -->
+            <div style="border-radius:10px; overflow:hidden; border:1px solid #e2e8f0; margin-top:10px;">
+                <table style="width:100%; border-collapse:collapse; font-size:11.5px; text-align:left;">
+                    <thead style="background:#1e293b; color:#ffffff;">
+                        <tr>
+                            <th style="padding:10px 12px; font-weight:700;">Parameter / Metrik Kinerja</th>
+                            <th style="padding:10px 12px; text-align:right; font-weight:700;">D 8707 UE (Hilman)</th>
+                            <th style="padding:10px 12px; text-align:right; font-weight:700;">D 8142 UK (Adi)</th>
+                            <th style="padding:10px 12px; text-align:right; font-weight:700;">D 8749 UA (Truk)</th>
+                            <th style="padding:10px 12px; text-align:right; font-weight:800; background:#0f172a;">TOTAL CBL</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom:1px solid #e2e8f0; background:#f8fafc;">
+                            <td style="padding:9px 12px; font-weight:600; color:#1e293b;">Jumlah Rit Pengantaran</td>
+                            <td style="padding:9px 12px; text-align:right;">${mHilman.totalRit} Rit</td>
+                            <td style="padding:9px 12px; text-align:right;">${mAdi.totalRit} Rit</td>
+                            <td style="padding:9px 12px; text-align:right;">${mTruk.totalRit} Rit</td>
+                            <td style="padding:9px 12px; text-align:right; font-weight:700; background:#f1f5f9;">${totRit} Rit</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #e2e8f0;">
+                            <td style="padding:9px 12px; font-weight:600; color:#1e293b;">Total Muatan Terdistribusi</td>
+                            <td style="padding:9px 12px; text-align:right; font-weight:700;">${nf.format(mHilman.totalKg)} Kg</td>
+                            <td style="padding:9px 12px; text-align:right; font-weight:700;">${nf.format(mAdi.totalKg)} Kg</td>
+                            <td style="padding:9px 12px; text-align:right; font-weight:700;">${nf.format(mTruk.totalKg)} Kg</td>
+                            <td style="padding:9px 12px; text-align:right; font-weight:800; background:#f1f5f9; color:#0f766e;">${nf.format(totKg)} Kg</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #e2e8f0; background:#f8fafc;">
+                            <td style="padding:9px 12px; color:#475569;">Rata-rata Muatan per Rit</td>
+                            <td style="padding:9px 12px; text-align:right;">${nf.format(mHilman.avgKgPerRit)} Kg</td>
+                            <td style="padding:9px 12px; text-align:right;">${nf.format(mAdi.avgKgPerRit)} Kg</td>
+                            <td style="padding:9px 12px; text-align:right;">${nf.format(mTruk.avgKgPerRit)} Kg</td>
+                            <td style="padding:9px 12px; text-align:right; background:#f1f5f9;">${totRit > 0 ? nf.format(Math.round(totKg / totRit)) : 0} Kg</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #e2e8f0;">
+                            <td style="padding:9px 12px; color:#475569;">Total Jarak Tempuh Pengiriman</td>
+                            <td style="padding:9px 12px; text-align:right;">${nf.format(mHilman.totalKm)} Km</td>
+                            <td style="padding:9px 12px; text-align:right;">${nf.format(mAdi.totalKm)} Km</td>
+                            <td style="padding:9px 12px; text-align:right;">${nf.format(mTruk.totalKm)} Km</td>
+                            <td style="padding:9px 12px; text-align:right; background:#f1f5f9;">${nf.format(totKm)} Km</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #e2e8f0; background:#fefce8;">
+                            <td style="padding:9px 12px; color:#854d0e; font-weight:600;">Biaya BBM / Solar</td>
+                            <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mHilman.bbm)}</td>
+                            <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mAdi.bbm)}</td>
+                            <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mTruk.bbm)} ${mTruk.isSolarTrukAuto ? '<span style="font-size:9.5px; color:#a16207; font-weight:600;">(Standar Titik)</span>' : ''}</td>
+                            <td style="padding:9px 12px; text-align:right; font-weight:700; color:#854d0e; background:#fef9c3;">Rp ${nf.format(totBbm)}</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #e2e8f0;">
+                            <td style="padding:9px 12px; color:#1e40af; font-weight:600;">Biaya Servis, Oli & Sparepart</td>
+                            <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mHilman.servis)}</td>
+                            <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mAdi.servis)}</td>
+                            <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mTruk.servis)}</td>
+                            <td style="padding:9px 12px; text-align:right; font-weight:700; color:#1e40af; background:#f1f5f9;">Rp ${nf.format(totServis)}</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #e2e8f0; background:#f8fafc;">
+                            <td style="padding:9px 12px; color:#b91c1c; font-weight:600;">Biaya Ban & Angin</td>
+                            <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mHilman.ban)}</td>
+                            <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mAdi.ban)}</td>
+                            <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mTruk.ban)}</td>
+                            <td style="padding:9px 12px; text-align:right; font-weight:700; color:#b91c1c; background:#f1f5f9;">Rp ${nf.format(totBan)}</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #e2e8f0;">
+                            <td style="padding:9px 12px; color:#0369a1; font-weight:600;">Biaya Cuci, Tol & Parkir</td>
+                            <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mHilman.cuci + mHilman.lainnya)}</td>
+                            <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mAdi.cuci + mAdi.lainnya)}</td>
+                            <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mTruk.cuci + mTruk.lainnya)}</td>
+                            <td style="padding:9px 12px; text-align:right; font-weight:700; color:#0369a1; background:#f1f5f9;">Rp ${nf.format(totCuciLain)}</td>
+                        </tr>
+                        <tr style="border-bottom:2px solid #cbd5e1; background:#fef2f2;">
+                            <td style="padding:10px 12px; font-weight:700; color:#991b1b;">Total Biaya Operasional</td>
+                            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#b91c1c;">Rp ${nf.format(mHilman.totalBiaya)}</td>
+                            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#b91c1c;">Rp ${nf.format(mAdi.totalBiaya)}</td>
+                            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#b91c1c;">Rp ${nf.format(mTruk.totalBiaya)}</td>
+                            <td style="padding:10px 12px; text-align:right; font-weight:800; background:#fee2e2; color:#991b1b;">Rp ${nf.format(totBiaya)}</td>
+                        </tr>
+                        <tr style="background:#f0fdf4; border-bottom:${showPendapatan ? '1px solid #e2e8f0' : 'none'};">
+                            <td style="padding:10px 12px; font-weight:700; color:#15803d;">Efisiensi: Biaya Logistik per Kg</td>
+                            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#15803d;">Rp ${mHilman.costPerKg.toFixed(1)} / Kg</td>
+                            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#15803d;">Rp ${mAdi.costPerKg.toFixed(1)} / Kg</td>
+                            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#15803d;">Rp ${mTruk.costPerKg.toFixed(1)} / Kg</td>
+                            <td style="padding:10px 12px; text-align:right; font-weight:800; background:#dcfce7; color:#166534;">Rp ${totCostPerKg.toFixed(1)} / Kg</td>
+                        </tr>
+                        ${showPendapatan ? `
+                            <tr style="border-bottom:1px solid #e2e8f0; background:#eff6ff;">
+                                <td style="padding:10px 12px; font-weight:700; color:#1e40af;">Pendapatan Ongkir Pengantaran</td>
+                                <td style="padding:10px 12px; text-align:right; font-weight:700; color:#1d4ed8;">Rp ${nf.format(mHilman.pendapatanOngkir)}</td>
+                                <td style="padding:10px 12px; text-align:right; font-weight:700; color:#1d4ed8;">Rp ${nf.format(mAdi.pendapatanOngkir)}</td>
+                                <td style="padding:10px 12px; text-align:right; font-weight:700; color:#1d4ed8;">Rp ${nf.format(mTruk.pendapatanOngkir)}</td>
+                                <td style="padding:10px 12px; text-align:right; font-weight:800; background:#dbeafe; color:#1e40af;">Rp ${nf.format(totPendapatan)}</td>
+                            </tr>
+                            <tr style="background:#f8fafc;">
+                                <td style="padding:10px 12px; font-weight:800; color:#0f172a;">Margin / Laba Bersih Logistik</td>
+                                <td style="padding:10px 12px; text-align:right; font-weight:800; color:${mHilman.marginLogistik >= 0 ? '#15803d' : '#b91c1c'};">Rp ${nf.format(mHilman.marginLogistik)}</td>
+                                <td style="padding:10px 12px; text-align:right; font-weight:800; color:${mAdi.marginLogistik >= 0 ? '#15803d' : '#b91c1c'};">Rp ${nf.format(mAdi.marginLogistik)}</td>
+                                <td style="padding:10px 12px; text-align:right; font-weight:800; color:${mTruk.marginLogistik >= 0 ? '#15803d' : '#b91c1c'};">Rp ${nf.format(mTruk.marginLogistik)}</td>
+                                <td style="padding:10px 12px; text-align:right; font-weight:900; background:#f1f5f9; color:${totMargin >= 0 ? '#15803d' : '#b91c1c'};">Rp ${nf.format(totMargin)}</td>
+                            </tr>
+                        ` : ''}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+function cetakRaporArmada() {
+    let nf = new Intl.NumberFormat('id-ID');
+    let allExpenses = window._cacheArmadaData?.expenses || [];
+    let allTrips = window._cacheArmadaData?.trips || [];
+    let ongkirRows = window._cacheArmadaData?.ongkirRows || [];
+    let labelPeriode = window._cacheArmadaData?.labelPeriode || 'Periode Aktif';
+
+    let settings = window._raporSettings || { showPendapatan: true, printPendapatan: false, autoSolarTruk: true };
+
+    let mHilman = getFleetReportMetrics('D 8707 UE', allTrips, allExpenses, ongkirRows, settings.autoSolarTruk);
+    let mAdi = getFleetReportMetrics('D 8142 UK', allTrips, allExpenses, ongkirRows, settings.autoSolarTruk);
+    let mTruk = getFleetReportMetrics('D 8749 UA', allTrips, allExpenses, ongkirRows, settings.autoSolarTruk);
+
+    let totRit = mHilman.totalRit + mAdi.totalRit + mTruk.totalRit;
+    let totKg = mHilman.totalKg + mAdi.totalKg + mTruk.totalKg;
+    let totKm = mHilman.totalKm + mAdi.totalKm + mTruk.totalKm;
+    let totBbm = mHilman.bbm + mAdi.bbm + mTruk.bbm;
+    let totServis = mHilman.servis + mAdi.servis + mTruk.servis;
+    let totBan = mHilman.ban + mAdi.ban + mTruk.ban;
+    let totCuciLain = (mHilman.cuci + mHilman.lainnya) + (mAdi.cuci + mAdi.lainnya) + (mTruk.cuci + mTruk.lainnya);
+    let totBiaya = mHilman.totalBiaya + mAdi.totalBiaya + mTruk.totalBiaya;
+    let totCostPerKg = totKg > 0 ? (totBiaya / totKg) : 0;
+    let totCostPerKm = totKm > 0 ? (totBiaya / totKm) : 0;
+
+    let printPendapatan = settings.printPendapatan;
+    let totPendapatan = mHilman.pendapatanOngkir + mAdi.pendapatanOngkir + mTruk.pendapatanOngkir;
+    let totMargin = totPendapatan - totBiaya;
+
+    let printWin = window.open('', '_blank', 'width=1050,height=800');
+    if (!printWin) {
+        window.print();
+        return;
+    }
+
+    let printHtml = `
+        <!DOCTYPE html>
+        <html>
+            <head>
+                <meta charset="utf-8">
+                <title>Rapor Kinerja & Biaya Operasional Armada CBL - ${labelPeriode}</title>
+                <style>
+                    @page {
+                        size: A4 landscape;
+                        margin: 12mm 15mm;
+                    }
+                    * {
+                        box-sizing: border-box;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                    }
+                    body {
+                        font-family: Arial, Helvetica, sans-serif;
+                        padding: 0;
+                        margin: 0;
+                        color: #0f172a;
+                        background: #ffffff;
+                        font-size: 10.5px;
+                    }
+                    .header-box {
+                        border-bottom: 2px solid #0f172a;
+                        padding-bottom: 8px;
+                        margin-bottom: 12px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: flex-end;
+                    }
+                    .company-name {
+                        font-size: 15px;
+                        font-weight: 800;
+                        color: #0f172a;
+                        letter-spacing: 0.5px;
+                    }
+                    .doc-title {
+                        font-size: 11.5px;
+                        font-weight: 700;
+                        color: #334155;
+                        margin-top: 2px;
+                    }
+                    .doc-meta {
+                        text-align: right;
+                        font-size: 9.5px;
+                        color: #64748b;
+                        line-height: 1.4;
+                    }
+                    .cards-container {
+                        display: flex;
+                        gap: 12px;
+                        margin-bottom: 14px;
+                    }
+                    .armada-card {
+                        flex: 1;
+                        border: 1px solid #94a3b8;
+                        border-radius: 6px;
+                        padding: 8px 10px;
+                        background: #f8fafc;
+                    }
+                    .card-head {
+                        border-bottom: 1px solid #cbd5e1;
+                        padding-bottom: 4px;
+                        margin-bottom: 6px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    }
+                    .card-plat {
+                        font-size: 12px;
+                        font-weight: 800;
+                        color: #0f172a;
+                    }
+                    .card-type {
+                        font-size: 9px;
+                        font-weight: 700;
+                        color: #334155;
+                        background: #e2e8f0;
+                        padding: 1px 5px;
+                        border-radius: 3px;
+                    }
+                    .row-kv {
+                        display: flex;
+                        justify-content: space-between;
+                        margin-bottom: 2px;
+                        font-size: 10px;
+                        color: #334155;
+                    }
+                    .row-kv.bold {
+                        font-weight: bold;
+                        color: #0f172a;
+                    }
+                    .table-rapor {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-size: 10px;
+                        margin-top: 10px;
+                    }
+                    .table-rapor th, .table-rapor td {
+                        border: 1px solid #94a3b8;
+                        padding: 5px 8px;
+                    }
+                    .table-rapor th {
+                        background-color: #f1f5f9;
+                        color: #0f172a;
+                        font-weight: 800;
+                        text-align: left;
+                    }
+                    .table-rapor td.right, .table-rapor th.right {
+                        text-align: right;
+                    }
+                    .bg-light {
+                        background-color: #f8fafc;
+                    }
+                    .bg-total {
+                        background-color: #f1f5f9;
+                        font-weight: 800;
+                    }
+                    .signatures {
+                        display: flex;
+                        justify-content: space-between;
+                        margin-top: 25px;
+                        padding: 0 40px;
+                        font-size: 10px;
+                        text-align: center;
+                    }
+                    .sig-person {
+                        width: 180px;
+                    }
+                    .sig-space {
+                        height: 40px;
+                    }
+                    .sig-name {
+                        border-top: 1px solid #0f172a;
+                        padding-top: 4px;
+                        font-weight: 700;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header-box">
+                    <div>
+                        <div class="company-name">PT CITRA BINTANG LOGISTIK (CBL)</div>
+                        <div class="doc-title">RAPOR KINERJA DAN BIAYA OPERASIONAL ARMADA PENGIRIMAN</div>
+                    </div>
+                    <div class="doc-meta">
+                        <div>Periode: <b>${labelPeriode}</b></div>
+                        <div>Dicetak: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                    </div>
+                </div>
+
+                <div class="cards-container">
+                    <div class="armada-card">
+                        <div class="card-head">
+                            <div>
+                                <div class="card-plat">D 8707 UE</div>
+                                <div style="font-size:9.5px; color:#64748b;">Grand Max • Supir: Hilman</div>
+                            </div>
+                            <span class="card-type">1.5 TON</span>
+                        </div>
+                        <div class="row-kv"><span>Rit Pengantaran:</span><b>${mHilman.totalRit} Rit</b></div>
+                        <div class="row-kv"><span>Muatan Diangkut:</span><b>${nf.format(mHilman.totalKg)} Kg</b></div>
+                        <div class="row-kv"><span>Rata-rata/Rit:</span><span>${nf.format(mHilman.avgKgPerRit)} Kg</span></div>
+                        <div class="row-kv"><span>Jarak Tempuh:</span><span>${nf.format(mHilman.totalKm)} Km</span></div>
+                        <div style="border-top:1px dashed #cbd5e1; margin:4px 0;"></div>
+                        <div class="row-kv"><span>BBM / Bensin:</span><span>Rp ${nf.format(mHilman.bbm)}</span></div>
+                        <div class="row-kv"><span>Servis & Sparepart:</span><span>Rp ${nf.format(mHilman.servis)}</span></div>
+                        <div class="row-kv"><span>Ban & Angin:</span><span>Rp ${nf.format(mHilman.ban)}</span></div>
+                        <div class="row-kv"><span>Cuci, Tol & Parkir:</span><span>Rp ${nf.format(mHilman.cuci + mHilman.lainnya)}</span></div>
+                        <div class="row-kv bold" style="margin-top:3px; border-top:1px solid #94a3b8; padding-top:3px;">
+                            <span>Total Biaya:</span>
+                            <span>Rp ${nf.format(mHilman.totalBiaya)}</span>
+                        </div>
+                        <div class="row-kv" style="font-size:9.5px; color:#475569;">
+                            <span>Biaya per Kg:</span>
+                            <b>Rp ${mHilman.costPerKg.toFixed(1)} / Kg</b>
+                        </div>
+                        ${printPendapatan ? `
+                            <div style="border-top:1px solid #cbd5e1; margin-top:3px; padding-top:2px;"></div>
+                            <div class="row-kv"><span>Pendapatan Ongkir:</span><b>Rp ${nf.format(mHilman.pendapatanOngkir)}</b></div>
+                            <div class="row-kv bold"><span>Margin Logistik:</span><b>Rp ${nf.format(mHilman.marginLogistik)}</b></div>
+                        ` : ''}
+                    </div>
+
+                    <div class="armada-card">
+                        <div class="card-head">
+                            <div>
+                                <div class="card-plat">D 8142 UK</div>
+                                <div style="font-size:9.5px; color:#64748b;">Pick-up Putih • Supir: Adi</div>
+                            </div>
+                            <span class="card-type">1.5 TON</span>
+                        </div>
+                        <div class="row-kv"><span>Rit Pengantaran:</span><b>${mAdi.totalRit} Rit</b></div>
+                        <div class="row-kv"><span>Muatan Diangkut:</span><b>${nf.format(mAdi.totalKg)} Kg</b></div>
+                        <div class="row-kv"><span>Rata-rata/Rit:</span><span>${nf.format(mAdi.avgKgPerRit)} Kg</span></div>
+                        <div class="row-kv"><span>Jarak Tempuh:</span><span>${nf.format(mAdi.totalKm)} Km</span></div>
+                        <div style="border-top:1px dashed #cbd5e1; margin:4px 0;"></div>
+                        <div class="row-kv"><span>BBM / Bensin:</span><span>Rp ${nf.format(mAdi.bbm)}</span></div>
+                        <div class="row-kv"><span>Servis & Sparepart:</span><span>Rp ${nf.format(mAdi.servis)}</span></div>
+                        <div class="row-kv"><span>Ban & Angin:</span><span>Rp ${nf.format(mAdi.ban)}</span></div>
+                        <div class="row-kv"><span>Cuci, Tol & Parkir:</span><span>Rp ${nf.format(mAdi.cuci + mAdi.lainnya)}</span></div>
+                        <div class="row-kv bold" style="margin-top:3px; border-top:1px solid #94a3b8; padding-top:3px;">
+                            <span>Total Biaya:</span>
+                            <span>Rp ${nf.format(mAdi.totalBiaya)}</span>
+                        </div>
+                        <div class="row-kv" style="font-size:9.5px; color:#475569;">
+                            <span>Biaya per Kg:</span>
+                            <b>Rp ${mAdi.costPerKg.toFixed(1)} / Kg</b>
+                        </div>
+                        ${printPendapatan ? `
+                            <div style="border-top:1px solid #cbd5e1; margin-top:3px; padding-top:2px;"></div>
+                            <div class="row-kv"><span>Pendapatan Ongkir:</span><b>Rp ${nf.format(mAdi.pendapatanOngkir)}</b></div>
+                            <div class="row-kv bold"><span>Margin Logistik:</span><b>Rp ${nf.format(mAdi.marginLogistik)}</b></div>
+                        ` : ''}
+                    </div>
+
+                    <div class="armada-card">
+                        <div class="card-head">
+                            <div>
+                                <div class="card-plat">D 8749 UA</div>
+                                <div style="font-size:9.5px; color:#64748b;">Truk Colt Diesel • Supir: Pak Agus</div>
+                            </div>
+                            <span class="card-type">7.5 TON</span>
+                        </div>
+                        <div class="row-kv"><span>Rit Pengantaran:</span><b>${mTruk.totalRit} Rit</b></div>
+                        <div class="row-kv"><span>Muatan Diangkut:</span><b>${nf.format(mTruk.totalKg)} Kg</b></div>
+                        <div class="row-kv"><span>Rata-rata/Rit:</span><span>${nf.format(mTruk.avgKgPerRit)} Kg</span></div>
+                        <div class="row-kv"><span>Jarak Tempuh:</span><span>${nf.format(mTruk.totalKm)} Km</span></div>
+                        <div style="border-top:1px dashed #cbd5e1; margin:4px 0;"></div>
+                        <div class="row-kv"><span>BBM / Solar:</span><span>Rp ${nf.format(mTruk.bbm)} ${mTruk.isSolarTrukAuto ? '(Standar Titik)' : ''}</span></div>
+                        <div class="row-kv"><span>Servis & Sparepart:</span><span>Rp ${nf.format(mTruk.servis)}</span></div>
+                        <div class="row-kv"><span>Ban & Angin:</span><span>Rp ${nf.format(mTruk.ban)}</span></div>
+                        <div class="row-kv"><span>Cuci, Tol & Parkir:</span><span>Rp ${nf.format(mTruk.cuci + mTruk.lainnya)}</span></div>
+                        <div class="row-kv bold" style="margin-top:3px; border-top:1px solid #94a3b8; padding-top:3px;">
+                            <span>Total Biaya:</span>
+                            <span>Rp ${nf.format(mTruk.totalBiaya)}</span>
+                        </div>
+                        <div class="row-kv" style="font-size:9.5px; color:#475569;">
+                            <span>Biaya per Kg:</span>
+                            <b>Rp ${mTruk.costPerKg.toFixed(1)} / Kg</b>
+                        </div>
+                        ${printPendapatan ? `
+                            <div style="border-top:1px solid #cbd5e1; margin-top:3px; padding-top:2px;"></div>
+                            <div class="row-kv"><span>Pendapatan Ongkir:</span><b>Rp ${nf.format(mTruk.pendapatanOngkir)}</b></div>
+                            <div class="row-kv bold"><span>Margin Logistik:</span><b>Rp ${nf.format(mTruk.marginLogistik)}</b></div>
+                        ` : ''}
+                    </div>
+                </div>
+
+                <table class="table-rapor">
+                    <thead>
+                        <tr>
+                            <th>Parameter / Metrik Kinerja</th>
+                            <th class="right">D 8707 UE (Hilman)</th>
+                            <th class="right">D 8142 UK (Adi)</th>
+                            <th class="right">D 8749 UA (Truk)</th>
+                            <th class="right bg-total">TOTAL CBL</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="bg-light">
+                            <td>Jumlah Rit Pengantaran</td>
+                            <td class="right">${mHilman.totalRit} Rit</td>
+                            <td class="right">${mAdi.totalRit} Rit</td>
+                            <td class="right">${mTruk.totalRit} Rit</td>
+                            <td class="right bg-total">${totRit} Rit</td>
+                        </tr>
+                        <tr>
+                            <td>Total Muatan Terdistribusi</td>
+                            <td class="right">${nf.format(mHilman.totalKg)} Kg</td>
+                            <td class="right">${nf.format(mAdi.totalKg)} Kg</td>
+                            <td class="right">${nf.format(mTruk.totalKg)} Kg</td>
+                            <td class="right bg-total">${nf.format(totKg)} Kg</td>
+                        </tr>
+                        <tr class="bg-light">
+                            <td>Rata-rata Muatan per Rit</td>
+                            <td class="right">${nf.format(mHilman.avgKgPerRit)} Kg</td>
+                            <td class="right">${nf.format(mAdi.avgKgPerRit)} Kg</td>
+                            <td class="right">${nf.format(mTruk.avgKgPerRit)} Kg</td>
+                            <td class="right bg-total">${totRit > 0 ? nf.format(Math.round(totKg / totRit)) : 0} Kg</td>
+                        </tr>
+                        <tr>
+                            <td>Total Jarak Tempuh Pengiriman</td>
+                            <td class="right">${nf.format(mHilman.totalKm)} Km</td>
+                            <td class="right">${nf.format(mAdi.totalKm)} Km</td>
+                            <td class="right">${nf.format(mTruk.totalKm)} Km</td>
+                            <td class="right bg-total">${nf.format(totKm)} Km</td>
+                        </tr>
+                        <tr class="bg-light">
+                            <td>Biaya BBM / Solar</td>
+                            <td class="right">Rp ${nf.format(mHilman.bbm)}</td>
+                            <td class="right">Rp ${nf.format(mAdi.bbm)}</td>
+                            <td class="right">Rp ${nf.format(mTruk.bbm)} ${mTruk.isSolarTrukAuto ? '(Standar Titik)' : ''}</td>
+                            <td class="right bg-total">Rp ${nf.format(totBbm)}</td>
+                        </tr>
+                        <tr>
+                            <td>Biaya Servis, Oli & Sparepart</td>
+                            <td class="right">Rp ${nf.format(mHilman.servis)}</td>
+                            <td class="right">Rp ${nf.format(mAdi.servis)}</td>
+                            <td class="right">Rp ${nf.format(mTruk.servis)}</td>
+                            <td class="right bg-total">Rp ${nf.format(totServis)}</td>
+                        </tr>
+                        <tr class="bg-light">
+                            <td>Biaya Ban & Angin</td>
+                            <td class="right">Rp ${nf.format(mHilman.ban)}</td>
+                            <td class="right">Rp ${nf.format(mAdi.ban)}</td>
+                            <td class="right">Rp ${nf.format(mTruk.ban)}</td>
+                            <td class="right bg-total">Rp ${nf.format(totBan)}</td>
+                        </tr>
+                        <tr>
+                            <td>Biaya Cuci, Tol & Parkir</td>
+                            <td class="right">Rp ${nf.format(mHilman.cuci + mHilman.lainnya)}</td>
+                            <td class="right">Rp ${nf.format(mAdi.cuci + mAdi.lainnya)}</td>
+                            <td class="right">Rp ${nf.format(mTruk.cuci + mTruk.lainnya)}</td>
+                            <td class="right bg-total">Rp ${nf.format(totCuciLain)}</td>
+                        </tr>
+                        <tr class="bg-total">
+                            <td>TOTAL BIAYA OPERASIONAL</td>
+                            <td class="right">Rp ${nf.format(mHilman.totalBiaya)}</td>
+                            <td class="right">Rp ${nf.format(mAdi.totalBiaya)}</td>
+                            <td class="right">Rp ${nf.format(mTruk.totalBiaya)}</td>
+                            <td class="right bg-total">Rp ${nf.format(totBiaya)}</td>
+                        </tr>
+                        <tr class="bg-light">
+                            <td>Efisiensi: Biaya Logistik per Kg</td>
+                            <td class="right">Rp ${mHilman.costPerKg.toFixed(1)} / Kg</td>
+                            <td class="right">Rp ${mAdi.costPerKg.toFixed(1)} / Kg</td>
+                            <td class="right">Rp ${mTruk.costPerKg.toFixed(1)} / Kg</td>
+                            <td class="right bg-total">Rp ${totCostPerKg.toFixed(1)} / Kg</td>
+                        </tr>
+                        ${printPendapatan ? `
+                            <tr>
+                                <td>Pendapatan Ongkir Pengantaran</td>
+                                <td class="right">Rp ${nf.format(mHilman.pendapatanOngkir)}</td>
+                                <td class="right">Rp ${nf.format(mAdi.pendapatanOngkir)}</td>
+                                <td class="right">Rp ${nf.format(mTruk.pendapatanOngkir)}</td>
+                                <td class="right bg-total">Rp ${nf.format(totPendapatan)}</td>
+                            </tr>
+                            <tr class="bg-total">
+                                <td>Margin Operasional Logistik</td>
+                                <td class="right">Rp ${nf.format(mHilman.marginLogistik)}</td>
+                                <td class="right">Rp ${nf.format(mAdi.marginLogistik)}</td>
+                                <td class="right">Rp ${nf.format(mTruk.marginLogistik)}</td>
+                                <td class="right bg-total">Rp ${nf.format(totMargin)}</td>
+                            </tr>
+                        ` : ''}
+                    </tbody>
+                </table>
+
+                <div class="signatures">
+                    <div class="sig-person">
+                        <div>Dibuat Oleh,</div>
+                        <div class="sig-space"></div>
+                        <div class="sig-name">Bagian Logistik & Armada</div>
+                    </div>
+                    <div class="sig-person">
+                        <div>Mengetahui,</div>
+                        <div class="sig-space"></div>
+                        <div class="sig-name">Manajemen PT CBL</div>
+                    </div>
+                </div>
+
+                <script>
+                    window.onload = function() {
+                        window.print();
+                    };
+                </script>
+            </body>
+        </html>
+    `;
+
+    printWin.document.write(printHtml);
+    printWin.document.close();
+}
+
+// ====================================================================
+// MODAL TAMBAH PENGANTARAN MANUAL OLEH ADMIN
+// ====================================================================
+
+function bukaModalTambahTripManual() {
+    let modal = document.getElementById('modal-tambah-trip-manual');
+    if (!modal) return;
+    let tglEl = document.getElementById('manual-trip-tanggal');
+    if (tglEl) tglEl.value = new Date().toISOString().split('T')[0];
+    let kgEl = document.getElementById('manual-trip-kg');
+    if (kgEl) kgEl.value = '';
+    let tujEl = document.getElementById('manual-trip-tujuan');
+    if (tujEl) tujEl.value = '';
+    let titikEl = document.getElementById('manual-trip-titik');
+    if (titikEl) titikEl.value = '1';
+    let catEl = document.getElementById('manual-trip-catatan');
+    if (catEl) catEl.value = '';
+
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+}
+
+function tutupModalTambahTripManual() {
+    let modal = document.getElementById('modal-tambah-trip-manual');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
+}
+
+async function simpanTripManualAdmin() {
+    let tgl = document.getElementById('manual-trip-tanggal')?.value;
+    let armada = document.getElementById('manual-trip-armada')?.value;
+    let tujuan = document.getElementById('manual-trip-tujuan')?.value.trim();
+    let kg = parseFloat(document.getElementById('manual-trip-kg')?.value) || 0;
+    let titik = parseInt(document.getElementById('manual-trip-titik')?.value) || 1;
+    let catatan = document.getElementById('manual-trip-catatan')?.value.trim();
+
+    if (!tgl) return alert("Pilih tanggal pengantaran!");
+    if (!armada) return alert("Pilih armada pengantar!");
+    if (!tujuan) return alert("Masukkan nama tujuan / konsumen / peternak!");
+    if (kg <= 0) return alert("Masukkan total muatan (Kg) yang valid!");
+
+    let sopirId = null;
+    if (armada.includes('8707') || armada.includes('8070')) sopirId = 6;
+    else if (armada.includes('8142')) sopirId = 7;
+    else if (armada.includes('8749')) {
+        let users = window.tripState?.cachedUsers || [];
+        let agusUser = users.find(u => (u.nama || '').toLowerCase().includes('agus') && (u.role || '').toLowerCase() === 'sopir');
+        if (agusUser) sopirId = agusUser.id;
+    }
+
+    let btn = document.getElementById('btn-simpan-trip-manual');
+    let origText = btn ? btn.innerText : '';
+    if (btn) { btn.disabled = true; btn.innerText = "Menyimpan..."; }
+
+    try {
+        let fullCatatan = catatan ? `${tujuan} - ${catatan}` : tujuan;
+        let payload = {
+            tanggal: tgl,
+            cabang: 'PM',
+            armada: armada,
+            sopir_user_id: sopirId,
+            total_kg: kg,
+            jumlah_titik: titik,
+            status_trip: 'SELESAI',
+            catatan: fullCatatan,
+            manifest_items: [{ relasi: tujuan, pakan: 'Pakan Ternak', qty: kg }]
+        };
+
+        let res = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman`, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPA_ANON_KEY,
+                'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            let err = await res.json();
+            throw new Error(err.message || 'Gagal menyimpan pengantaran');
+        }
+
+        alert(`✅ Sukses! Pengantaran ${armada} (${tujuan}, ${kg} Kg) berhasil ditambahkan ke log armada.`);
+        tutupModalTambahTripManual();
+        if (typeof loadLogBBMAdmin === 'function') await loadLogBBMAdmin();
+    } catch (e) {
+        alert("Gagal menambahkan pengantaran: " + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerText = origText; }
+    }
+}
+
 function switchDriverPortalTab(tab) {
     pindahDriverTab(tab);
 }
@@ -4440,6 +5640,15 @@ window.bukaModalKelolaTripAdmin = bukaModalKelolaTripAdmin;
 window.tutupModalKelolaTripAdmin = tutupModalKelolaTripAdmin;
 window.pindahArmadaTripAdmin = pindahArmadaTripAdmin;
 window.simpanRitTripAdmin = simpanRitTripAdmin;
+window.eksekusiPecahTripAdmin = eksekusiPecahTripAdmin;
+window.onInputSisaKgChange = onInputSisaKgChange;
+window.onInputSplitKgChange = onInputSplitKgChange;
+window.renderRaporArmadaView = renderRaporArmadaView;
+window.cetakRaporArmada = cetakRaporArmada;
+window.toggleRaporSetting = toggleRaporSetting;
+window.bukaModalTambahTripManual = bukaModalTambahTripManual;
+window.tutupModalTambahTripManual = tutupModalTambahTripManual;
+window.simpanTripManualAdmin = simpanTripManualAdmin;
 window.eksekusiGabungTripAdmin = eksekusiGabungTripAdmin;
 window.hapusTripAdminDariLog = hapusTripAdminDariLog;
 window.bukaShortcutCashflow = function() {

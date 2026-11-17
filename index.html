@@ -4863,10 +4863,14 @@
                             <p style="margin:3px 0 0 0; font-size:11px; color:#64748b;">Tracking riwayat perjalanan
                                 (kemana aja), pengisian BBM, tambal ban/isi angin, dan servis berkala.</p>
                         </div>
-                        <div style="display:flex; gap:8px;">
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
                             <button type="button" onclick="loadLogBBMAdmin()"
                                 style="background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; padding:8px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px;">
                                 <span class="material-symbols-outlined" style="font-size:15px;">refresh</span> Segarkan
+                            </button>
+                            <button type="button" onclick="bukaModalTambahTripManual()"
+                                style="background:#0f766e; color:white; border:none; padding:8px 14px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(15,118,110,0.25);">
+                                <span class="material-symbols-outlined" style="font-size:16px;">local_shipping</span> + Catat Pengantaran
                             </button>
                             <button type="button" onclick="bukaShortcutCashflow()"
                                 style="background:#d97706; color:white; border:none; padding:8px 14px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(217,119,6,0.25);">
@@ -4952,17 +4956,21 @@
                 <!-- 3. KPI Summary Box -->
                 <div id="admin-bbm-summary"></div>
 
-                <!-- Sub-tab Navigasi Antara Biaya/Servis vs Riwayat Perjalanan -->
-                <div style="display:flex; gap:8px; margin-bottom:12px;">
+                <!-- Sub-tab Navigasi Antara Biaya/Servis vs Riwayat Perjalanan vs Rapor Armada -->
+                <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
                     <button type="button" id="subtab-btn-biaya" onclick="switchSubTabArmada('biaya')"
-                        style="flex:1; padding:9px 12px; font-size:12px; font-weight:800; border-radius:8px; border:1px solid #2563eb; background:#2563eb; color:white; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+                        style="flex:1; min-width:180px; padding:9px 12px; font-size:12px; font-weight:800; border-radius:8px; border:1px solid #2563eb; background:#2563eb; color:white; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
                         <span class="material-symbols-outlined" style="font-size:17px;">handyman</span> Catatan Servis,
                         Bensin & Perawatan
                     </button>
                     <button type="button" id="subtab-btn-rute" onclick="switchSubTabArmada('rute')"
-                        style="flex:1; padding:9px 12px; font-size:12px; font-weight:700; border-radius:8px; border:1px solid #cbd5e1; background:#f8fafc; color:#475569; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+                        style="flex:1; min-width:180px; padding:9px 12px; font-size:12px; font-weight:700; border-radius:8px; border:1px solid #cbd5e1; background:#f8fafc; color:#475569; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
                         <span class="material-symbols-outlined" style="font-size:17px;">route</span> Riwayat Perjalanan
                         (Tracking Kemana Aja)
+                    </button>
+                    <button type="button" id="subtab-btn-rapor" onclick="switchSubTabArmada('rapor')"
+                        style="flex:1; min-width:180px; padding:9px 12px; font-size:12px; font-weight:700; border-radius:8px; border:1px solid #cbd5e1; background:#f8fafc; color:#475569; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+                        <span class="material-symbols-outlined" style="font-size:17px; color:#7c3aed;">analytics</span> Rapor Kinerja & Biaya Armada
                     </button>
                 </div>
 
@@ -5002,6 +5010,7 @@
                             <thead style="background:#0f766e; color:white;">
                                 <tr>
                                     <th style="padding:10px 8px; text-align:left;">Waktu & Tanggal</th>
+                                    <th style="padding:10px 8px; text-align:center;">Rit</th>
                                     <th style="padding:10px 8px; text-align:left;">Armada</th>
                                     <th style="padding:10px 8px; text-align:left;">Tujuan (Konsumen / Kandang)</th>
                                     <th style="padding:10px 8px; text-align:left;">Muatan Pakan</th>
@@ -5014,12 +5023,17 @@
                             </thead>
                             <tbody id="admin-armada-rute-tbody">
                                 <tr>
-                                    <td colspan="9" style="text-align:center; padding:25px; color:#94a3b8;">Memuat
+                                    <td colspan="10" style="text-align:center; padding:25px; color:#94a3b8;">Memuat
                                         riwayat perjalanan armada...</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
+                </div>
+
+                <!-- Subview 3: Rapor Kinerja & Biaya Armada CBL -->
+                <div id="subview-armada-rapor" class="hidden">
+                    <div id="admin-rapor-armada-content"></div>
                 </div>
             </div>
 
@@ -5061,7 +5075,7 @@
                     <!-- BAGIAN 1: PINDAH ARMADA -->
                     <div style="margin-bottom:16px;">
                         <label style="font-size:11px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">
-                            🚚 Pindahkan ke Armada Lain:
+                            Pindahkan ke Armada Lain:
                         </label>
                         <div style="display:flex; gap:6px;">
                             <button type="button" id="btn-kelola-arm-8707" class="btn-kelola-armada" onclick="pindahArmadaTripAdmin('D 8707 UE')"
@@ -5079,26 +5093,71 @@
                         </div>
                     </div>
 
-                    <!-- BAGIAN 2: PENYESUAIAN URUTAN RIT & TITIK DROP -->
+                    <!-- BAGIAN: ATUR URUTAN RIT & TITIK DROP / RIT FISIK -->
                     <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px; margin-bottom:16px;">
-                        <label style="font-size:11px; font-weight:800; color:#166534; display:block; margin-bottom:6px;">
-                            🔢 Atur Urutan Rit & Titik Drop:
+                        <label style="font-size:11px; font-weight:800; color:#166534; display:flex; align-items:center; gap:4px; margin-bottom:4px;">
+                            <span class="material-symbols-outlined" style="font-size:16px; color:#16a34a;">format_list_numbered</span>
+                            Atur Urutan Rit & Titik Drop:
                         </label>
-                        <div style="display:flex; gap:10px; margin-bottom:8px;">
+                        <div style="font-size:10px; color:#14532d; line-height:1.4; margin-bottom:8px;">
+                            Sesuaikan urutan rit, jumlah titik penurunan, atau jumlah rit fisik pengantaran:
+                        </div>
+                        <div style="display:flex; gap:8px; margin-bottom:8px;">
                             <div style="flex:1;">
-                                <label style="font-size:10px; font-weight:700; color:#15803d; display:block; margin-bottom:2px;">Urutan Rit:</label>
-                                <input type="number" id="kelola-trip-input-rit" min="1"
-                                    style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #86efac; font-size:12px; font-weight:800; box-sizing:border-box; text-align:center; background:#fff;">
+                                <label style="font-size:10px; font-weight:700; color:#166534; display:block; margin-bottom:2px;">Urutan Rit:</label>
+                                <input type="number" id="kelola-trip-urutan-rit" min="1" placeholder="Auto"
+                                    style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #86efac; font-size:12px; font-weight:800; box-sizing:border-box; background:#fff;">
                             </div>
                             <div style="flex:1;">
-                                <label style="font-size:10px; font-weight:700; color:#15803d; display:block; margin-bottom:2px;">Jumlah Titik Drop:</label>
-                                <input type="number" id="kelola-trip-input-titik" min="1"
-                                    style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #86efac; font-size:12px; font-weight:800; box-sizing:border-box; text-align:center; background:#fff;">
+                                <label style="font-size:10px; font-weight:700; color:#166534; display:block; margin-bottom:2px;">Titik Drop:</label>
+                                <input type="number" id="kelola-trip-titik-drop" min="0" placeholder="1"
+                                    style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #86efac; font-size:12px; font-weight:800; box-sizing:border-box; background:#fff;">
+                            </div>
+                            <div style="flex:1;">
+                                <label style="font-size:10px; font-weight:700; color:#166534; display:block; margin-bottom:2px;">Rit Fisik (Opsional):</label>
+                                <input type="number" id="kelola-trip-jumlah-rit" min="1" placeholder="Auto"
+                                    style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #86efac; font-size:12px; font-weight:800; box-sizing:border-box; background:#fff;">
                             </div>
                         </div>
-                        <button type="button" id="btn-simpan-rit-admin" onclick="simpanRitTripAdmin()"
+                        <button type="button" id="btn-simpan-rit-titik" onclick="simpanRitTripAdmin()"
                             style="width:100%; background:#16a34a; color:white; border:none; padding:8px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
                             <span class="material-symbols-outlined" style="font-size:15px;">save</span> Simpan Perubahan Rit & Titik
+                        </button>
+                    </div>
+
+                    <!-- BAGIAN 2: PECAH MUATAN KE ARMADA LAIN (CUSTOM TONASE BEBAS) -->
+                    <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:12px; margin-bottom:16px;">
+                        <label style="font-size:11px; font-weight:800; color:#92400e; display:flex; align-items:center; gap:4px; margin-bottom:4px;">
+                            <span class="material-symbols-outlined" style="font-size:16px; color:#d97706;">call_split</span>
+                            Pecah Muatan ke Armada Lain (Bebas Atur Tonase):
+                        </label>
+                        <div style="font-size:10px; color:#78350f; line-height:1.4; margin-bottom:8px;">
+                            Bebas atur pembagian beban muatan (misal total 9.000 Kg dipecah: truk 6.000 Kg & pick-up 3.000 Kg):
+                        </div>
+                        <div style="display:flex; gap:8px; margin-bottom:8px;">
+                            <div style="flex:1;">
+                                <label style="font-size:10px; font-weight:700; color:#92400e; display:block; margin-bottom:2px;">Tetap di Mobil Ini:</label>
+                                <input type="number" id="kelola-trip-input-sisa-kg" min="1" placeholder="Kg di armada ini" oninput="onInputSisaKgChange(this.value)"
+                                    style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #fcd34d; font-size:12px; font-weight:800; box-sizing:border-box; background:#fff;">
+                            </div>
+                            <div style="flex:1;">
+                                <label style="font-size:10px; font-weight:700; color:#92400e; display:block; margin-bottom:2px;">Dioper ke Mobil Lain:</label>
+                                <input type="number" id="kelola-trip-input-split-kg" min="1" placeholder="Kg dioper" oninput="onInputSplitKgChange(this.value)"
+                                    style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #fcd34d; font-size:12px; font-weight:800; box-sizing:border-box; background:#fff;">
+                            </div>
+                        </div>
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:10px; font-weight:700; color:#92400e; display:block; margin-bottom:2px;">Pilih Armada Penerima Muatan:</label>
+                            <select id="kelola-trip-select-split-armada"
+                                style="width:100%; padding:7px; border-radius:6px; border:1px solid #fcd34d; font-size:11px; font-weight:700; color:#1e293b; background:#fff;">
+                                <option value="D 8707 UE">D 8707 UE (Pick-up Hilman)</option>
+                                <option value="D 8142 UK">D 8142 UK (Pick-up Adi)</option>
+                                <option value="D 8749 UA">D 8749 UA (Truk Pak Agus)</option>
+                            </select>
+                        </div>
+                        <button type="button" id="btn-pecah-trip-admin" onclick="eksekusiPecahTripAdmin()"
+                            style="width:100%; background:#d97706; color:white; border:none; padding:8px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                            <span class="material-symbols-outlined" style="font-size:15px;">call_split</span> Pecah & Buat Pengiriman Baru
                         </button>
                     </div>
 
@@ -5129,6 +5188,82 @@
                         <div style="font-size:9.5px; color:#94a3b8; margin-top:2px;">
                             *Hanya menghapus dari catatan perjalanan. Data penjualan di tabel transaksi pakan tetap aman.
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL TAMBAH PENGANTARAN MANUAL OLEH ADMIN -->
+            <div id="modal-tambah-trip-manual" class="hidden"
+                style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.6); z-index:10000; display:flex; justify-content:center; align-items:center; padding:15px; box-sizing:border-box;">
+                <div style="background:#ffffff; border-radius:14px; width:100%; max-width:460px; padding:20px; box-shadow:0 15px 30px rgba(0,0,0,0.25); border:1px solid #e2e8f0;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid #e2e8f0;">
+                        <div>
+                            <h3 style="margin:0; font-size:15px; font-weight:800; color:#0f766e;">Hubungkan Transaksi / Catat Pengantaran</h3>
+                            <div style="font-size:11px; color:#64748b; margin-top:2px;">Tarik transaksi tanpa armada atau catat perjalanan baru</div>
+                        </div>
+                        <button type="button" onclick="tutupModalTambahTripManual()" style="background:#f1f5f9; border:none; border-radius:6px; padding:4px; cursor:pointer; color:#64748b;">
+                            <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+                        </button>
+                    </div>
+
+                    <!-- TARIK TRANSAKSI PENJUALAN TANPA ARMADA -->
+                    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px; margin-bottom:12px;">
+                        <label style="font-size:11px; font-weight:800; color:#15803d; display:block; margin-bottom:4px;">
+                            Tarik dari Transaksi Penjualan yang Belum Diantar (Ambil Mandiri / Tanpa Armada):
+                        </label>
+                        <select id="manual-trip-select-trx" onchange="onSelectTransaksiTanpaArmada(this.value)"
+                            style="width:100%; padding:8px; border-radius:6px; border:1px solid #86efac; font-size:11px; font-weight:600; color:#1e293b; background:#fff; box-sizing:border-box;">
+                            <option value="">-- Memuat daftar transaksi penjualan... --</option>
+                        </select>
+                        <div style="font-size:10px; color:#166534; margin-top:4px;">
+                            Pilih transaksi untuk mengisi otomatis tanggal, konsumen, dan berat muatan (Kg).
+                        </div>
+                    </div>
+
+                    <div style="display:flex; flex-direction:column; gap:12px;">
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Tanggal Pengantaran:</label>
+                            <input type="date" id="manual-trip-tanggal" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:12px; font-weight:600; box-sizing:border-box;">
+                        </div>
+
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Pilih Armada Pengantar:</label>
+                            <select id="manual-trip-armada" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:12px; font-weight:700; color:#1e293b; background:#fff; box-sizing:border-box;">
+                                <option value="D 8707 UE">D 8707 UE (Grand Max Pick-up - Hilman)</option>
+                                <option value="D 8142 UK">D 8142 UK (Pick-up Putih - Adi)</option>
+                                <option value="D 8749 UA">D 8749 UA (Truk Colt Diesel - Pak Agus)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Tujuan / Konsumen / Peternak:</label>
+                            <input type="text" id="manual-trip-tujuan" list="list-tujuan-armada" placeholder="Contoh: Pak Haji Jaja, SPN, RPH..." style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:12px; font-weight:600; box-sizing:border-box;">
+                        </div>
+
+                        <div style="display:flex; gap:10px;">
+                            <div style="flex:1;">
+                                <label style="font-size:11px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Total Muatan (Kg):</label>
+                                <input type="number" id="manual-trip-kg" min="1" placeholder="Cth: 1500" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:12px; font-weight:700; box-sizing:border-box;">
+                            </div>
+                            <div style="flex:1;">
+                                <label style="font-size:11px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Jumlah Titik Drop:</label>
+                                <input type="number" id="manual-trip-titik" min="1" value="1" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:12px; font-weight:700; box-sizing:border-box;">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#334155; display:block; margin-bottom:4px;">Catatan Tambahan (Opsional):</label>
+                            <input type="text" id="manual-trip-catatan" placeholder="Contoh: Pengantaran pakan sapi" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:12px; box-sizing:border-box;">
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:10px; margin-top:18px;">
+                        <button type="button" onclick="tutupModalTambahTripManual()" style="flex:1; padding:9px; border-radius:8px; border:1px solid #cbd5e1; background:#f8fafc; color:#475569; font-weight:700; font-size:11px; cursor:pointer;">
+                            Batal
+                        </button>
+                        <button type="button" id="btn-simpan-trip-manual" onclick="simpanTripManualAdmin()" style="flex:1.5; padding:9px; border-radius:8px; border:none; background:#0f766e; color:white; font-weight:700; font-size:11px; cursor:pointer;">
+                            Simpan & Hubungkan
+                        </button>
                     </div>
                 </div>
             </div>
@@ -6639,7 +6774,7 @@
                             style="font-size:30px; color:#8AA624;">local_shipping</span>
                     </div>
                     <h3 style="margin:0; font-size:18px;">Pilih Armada Pengantar</h3>
-                    <div style="font-size:11px; opacity:0.9; margin-top:3px;">Pilih armada pengantaran atau ambil
+                    <div id="modal-ongkir-subtext" style="font-size:11px; opacity:0.9; margin-top:3px;">Pilih armada pengantaran atau ambil
                         mandiri</div>
                 </div>
                 <div
@@ -13805,10 +13940,25 @@
                     if (multiples < 1) multiples = 1; // Minimal hitungan 1 rit
                     let calculatedOngkir = multiples * tarifPerRit;
 
+                    // JIKA KATEGORI MUTASI: ONGKIR OTOMATIS Rp 0 (TIDAK MEMBEBANKAN ONGKIR)
+                    let rLower = inputRelasi.toLowerCase();
+                    let isKategoriMutasi = relDataObj && relDataObj.kategori && relDataObj.kategori.toLowerCase() === 'mutasi';
+                    let isMutasiInternal = isKategoriMutasi ||
+                        gabunganAlamat.includes('rph') || gabunganAlamat.includes('spn') || 
+                        gabunganAlamat.includes('pembibitan') || gabunganAlamat.includes('cibulakan') || 
+                        gabunganAlamat.includes('mutasi') ||
+                        rLower.includes('rph') || rLower.includes('spn') || 
+                        rLower.includes('pembibitan') || rLower.includes('cibulakan') || 
+                        rLower.includes('mutasi');
+
+                    if (isMutasiInternal) {
+                        calculatedOngkir = 0;
+                    }
+
                     let inputOngkirEl = document.getElementById('ongkir');
                     if (inputOngkirEl) {
-                        inputOngkirEl.value = calculatedOngkir;
-                        if (typeof formatOngkir === 'function') formatOngkir(inputOngkirEl);
+                        inputOngkirEl.value = (calculatedOngkir > 0) ? calculatedOngkir : '';
+                        if (typeof formatOngkir === 'function' && calculatedOngkir > 0) formatOngkir(inputOngkirEl);
                     }
 
                     let modalEl = document.getElementById('modal-ongkir');
@@ -13880,11 +14030,17 @@
                         rLower.includes('cibulakan') ||
                         rLower.includes('mutasi');
 
-                    // Pop-up Dikirim / Diambil HANYA untuk penjualan komersial reguler
-                    let skipPopupKirimAmbil = isGilinganRelasi || isPemakaianKandang || isMutasiInternal;
+                    // Pop-up Dikirim / Diambil dikecualikan hanya untuk gilingan dan pemakaian pakan sapi sendiri
+                    let skipPopupKirimAmbil = isGilinganRelasi || isPemakaianKandang;
 
                     if (!skipOngkirModal && statusPilihan === 'Keluar' && inputOngkirEl.value.trim() === "" && !skipPopupKirimAmbil) {
                         window.tempKirimMode = mode;
+                        let subtext = document.getElementById('modal-ongkir-subtext');
+                        if (subtext) {
+                            subtext.innerText = isMutasiInternal 
+                                ? "🚚 Mutasi Antar Cabang / Gudang (Tanpa Ongkir)" 
+                                : "Pilih armada pengantaran atau ambil mandiri";
+                        }
                         document.getElementById('modal-ongkir').classList.remove('hidden');
                         return;
                     }
