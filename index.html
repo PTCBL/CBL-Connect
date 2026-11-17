@@ -2572,13 +2572,54 @@
                         </div>
                     </div>
                 </div>
-                <div class="form-group"><label>Kategori</label><select id="cf_perkiraan"></select></div>
                 <div class="form-group">
-                    <label>Relasi (Dari / Ke)</label>
-                    <div class="autocomplete-wrapper">
+                    <label>Kategori</label>
+                    <select id="cf_perkiraan" onchange="onKategoriCashflowChange()"></select>
+                </div>
+                <div class="form-group" id="cf_group_relasi">
+                    <label id="cf_label_relasi">Relasi (Dari / Ke)</label>
+                    <!-- Input Relasi Normal (Muncul untuk kategori umum) -->
+                    <div id="cf_relasi_normal" class="autocomplete-wrapper">
                         <input type="text" id="cf_relasi" placeholder="Cari nama relasi..." autocomplete="off"
                             oninput="tampilkanSaran(this, 'saran-relasi-cf', false)">
                         <div id="saran-relasi-cf" class="autocomplete-items hidden"></div>
+                    </div>
+                    <!-- Pilihan 3 Armada Cerdas (Muncul otomatis untuk kategori operasional armada) -->
+                    <div id="cf_relasi_armada" class="hidden" style="margin-top:4px;">
+                        <div style="display:flex; gap:8px;">
+                            <button type="button" class="btn-cf-armada" data-armada="D 8707 UE" onclick="pilihArmadaCF('D 8707 UE')"
+                                style="flex:1; padding:10px 4px; border:2px solid #cbd5e1; border-radius:10px; background:#fff; font-size:12px; font-weight:800; color:#1e293b; cursor:pointer; text-align:center; transition:all 0.2s;">
+                                <div style="font-size:13px;">🚚 D 8707 UE</div>
+                                <div style="font-size:10px; font-weight:700; color:#2563eb; margin-top:2px;">Pick-up (Hilman)</div>
+                            </button>
+                            <button type="button" class="btn-cf-armada" data-armada="D 8142 UK" onclick="pilihArmadaCF('D 8142 UK')"
+                                style="flex:1; padding:10px 4px; border:2px solid #cbd5e1; border-radius:10px; background:#fff; font-size:12px; font-weight:800; color:#1e293b; cursor:pointer; text-align:center; transition:all 0.2s;">
+                                <div style="font-size:13px;">🚚 D 8142 UK</div>
+                                <div style="font-size:10px; font-weight:700; color:#ea580c; margin-top:2px;">Pick-up (Adi)</div>
+                            </button>
+                            <button type="button" class="btn-cf-armada" data-armada="D 8749 UA" onclick="pilihArmadaCF('D 8749 UA')"
+                                style="flex:1; padding:10px 4px; border:2px solid #cbd5e1; border-radius:10px; background:#fff; font-size:12px; font-weight:800; color:#1e293b; cursor:pointer; text-align:center; transition:all 0.2s;">
+                                <div style="font-size:13px;">🚛 D 8749 UA</div>
+                                <div style="font-size:10px; font-weight:700; color:#0f766e; margin-top:2px;">Truk (Pak Agus)</div>
+                            </button>
+                        </div>
+                        <!-- Kolom Tambahan Opsional: Spidometer & Liter -->
+                        <div id="cf_extra_armada_row" style="display:flex; gap:10px; margin-top:10px; background:#f8fafc; padding:10px; border-radius:8px; border:1px dashed #cbd5e1;">
+                            <div style="flex:1;">
+                                <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:3px;">
+                                    <span class="material-symbols-outlined" style="font-size:13px; vertical-align:middle; color:#0f766e;">speed</span> Spidometer (KM) <span style="font-size:10px; color:#94a3b8; font-weight:normal;">(Opsional)</span>:
+                                </label>
+                                <input type="number" id="cf_spido_km" placeholder="Misal: 45200"
+                                    style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:12px; box-sizing:border-box; background:#fff;">
+                            </div>
+                            <div id="cf_col_liter" style="flex:1; display:none;">
+                                <label style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:3px;">
+                                    <span class="material-symbols-outlined" style="font-size:13px; vertical-align:middle; color:#d97706;">local_gas_station</span> Beli BBM (Liter) <span style="font-size:10px; color:#94a3b8; font-weight:normal;">(Opsional)</span>:
+                                </label>
+                                <input type="number" step="0.1" id="cf_liter" placeholder="Misal: 35"
+                                    style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:12px; box-sizing:border-box; background:#fff;">
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="form-group"><label>Nominal Bayar (Rp)</label><input type="text" inputmode="numeric"
@@ -4646,148 +4687,148 @@
                     </button>
                 </div>
             </div>
+        </div>
 
-            <!-- MODAL LAPORAN ISI BENSIN & OPERASIONAL (UANG KELUAR) -->
-            <div id="modal-catat-bbm-driver" class="hidden"
-                style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:9999; display:flex; justify-content:center; align-items:center; padding:15px; box-sizing:border-box;">
+        <!-- MODAL LAPORAN ISI BENSIN & OPERASIONAL (UANG KELUAR) (GLOBAL MODAL) -->
+        <div id="modal-catat-bbm-driver" class="hidden"
+            style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:9999; display:flex; justify-content:center; align-items:center; padding:15px; box-sizing:border-box;">
+            <div
+                style="background:#ffffff; border-radius:16px; max-width:400px; width:100%; padding:20px; box-shadow:0 12px 30px rgba(0,0,0,0.25); max-height:90vh; overflow-y:auto;">
                 <div
-                    style="background:#ffffff; border-radius:16px; max-width:400px; width:100%; padding:20px; box-shadow:0 12px 30px rgba(0,0,0,0.25); max-height:90vh; overflow-y:auto;">
+                    style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
                     <div
-                        style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+                        style="display:flex; align-items:center; gap:6px; font-size:15px; font-weight:800; color:#1e293b;">
+                        <span class="material-symbols-outlined"
+                            style="color:#d97706; font-size:22px;">local_gas_station</span>
+                        Laporan Isi Bensin & Operasional
+                    </div>
+                    <button type="button" onclick="tutupModalCatatBBM()"
+                        style="background:none; border:none; color:#64748b; cursor:pointer;">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+
+                <form onsubmit="simpanBeliBBMDriver(event)">
+                    <!-- Jenis Laporan Operasional -->
+                    <div style="margin-bottom:12px;">
+                        <label
+                            style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Jenis
+                            Laporan:</label>
                         <div
-                            style="display:flex; align-items:center; gap:6px; font-size:15px; font-weight:800; color:#1e293b;">
-                            <span class="material-symbols-outlined"
-                                style="color:#d97706; font-size:22px;">local_gas_station</span>
-                            Laporan Isi Bensin & Operasional
+                            style="display:flex; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:0 10px;">
+                            <span id="bbm-kategori-icon" class="material-symbols-outlined"
+                                style="color:#2563eb; font-size:20px; margin-right:8px;">local_gas_station</span>
+                            <select id="bbm-input-kategori" onchange="toggleKategoriOperasionalForm()"
+                                style="flex:1; padding:9px 0; border:none; background:transparent; font-size:12px; font-weight:700; color:#1e293b; outline:none; cursor:pointer;">
+                                <option value="BBM / Solar">Isi Bensin / Solar</option>
+                                <option value="Ban / Isi Angin">Ban (Tambal / Isi Angin / Ganti Ban)</option>
+                                <option value="Servis / Ganti Oli">Servis Rutin / Ganti Oli</option>
+                                <option value="Cuci Mobil">Cuci Armada</option>
+                                <option value="Operasional Lainnya">Perbaikan / Pengeluaran Lain</option>
+                            </select>
                         </div>
-                        <button type="button" onclick="tutupModalCatatBBM()"
-                            style="background:none; border:none; color:#64748b; cursor:pointer;">
-                            <span class="material-symbols-outlined">close</span>
-                        </button>
                     </div>
 
-                    <form onsubmit="simpanBeliBBMDriver(event)">
-                        <!-- Jenis Laporan Operasional -->
-                        <div style="margin-bottom:12px;">
-                            <label
-                                style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Jenis
-                                Laporan:</label>
-                            <div
-                                style="display:flex; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:0 10px;">
-                                <span id="bbm-kategori-icon" class="material-symbols-outlined"
-                                    style="color:#2563eb; font-size:20px; margin-right:8px;">local_gas_station</span>
-                                <select id="bbm-input-kategori" onchange="toggleKategoriOperasionalForm()"
-                                    style="flex:1; padding:9px 0; border:none; background:transparent; font-size:12px; font-weight:700; color:#1e293b; outline:none; cursor:pointer;">
-                                    <option value="BBM / Solar">Isi Bensin / Solar</option>
-                                    <option value="Ban / Isi Angin">Ban (Tambal / Isi Angin / Ganti Ban)</option>
-                                    <option value="Servis / Ganti Oli">Servis Rutin / Ganti Oli</option>
-                                    <option value="Cuci Mobil">Cuci Armada</option>
-                                    <option value="Operasional Lainnya">Perbaikan / Pengeluaran Lain</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Pilih Armada -->
-                        <div style="margin-bottom:12px;">
-                            <label
-                                style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Pilih
-                                Armada & Supir Tetap:</label>
-                            <div
-                                style="display:flex; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:0 10px;">
-                                <span class="material-symbols-outlined"
-                                    style="color:#0f766e; font-size:20px; margin-right:8px;">directions_car</span>
-                                <select id="bbm-input-armada"
-                                    style="flex:1; padding:9px 0; border:none; background:transparent; font-size:12px; font-weight:700; color:#1e293b; outline:none; cursor:pointer;">
-                                    <option value="D 8707 UE">D 8707 UE (Supir: Hilman)</option>
-                                    <option value="D 8142 UK">D 8142 UK (Supir: Adi)</option>
-                                    <option value="Truk">Truk Ekspedisi</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Rincian Catatan (Khusus non-BBM) -->
-                        <div id="bbm-row-detail" style="margin-bottom:12px; display:none;">
-                            <label
-                                style="font-size:11px; font-weight:700; color:#1e293b; display:block; margin-bottom:4px;">Keterangan
-                                / Rincian Pekerjaan:</label>
-                            <input type="text" id="bbm-input-detail"
-                                placeholder="Misal: Tambal ban belakang kiri, isi angin 4 roda, ganti oli mesin"
-                                style="width:100%; padding:9px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:11px; box-sizing:border-box;">
-                        </div>
-
-                        <!-- Tanggal & Metode Bayar -->
-                        <div style="display:flex; gap:10px; margin-bottom:12px;">
-                            <div style="flex:1;">
-                                <label
-                                    style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Tanggal:</label>
-                                <input type="date" id="bbm-input-tanggal"
-                                    style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:11px; box-sizing:border-box;">
-                            </div>
-                            <div style="flex:1;">
-                                <label
-                                    style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Metode
-                                    Bayar:</label>
-                                <select id="bbm-input-metode"
-                                    style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:11px; box-sizing:border-box;">
-                                    <option value="Cash">Tunai (Cash)</option>
-                                    <option value="Transfer">Transfer / QRIS</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Nominal Biaya (Rp) -->
-                        <div style="margin-bottom:12px;">
-                            <label id="bbm-label-nominal"
-                                style="font-size:11px; font-weight:700; color:#1e293b; display:block; margin-bottom:4px;">
-                                Nominal Biaya Bensin (Rp) <span style="color:#dc2626;">*Wajib</span>:
-                            </label>
-                            <input type="number" id="bbm-input-nominal" required placeholder="Contoh: 150000" min="1000"
-                                style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #94a3b8; font-size:16px; font-weight:800; color:#1e3a8a; box-sizing:border-box;">
-                        </div>
-
-                        <!-- Liter & Kilometer Odometer -->
-                        <div style="display:flex; gap:10px; margin-bottom:12px;">
-                            <div id="bbm-col-liter" style="flex:1;">
-                                <label
-                                    style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Jumlah
-                                    Liter (Opsional):</label>
-                                <input type="number" step="0.01" id="bbm-input-liter" placeholder="Misal: 22.5"
-                                    style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:11px; box-sizing:border-box;">
-                            </div>
-                            <div style="flex:1;">
-                                <label
-                                    style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">KM
-                                    Spido (Opsional):</label>
-                                <input type="number" id="bbm-input-km" placeholder="Misal: 45200"
-                                    style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:11px; box-sizing:border-box;">
-                            </div>
-                        </div>
-
-                        <!-- Foto Struk SPBU / Nota Bengkel -->
+                    <!-- Pilih Armada -->
+                    <div style="margin-bottom:12px;">
+                        <label
+                            style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Pilih
+                            Armada & Supir Tetap:</label>
                         <div
-                            style="margin-bottom:14px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px; padding:10px;">
+                            style="display:flex; align-items:center; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:0 10px;">
+                            <span class="material-symbols-outlined"
+                                style="color:#0f766e; font-size:20px; margin-right:8px;">directions_car</span>
+                            <select id="bbm-input-armada"
+                                style="flex:1; padding:9px 0; border:none; background:transparent; font-size:12px; font-weight:700; color:#1e293b; outline:none; cursor:pointer;">
+                                <option value="D 8707 UE">D 8707 UE (Pick-up - Hilman)</option>
+                                <option value="D 8142 UK">D 8142 UK (Pick-up - Adi)</option>
+                                <option value="D 8749 UA">D 8749 UA (Truk - Pak Agus)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Rincian Catatan (Khusus non-BBM) -->
+                    <div id="bbm-row-detail" style="margin-bottom:12px; display:none;">
+                        <label
+                            style="font-size:11px; font-weight:700; color:#1e293b; display:block; margin-bottom:4px;">Keterangan
+                            / Rincian Pekerjaan:</label>
+                        <input type="text" id="bbm-input-detail"
+                            placeholder="Misal: Tambal ban belakang kiri, isi angin 4 roda, ganti oli mesin"
+                            style="width:100%; padding:9px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:11px; box-sizing:border-box;">
+                    </div>
+
+                    <!-- Tanggal & Metode Bayar -->
+                    <div style="display:flex; gap:10px; margin-bottom:12px;">
+                        <div style="flex:1;">
                             <label
-                                style="font-size:11px; font-weight:700; color:#334155; display:flex; align-items:center; gap:4px; margin-bottom:6px;">
-                                <span class="material-symbols-outlined"
-                                    style="font-size:15px; color:#2563eb;">photo_camera</span> Foto Struk SPBU / Nota
-                                (Opsional):
-                            </label>
-                            <input type="file" id="bbm-input-foto" accept="image/*" capture="environment"
-                                style="width:100%; font-size:11px;">
-                            <div id="bbm-foto-preview" style="margin-top:6px;"></div>
+                                style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Tanggal:</label>
+                            <input type="date" id="bbm-input-tanggal"
+                                style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:11px; box-sizing:border-box;">
                         </div>
-
-                        <div style="font-size:10px; color:#64748b; margin-bottom:14px; line-height:1.4;">
-                            *Pengeluaran otomatis masuk ke <b>Laporan Uang Keluar (Cashflow Kantor)</b> dan tersinkron
-                            ke rekap kasir.
+                        <div style="flex:1;">
+                            <label
+                                style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Metode
+                                Bayar:</label>
+                            <select id="bbm-input-metode"
+                                style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:11px; box-sizing:border-box;">
+                                <option value="Cash">Tunai (Cash)</option>
+                                <option value="Transfer">Transfer / QRIS</option>
+                            </select>
                         </div>
+                    </div>
 
-                        <button type="submit" id="btn-simpan-bbm"
-                            style="width:100%; background:linear-gradient(135deg, #d97706, #b45309); color:white; border:none; padding:12px; border-radius:10px; font-size:13px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 3px 8px rgba(217,119,6,0.25);">
-                            <span class="material-symbols-outlined">payments</span> Simpan & Laporkan Uang Keluar
-                        </button>
-                    </form>
-                </div>
+                    <!-- Nominal Biaya (Rp) -->
+                    <div style="margin-bottom:12px;">
+                        <label id="bbm-label-nominal"
+                            style="font-size:11px; font-weight:700; color:#1e293b; display:block; margin-bottom:4px;">
+                            Nominal Biaya Bensin (Rp) <span style="color:#dc2626;">*Wajib</span>:
+                        </label>
+                        <input type="number" id="bbm-input-nominal" required placeholder="Contoh: 150000" min="1000"
+                            style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #94a3b8; font-size:16px; font-weight:800; color:#1e3a8a; box-sizing:border-box;">
+                    </div>
+
+                    <!-- Liter & Kilometer Odometer -->
+                    <div style="display:flex; gap:10px; margin-bottom:12px;">
+                        <div id="bbm-col-liter" style="flex:1;">
+                            <label
+                                style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">Jumlah
+                                Liter (Opsional):</label>
+                            <input type="number" step="0.01" id="bbm-input-liter" placeholder="Misal: 22.5"
+                                style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:11px; box-sizing:border-box;">
+                        </div>
+                        <div style="flex:1;">
+                            <label
+                                style="font-size:11px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">KM
+                                Spido (Opsional):</label>
+                            <input type="number" id="bbm-input-km" placeholder="Misal: 45200"
+                                style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:11px; box-sizing:border-box;">
+                        </div>
+                    </div>
+
+                    <!-- Foto Struk SPBU / Nota Bengkel -->
+                    <div
+                        style="margin-bottom:14px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px; padding:10px;">
+                        <label
+                            style="font-size:11px; font-weight:700; color:#334155; display:flex; align-items:center; gap:4px; margin-bottom:6px;">
+                            <span class="material-symbols-outlined"
+                                style="font-size:15px; color:#2563eb;">photo_camera</span> Foto Struk SPBU / Nota
+                            (Opsional):
+                        </label>
+                        <input type="file" id="bbm-input-foto" accept="image/*" capture="environment"
+                            style="width:100%; font-size:11px;">
+                        <div id="bbm-foto-preview" style="margin-top:6px;"></div>
+                    </div>
+
+                    <div style="font-size:10px; color:#64748b; margin-bottom:14px; line-height:1.4;">
+                        *Pengeluaran otomatis masuk ke <b>Laporan Uang Keluar (Cashflow Kantor)</b> dan tersinkron
+                        ke rekap kasir.
+                    </div>
+
+                    <button type="submit" id="btn-simpan-bbm"
+                        style="width:100%; background:linear-gradient(135deg, #d97706, #b45309); color:white; border:none; padding:12px; border-radius:10px; font-size:13px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 3px 8px rgba(217,119,6,0.25);">
+                        <span class="material-symbols-outlined">payments</span> Simpan & Laporkan Uang Keluar
+                    </button>
+                </form>
             </div>
         </div>
 
@@ -4823,6 +4864,11 @@
                                 (kemana aja), pengisian BBM, tambal ban/isi angin, dan servis berkala.</p>
                         </div>
                         <div style="display:flex; gap:8px;">
+                            <button type="button" onclick="bukaShortcutCashflow()"
+                                title="Buka Form Pencatatan Cashflow Kantor (Uang Keluar)"
+                                style="background:#f0fdfa; color:#0f766e; border:1px solid #99f6e4; padding:8px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                                <span class="material-symbols-outlined" style="font-size:16px; color:#0d9488;">payments</span> Menu Cashflow
+                            </button>
                             <button type="button" onclick="loadLogBBMAdmin()"
                                 style="background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; padding:8px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:4px;">
                                 <span class="material-symbols-outlined" style="font-size:15px;">refresh</span> Segarkan
@@ -4853,10 +4899,10 @@
                             style="padding:6px 14px; font-size:11px; font-weight:700; border-radius:20px; border:1px solid #cbd5e1; background:#ffffff; color:#475569; cursor:pointer;">
                             D 8142 UK
                         </button>
-                        <button type="button" class="btn-filter-armada" data-armada="Truk"
-                            onclick="filterLogArmada('Truk')"
+                        <button type="button" class="btn-filter-armada" data-armada="D 8749 UA"
+                            onclick="filterLogArmada('D 8749 UA')"
                             style="padding:6px 14px; font-size:11px; font-weight:700; border-radius:20px; border:1px solid #cbd5e1; background:#ffffff; color:#475569; cursor:pointer;">
-                            Truk
+                            D 8749 UA (Truk)
                         </button>
                     </div>
                 </div>
@@ -6501,6 +6547,10 @@
                         style="margin:0; background:#ea580c; padding:12px; font-size: 15px; display:flex; align-items:center; justify-content:center; gap:8px;">
                         <span class="material-symbols-outlined">local_shipping</span> D 8142 UK (Pak Adi)
                     </button>
+                    <button class="btn-submit" onclick="prosesOngkirArmada('D 8749 UA')"
+                        style="margin:0; background:#0f766e; padding:12px; font-size: 15px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                        <span class="material-symbols-outlined">local_shipping</span> D 8749 UA (Truk - Pak Agus)
+                    </button>
                     <button class="btn-submit" onclick="prosesOngkirAmbil()"
                         style="margin:0; background:#64748b; padding:11px; font-size: 14px; display:flex; align-items:center; justify-content:center; gap:8px;">
                         <span class="material-symbols-outlined">storefront</span> Diambil Mandiri di Gudang
@@ -7540,7 +7590,35 @@
                 }
 
                 const KATG_MASUK = ["Bayar Pakan", "Bayar Tunai", "Dll"];
-                const KATG_KELUAR = ["Bongkar Muat", "OPR Ekspedisi Pakan", "Perawatan Kendaraan", "OPR Kandang", "Tarik Deposit", "Kasbon", "Lainnya"];
+                const KATG_KELUAR = [
+                    // Operasional Armada & Kendaraan
+                    "BBM / Solar",
+                    "Tambal Ban / Isi Angin",
+                    "Servis Rutin / Ganti Oli",
+                    "Perbaikan & Sparepart Kendaraan",
+                    "Cuci Armada",
+                    "Perawatan Kendaraan",
+                    "OPR Ekspedisi Pakan",
+                    // Operasional Gudang, Kandang & Kantor
+                    "Bongkar Muat",
+                    "OPR Kandang",
+                    "Listrik, Air & Internet",
+                    "Perlengkapan & Kebersihan",
+                    "Konsumsi & Dapur",
+                    // Transaksi Kas / Non-Operasional
+                    "Tarik Deposit",
+                    "Kasbon",
+                    "Lainnya"
+                ];
+                const KATG_ARMADA_LIST = [
+                    "BBM / Solar",
+                    "Tambal Ban / Isi Angin",
+                    "Servis Rutin / Ganti Oli",
+                    "Perbaikan & Sparepart Kendaraan",
+                    "Cuci Armada",
+                    "Perawatan Kendaraan",
+                    "OPR Ekspedisi Pakan"
+                ];
                 const ALIAS_MAP = { "Mako S-20": "S20", "Ransum Laktasi": "RL", "Ransum Darbun": "RD", "Mako A-20": "A20", "Mako SP-15": "SP15", "Meal Mix": "MM", "Rapen Kedelai": "RK", "Pongkol Singkong": "PS", "Silase Edamame": "SE", "Bio Smart": "BS", "Mix Calf": "MC", "YD": "YD", "Rapen Kacang Hijau": "RKH", "KFZS": "KFZS", "Silase Jagung": "SJ", "Hay Kangkung": "HK" };
 
                 const ICON_CLOUD = `<span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle; color:#FEA405;" title="Data Lokal (Belum Tersinkron)">cloud</span>`;
@@ -8530,9 +8608,13 @@
                                         manifest_items: manifestItems
                                     };
 
-                                    // Hubungkan supir default jika armada pick-up CBL
+                                    // Hubungkan supir default jika armada pick-up / truk CBL
                                     if (targetArmada.includes('8707') || targetArmada.includes('8070')) tripPayload.sopir_user_id = 6; // Pak Hilman
                                     else if (targetArmada.includes('8142')) tripPayload.sopir_user_id = 7; // Pak Adi
+                                    else if (targetArmada.includes('8749')) {
+                                        let agusUser = (window.tripState?.cachedUsers || []).find(u => (u.nama || '').toLowerCase().includes('agus') && (u.role || '').toLowerCase() === 'sopir');
+                                        if (agusUser) tripPayload.sopir_user_id = agusUser.id;
+                                    }
 
                                     let resTrip = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman`, {
                                         method: 'POST',
@@ -9057,7 +9139,7 @@
                     if (document.getElementById('nav-jurnal')) document.getElementById('nav-jurnal').classList.remove('hidden');
 
                     let rLower = (role || '').toLowerCase();
-                    let isAgus = (rLower === 'petugas pm') || (typeof activeUser !== 'undefined' && (activeUser || '').toLowerCase().includes('agus'));
+                    let isAgus = (rLower === 'petugas pm') || (typeof activeUser !== 'undefined' && (activeUser || '').toLowerCase().includes('agus') && rLower !== 'sopir' && rLower !== 'kernek');
 
                     // 2. Buka gembok sesuai 'role' yang diterima dari database Supabase
                     if (role === 'admin') {
@@ -9183,7 +9265,7 @@
                         tarikDataPanggul(true);
                     }
 
-                    let isAgus = (typeof currentRole !== 'undefined' && currentRole.toLowerCase() === 'petugas pm') || (typeof activeUser !== 'undefined' && (activeUser || '').toLowerCase().includes('agus'));
+                    let isAgus = (typeof currentRole !== 'undefined' && currentRole.toLowerCase() === 'petugas pm') || (typeof activeUser !== 'undefined' && (activeUser || '').toLowerCase().includes('agus') && (typeof currentRole === 'undefined' || (currentRole.toLowerCase() !== 'sopir' && currentRole.toLowerCase() !== 'kernek')));
                     if ((menu === 'jurnal' || menu === 'trip-bbm') && isAgus) {
                         alert("Akses Ditolak: Anda tidak memiliki akses ke menu ini.");
                         return;
@@ -13251,8 +13333,10 @@
                 function prosesFileGambarSJ(file) { let reader = new FileReader(); reader.onload = function (e) { document.getElementById('sj_preview_container').style.display = 'block'; document.getElementById('sj_preview').src = e.target.result; let img = new Image(); img.onload = function () { let canvas = document.createElement('canvas'); const MAX_WIDTH = 1000; let w = img.width; let h = img.height; if (w > MAX_WIDTH) { h *= MAX_WIDTH / w; w = MAX_WIDTH; } canvas.width = w; canvas.height = h; let ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, w, h); let dataUrl = canvas.toDataURL('image/jpeg', 0.70); fileBase64_SJ = dataUrl.split(',')[1]; fileMime_SJ = 'image/jpeg'; document.getElementById('paste-zone-sj').innerHTML = "<b>✅ Gambar SJ disalin!</b>"; }; img.src = e.target.result; }; reader.readAsDataURL(file); }
                 function hapusSJ() { document.getElementById('sj_preview_container').style.display = 'none'; document.getElementById('input_sj').value = ""; document.getElementById('paste-zone-sj').innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">content_paste</span> <b>Paste Lampiran</b>`; fileBase64_SJ = ""; fileMime_SJ = ""; }
                 function updateKategoriCashflow() {
-                    let jenis = document.querySelector('input[name="cf_jenis"]:checked').value;
+                    let jenisRadio = document.querySelector('input[name="cf_jenis"]:checked');
+                    let jenis = jenisRadio ? jenisRadio.value : 'Masuk';
                     let sel = document.getElementById('cf_perkiraan');
+                    if (!sel) return;
                     sel.innerHTML = "";
                     let arr = jenis === 'Masuk' ? KATG_MASUK : KATG_KELUAR;
                     arr.forEach(k => {
@@ -13260,7 +13344,59 @@
                         opt.value = k; opt.innerHTML = k;
                         sel.appendChild(opt);
                     });
+                    onKategoriCashflowChange();
                 }
+
+                function onKategoriCashflowChange() {
+                    let jenisRadio = document.querySelector('input[name="cf_jenis"]:checked');
+                    let jenis = jenisRadio ? jenisRadio.value : 'Keluar';
+                    let kat = document.getElementById('cf_perkiraan')?.value || '';
+                    let isArmada = (jenis === 'Keluar' && typeof KATG_ARMADA_LIST !== 'undefined' && KATG_ARMADA_LIST.includes(kat));
+
+                    let labelRelasi = document.getElementById('cf_label_relasi');
+                    let relasiNormal = document.getElementById('cf_relasi_normal');
+                    let relasiArmada = document.getElementById('cf_relasi_armada');
+                    let colLiter = document.getElementById('cf_col_liter');
+                    let inputRelasi = document.getElementById('cf_relasi');
+
+                    if (isArmada) {
+                        if (labelRelasi) labelRelasi.innerHTML = `<span class="material-symbols-outlined" style="font-size:16px; color:#0f766e; vertical-align:middle;">local_shipping</span> Pilih Armada CBL <span style="color:#dc2626; font-size:11px;">*Wajib</span>:`;
+                        if (relasiNormal) relasiNormal.classList.add('hidden');
+                        if (relasiArmada) relasiArmada.classList.remove('hidden');
+
+                        if (colLiter) colLiter.style.display = (kat === 'BBM / Solar') ? 'block' : 'none';
+
+                        let curVal = inputRelasi ? inputRelasi.value : '';
+                        if (curVal !== 'D 8707 UE' && curVal !== 'D 8142 UK' && curVal !== 'D 8749 UA') {
+                            pilihArmadaCF('D 8707 UE');
+                        } else {
+                            pilihArmadaCF(curVal);
+                        }
+                    } else {
+                        if (labelRelasi) labelRelasi.innerHTML = `Relasi (Dari / Ke)`;
+                        if (relasiNormal) relasiNormal.classList.remove('hidden');
+                        if (relasiArmada) relasiArmada.classList.add('hidden');
+                        if (inputRelasi && (inputRelasi.value === 'D 8707 UE' || inputRelasi.value === 'D 8142 UK' || inputRelasi.value === 'D 8749 UA')) {
+                            inputRelasi.value = '';
+                        }
+                    }
+                }
+
+                function pilihArmadaCF(armada) {
+                    let inputRelasi = document.getElementById('cf_relasi');
+                    if (inputRelasi) inputRelasi.value = armada;
+
+                    document.querySelectorAll('.btn-cf-armada').forEach(btn => {
+                        let isSel = (btn.dataset.armada === armada);
+                        btn.style.borderColor = isSel ? '#0f766e' : '#cbd5e1';
+                        btn.style.background = isSel ? '#f0fdfa' : '#ffffff';
+                        btn.style.boxShadow = isSel ? '0 0 0 2px #0f766e' : 'none';
+                    });
+                }
+
+                window.updateKategoriCashflow = updateKategoriCashflow;
+                window.onKategoriCashflowChange = onKategoriCashflowChange;
+                window.pilihArmadaCF = pilihArmadaCF;
 
                 function ekstrakNominalDariStruk(imageSrc) {
                     let inputNominal = document.getElementById('cf_nominal');
@@ -13407,6 +13543,21 @@
                     let diskon = parseInt(document.getElementById('cf_diskon').value.replace(/[^0-9]/g, '')) || 0;
                     let deskripsi = document.getElementById('cf_deskripsi').value.trim();
 
+                    let isArmada = (jenis === 'Keluar' && typeof KATG_ARMADA_LIST !== 'undefined' && KATG_ARMADA_LIST.includes(perkiraan));
+                    if (isArmada) {
+                        if (!relasi || (relasi !== 'D 8707 UE' && relasi !== 'D 8142 UK' && relasi !== 'D 8749 UA')) {
+                            return alert("Harap pilih salah satu armada (D 8707 UE / D 8142 UK / D 8749 UA)!");
+                        }
+                        let spidoKm = document.getElementById('cf_spido_km')?.value?.trim();
+                        let liter = document.getElementById('cf_liter')?.value?.trim();
+                        let extraKet = [];
+                        if (liter && !deskripsi.includes('Liter')) extraKet.push(`${liter} Liter`);
+                        if (spidoKm && !deskripsi.includes('Spido:')) extraKet.push(`Spido: ${spidoKm} KM`);
+                        if (extraKet.length > 0) {
+                            deskripsi = (deskripsi ? deskripsi + ' - ' : '') + extraKet.join(' - ');
+                        }
+                    }
+
                     if (!relasi) return alert("Relasi tidak boleh kosong!");
                     if (nominal === 0 && diskon === 0) return alert("Nominal atau Diskon harus diisi (lebih dari 0)!");
                     if (nominal < 0 || diskon < 0) return alert("Angka tidak boleh minus!");
@@ -13481,6 +13632,8 @@
                             document.getElementById('cf_nominal').value = "";
                             document.getElementById('cf_diskon').value = "";
                             document.getElementById('cf_deskripsi').value = "";
+                            if (document.getElementById('cf_spido_km')) document.getElementById('cf_spido_km').value = "";
+                            if (document.getElementById('cf_liter')) document.getElementById('cf_liter').value = "";
                             hapusBukti(); // Bersihkan layar
                             setTimeout(() => status.innerText = "", 3000);
                         } else {

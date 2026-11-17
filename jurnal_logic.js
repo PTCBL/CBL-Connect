@@ -2669,22 +2669,102 @@ async function muatLabaRugi() {
             }
         });
 
-        // Helper untuk cek apakah transaksi adalah internal kandang
-        function isInternalKandangRow(t) {
-            let st = (t.status || '').toLowerCase();
-            let rel = (t.relasi || '').toLowerCase();
-            return st.includes('pemakaian') || st.includes('kandang') || 
-                   rel.includes('kandang') || rel.startsWith('spn') || 
-                   rel.includes('kapalang') || rel.includes('jantan') || 
-                   rel.includes('dewasa') || rel.includes('pedet') ||
-                   rel.includes('pembibitan') || rel.includes('perah');
+        // Helper untuk cek apakah baris transaksi adalah transfer logistik antar gudang / drop ke kandang
+        function isLogistikTransferRow(t) {
+            let rel = (t.relasi || '').trim().toLowerCase();
+            let cat = (t.catatan || '').toLowerCase();
+            if (rel === 'kandang' || rel === 'kandang pm' || rel === 'kandang spn' || rel === 'kandang rph') return true;
+            if (rel === 'spn' || rel === 'pm' || rel === 'rph' || rel === 'mutasi') return true;
+            if (cat.includes('[auto mutasi]') || cat.includes('kiriman dari') || cat.includes('mutasi antar gudang')) return true;
+            return false;
+        }
+
+        // Helper untuk cek apakah baris transaksi adalah pengeluaran bahan baku untuk digiling di Gudang SPN
+        function isBahanBakuGilinganRow(t) {
+            let cab = (t.cabang || '').trim().toUpperCase();
+            let rel = (t.relasi || '').trim().toUpperCase();
+            let cat = (t.catatan || '').toLowerCase();
+            if (cab.includes('SPN') && !cab.includes('KANDANG')) {
+                if (rel === 'RL' || rel === 'RD' || rel === 'DARBUN' || rel === 'LAKTASI' || 
+                    rel.includes('GILING') || cat.includes('giling')) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Helper untuk mendeteksi konsumsi ternak internal riil (dan cabang tujuannya)
+        function getKonsumsiTernakInfo(t) {
+            if (isLogistikTransferRow(t) || isBahanBakuGilinganRow(t)) return null;
+
+            let rel = (t.relasi || '').trim();
+            let relLower = rel.toLowerCase();
+            let cab = (t.cabang || '').trim().toLowerCase();
+            let pkn = (t.pakan || '').trim().toLowerCase();
+
+            // 1. KANDANG SPN (Sapi Perah: Laktasi, Bunting / Darbun, Dara, Pedet SPN, Perah)
+            let isSPNGroup = cab.includes('spn') || 
+                             relLower.includes('laktasi') || 
+                             relLower.includes('bunting') || 
+                             relLower.includes('darbun') || 
+                             relLower.includes('perah') ||
+                             pkn.includes('laktasi') ||
+                             pkn.includes('darbun');
+
+            if (isSPNGroup) {
+                let unit = rel;
+                if (relLower.includes('laktasi') || pkn.includes('laktasi')) unit = 'Laktasi (RL)';
+                else if (relLower.includes('bunting') || relLower.includes('darbun') || pkn.includes('darbun')) unit = 'Bunting / Dara (RD)';
+                else if (relLower.includes('pedet')) unit = 'Pedet SPN';
+                else if (relLower.includes('perah') || relLower === 'spn') unit = 'Sapi Perah (SPN)';
+                else if (!unit || unit.toLowerCase() === 'kandang') unit = 'Sapi Perah (SPN)';
+                return { cabangKey: 'SPN', unit: unit };
+            }
+
+            // 2. KANDANG RPH (Sapi Transit / Potong)
+            let isRPHGroup = cab.includes('rph') || relLower.includes('transit');
+            if (isRPHGroup && (relLower.includes('transit') || cab.includes('kandang'))) {
+                let unit = relLower.includes('transit') ? 'Sapi Transit' : rel;
+                return { cabangKey: 'RPH', unit: unit };
+            }
+
+            // 3. KANDANG PM (Pembibitan Manoko: Kapalang, Dewasa, Jantan, BX, Domba, Pembibitan, Pedet PM)
+            let pmKelompok = ['kapalang', 'dewasa', 'jantan', 'bx', 'domba', 'pembibitan', 'pedet'];
+            let isPMMatch = pmKelompok.some(k => relLower.includes(k));
+            let isPMCabang = cab.includes('kandang pm') || (cab.includes('kandang') && !cab.includes('spn') && !cab.includes('rph'));
+
+            if (isPMMatch || isPMCabang) {
+                if (relLower === 'kandang') return null; // Drop logistik umum jangan masuk
+                let unit = rel;
+                if (relLower.includes('kapalang')) unit = 'Kapalang';
+                else if (relLower.includes('dewasa')) unit = 'Dewasa';
+                else if (relLower.includes('jantan')) unit = 'Jantan';
+                else if (relLower.includes('bx')) unit = 'BX';
+                else if (relLower.includes('domba')) unit = 'Domba';
+                else if (relLower.includes('pembibitan')) unit = 'Pembibitan';
+                else if (relLower.includes('pedet')) unit = 'Pedet PM';
+                return { cabangKey: 'PM', unit: unit };
+            }
+
+            return null;
         }
 
         let pemakaianKandangDetail = {};
+        let pemakaianKandangPerCabang = {
+            'PM': { key: 'PM', label: 'KANDANG PM (Pembibitan Manoko)', items: {}, totalQty: 0, totalHpp: 0, totalJual: 0 },
+            'SPN': { key: 'SPN', label: 'KANDANG SPN (Sapi Perah)', items: {}, totalQty: 0, totalHpp: 0, totalJual: 0 },
+            'RPH': { key: 'RPH', label: 'KANDANG RPH', items: {}, totalQty: 0, totalHpp: 0, totalJual: 0 }
+        };
 
         trxData.forEach(t => {
             let rel = (t.relasi || '').trim();
             if (rel.toLowerCase().includes('bapera')) return;
+
+            // Saring A: Logistik drop pakan / transfer antar-gudang (JANGAN MASUK LABA RUGI)
+            if (isLogistikTransferRow(t)) return;
+
+            // Saring B: Bahan baku gilingan SPN (JANGAN MASUK PENJUALAN KOMERSIAL)
+            if (isBahanBakuGilinganRow(t)) return;
 
             let pkn = (t.pakan || '').trim();
             let isOngkir = pkn.toLowerCase().includes('ongkir');
@@ -2693,25 +2773,42 @@ async function muatLabaRugi() {
             let hpp = Number(t.total_hpp) || 0;
             let totalNilai = qty * hs;
 
-            if (isInternalKandangRow(t)) {
-                // Alokasi Pemakaian Kandang Internal (Ternak Sendiri)
-                let unitName = rel || 'Kandang Lainnya';
-                if (!pemakaianKandangDetail[unitName]) {
-                    pemakaianKandangDetail[unitName] = {
-                        unit: unitName,
+            let ternakInfo = getKonsumsiTernakInfo(t);
+
+            if (ternakInfo) {
+                // Alokasi Konsumsi Pakan Ternak Sendiri (Holding Internal)
+                let { cabangKey, unit } = ternakInfo;
+                let targetBranch = pemakaianKandangPerCabang[cabangKey] || pemakaianKandangPerCabang['PM'];
+
+                if (!targetBranch.items[unit]) {
+                    targetBranch.items[unit] = {
+                        unit: unit,
                         totalQty: 0,
                         totalHpp: 0,
                         totalJual: 0
                     };
                 }
-                pemakaianKandangDetail[unitName].totalQty += qty;
-                pemakaianKandangDetail[unitName].totalHpp += hpp;
+                targetBranch.items[unit].totalQty += qty;
+                targetBranch.items[unit].totalHpp += hpp;
+
+                // Flat detail (backward compatibility)
+                if (!pemakaianKandangDetail[unit]) {
+                    pemakaianKandangDetail[unit] = { unit: unit, totalQty: 0, totalHpp: 0, totalJual: 0 };
+                }
+                pemakaianKandangDetail[unit].totalQty += qty;
+                pemakaianKandangDetail[unit].totalHpp += hpp;
 
                 // Hitung nilai jual normal: pakai harga_satuan jika ada (>0), atau fallback priceLookup
                 let hargaJualAcuan = hs > 0 ? hs : (priceLookup[pkn] || (hpp > 0 && qty > 0 ? Math.round(hpp / qty * 1.1) : 0));
-                pemakaianKandangDetail[unitName].totalJual += (qty * hargaJualAcuan);
+                let nilaiJual = (qty * hargaJualAcuan);
+                targetBranch.items[unit].totalJual += nilaiJual;
+                pemakaianKandangDetail[unit].totalJual += nilaiJual;
+
+                targetBranch.totalQty += qty;
+                targetBranch.totalHpp += hpp;
+                targetBranch.totalJual += nilaiJual;
             } else {
-                // Transaksi Komersial Pihak Luar
+                // Transaksi Komersial Pihak Luar Murni
                 if (isOngkir) {
                     revJasaOngkir += (totalNilai > 0 ? totalNilai : (hs > 0 ? hs : 0));
                 } else {
@@ -2731,11 +2828,26 @@ async function muatLabaRugi() {
                 if (nama === 'Harga Pokok Penjualan (HPP)') cogsPakanKomersial += deb;
                 if (nama.toLowerCase().includes('pemakaian pakan kandang')) {
                     let rel = (d.relasi || '').trim() || 'Kandang Lainnya';
-                    if (!pemakaianKandangDetail[rel]) {
-                        pemakaianKandangDetail[rel] = { unit: rel, totalQty: 0, totalHpp: 0, totalJual: 0 };
+                    if (rel.toLowerCase() === 'kandang') return; // Drop logistik jangan dimasukkan
+                    let ternakInfo = getKonsumsiTernakInfo({ relasi: rel, cabang: 'PM', status: 'Keluar' });
+                    let cKey = ternakInfo ? ternakInfo.cabangKey : 'PM';
+                    let uName = ternakInfo ? ternakInfo.unit : rel;
+                    let targetBranch = pemakaianKandangPerCabang[cKey] || pemakaianKandangPerCabang['PM'];
+
+                    if (!targetBranch.items[uName]) {
+                        targetBranch.items[uName] = { unit: uName, totalQty: 0, totalHpp: 0, totalJual: 0 };
                     }
-                    pemakaianKandangDetail[rel].totalHpp += deb;
-                    pemakaianKandangDetail[rel].totalJual += Math.round(deb * 1.15);
+                    targetBranch.items[uName].totalHpp += deb;
+                    let nj = Math.round(deb * 1.15);
+                    targetBranch.items[uName].totalJual += nj;
+                    targetBranch.totalHpp += deb;
+                    targetBranch.totalJual += nj;
+
+                    if (!pemakaianKandangDetail[uName]) {
+                        pemakaianKandangDetail[uName] = { unit: uName, totalQty: 0, totalHpp: 0, totalJual: 0 };
+                    }
+                    pemakaianKandangDetail[uName].totalHpp += deb;
+                    pemakaianKandangDetail[uName].totalJual += nj;
                 }
             });
         }
@@ -2773,14 +2885,14 @@ async function muatLabaRugi() {
         let labaBersihDivisiPakan = grossProfitKomersial - totalBebanOperasionalGudang;
         let netMarginDivisiPakan = netSalesKomersial > 0 ? ((labaBersihDivisiPakan / netSalesKomersial) * 100).toFixed(1) : '0.0';
 
-        // 5. Total Alokasi Pemakaian Kandang Internal
+        // 5. Total Alokasi Pemakaian Kandang Internal (Holding)
         let totalPemakaianHpp = 0;
         let totalPemakaianJual = 0;
         let totalPemakaianQty = 0;
-        Object.values(pemakaianKandangDetail).forEach(u => {
-            totalPemakaianHpp += u.totalHpp;
-            totalPemakaianJual += u.totalJual;
-            totalPemakaianQty += u.totalQty;
+        Object.values(pemakaianKandangPerCabang).forEach(branch => {
+            totalPemakaianHpp += branch.totalHpp;
+            totalPemakaianJual += branch.totalJual;
+            totalPemakaianQty += branch.totalQty;
         });
         let totalSubsidiInternal = totalPemakaianJual - totalPemakaianHpp;
 
@@ -2803,6 +2915,7 @@ async function muatLabaRugi() {
             labaBersihDivisiPakan,
             netMarginDivisiPakan,
             pemakaianKandangDetail,
+            pemakaianKandangPerCabang,
             totalPemakaianQty,
             totalPemakaianHpp,
             totalPemakaianJual,
@@ -2837,15 +2950,15 @@ function renderLabaRugi(lr) {
     });
 
     // Tabel Pemakaian Pakan Ternak Sendiri (2 Harga: HPP vs Jual)
-    let rowsPemakaian = Object.values(lr.pemakaianKandangDetail).sort((a, b) => b.totalHpp - a.totalHpp);
+    let activeBranches = Object.values(lr.pemakaianKandangPerCabang || {}).filter(b => Object.keys(b.items).length > 0);
     let htmlTablePemakaian = "";
-    if (rowsPemakaian.length > 0) {
+    if (activeBranches.length > 0) {
         htmlTablePemakaian = `
             <div style="overflow-x:auto; margin-top:8px; border:1px solid #cbd5e1; border-radius:6px;">
                 <table style="width:100%; border-collapse:collapse; font-size:11px;">
                     <thead>
                         <tr style="background:#f1f5f9; color:#334155; border-bottom:1px solid #cbd5e1;">
-                            <th style="padding:6px 8px; text-align:left;">Unit / Blok Ternak</th>
+                            <th style="padding:6px 8px; text-align:left;">Cabang / Unit Ternak</th>
                             <th style="padding:6px 8px; text-align:right;">Total Qty (Kg)</th>
                             <th style="padding:6px 8px; text-align:right;">Nilai Modal (HPP FIFO)</th>
                             <th style="padding:6px 8px; text-align:right;">Nilai Harga Jual Normal</th>
@@ -2854,27 +2967,56 @@ function renderLabaRugi(lr) {
                     </thead>
                     <tbody>
         `;
-        rowsPemakaian.forEach((u, idx) => {
-            let selisih = u.totalJual - u.totalHpp;
-            let bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+
+        activeBranches.forEach((branch, bIdx) => {
+            let branchItems = Object.values(branch.items).sort((a, b) => b.totalHpp - a.totalHpp);
+            let branchSelisih = branch.totalJual - branch.totalHpp;
+
+            let branchBg = branch.key === 'SPN' ? '#eff6ff' : (branch.key === 'RPH' ? '#fdf2f8' : '#f0fdf4');
+            let branchColor = branch.key === 'SPN' ? '#1e40af' : (branch.key === 'RPH' ? '#9d174d' : '#166534');
+            let branchIcon = branch.key === 'SPN' ? '🥛' : (branch.key === 'RPH' ? '🥩' : '🏢');
+
             htmlTablePemakaian += `
-                <tr style="background:${bg}; border-bottom:1px solid #f1f5f9;">
-                    <td style="padding:6px 8px; font-weight:600; color:#1e293b;">${escapeHtmlKP(u.unit)}</td>
-                    <td style="padding:6px 8px; text-align:right;">${nf.format(u.totalQty)} Kg</td>
-                    <td style="padding:6px 8px; text-align:right; font-weight:bold; color:#c2410c;">Rp ${nf.format(u.totalHpp)}</td>
-                    <td style="padding:6px 8px; text-align:right; color:#475569;">Rp ${nf.format(u.totalJual)}</td>
-                    <td style="padding:6px 8px; text-align:right; color:#15803d; font-weight:600;">+Rp ${nf.format(selisih)}</td>
+                <tr style="background:${branchBg}; border-top:${bIdx > 0 ? '2px solid #cbd5e1' : 'none'}; border-bottom:1px solid #cbd5e1;">
+                    <td colspan="5" style="padding:7px 8px; font-weight:bold; font-size:12px; color:${branchColor};">
+                        ${branchIcon} ${escapeHtmlKP(branch.label)}
+                    </td>
+                </tr>
+            `;
+
+            branchItems.forEach((u, idx) => {
+                let selisih = u.totalJual - u.totalHpp;
+                let bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+                htmlTablePemakaian += `
+                    <tr style="background:${bg}; border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:6px 8px 6px 24px; font-weight:600; color:#1e293b;">• ${escapeHtmlKP(u.unit)}</td>
+                        <td style="padding:6px 8px; text-align:right;">${nf.format(u.totalQty)} Kg</td>
+                        <td style="padding:6px 8px; text-align:right; font-weight:bold; color:#c2410c;">Rp ${nf.format(u.totalHpp)}</td>
+                        <td style="padding:6px 8px; text-align:right; color:#475569;">Rp ${nf.format(u.totalJual)}</td>
+                        <td style="padding:6px 8px; text-align:right; color:#15803d; font-weight:600;">+Rp ${nf.format(selisih)}</td>
+                    </tr>
+                `;
+            });
+
+            htmlTablePemakaian += `
+                <tr style="background:#f8fafc; font-weight:600; border-top:1px solid #e2e8f0; border-bottom:1px solid #cbd5e1; font-size:11px;">
+                    <td style="padding:6px 8px 6px 20px; color:#475569; font-style:italic;">Subtotal ${escapeHtmlKP(branch.label)}</td>
+                    <td style="padding:6px 8px; text-align:right; color:#334155;">${nf.format(branch.totalQty)} Kg</td>
+                    <td style="padding:6px 8px; text-align:right; color:#c2410c;">Rp ${nf.format(branch.totalHpp)}</td>
+                    <td style="padding:6px 8px; text-align:right; color:#475569;">Rp ${nf.format(branch.totalJual)}</td>
+                    <td style="padding:6px 8px; text-align:right; color:#15803d;">+Rp ${nf.format(branchSelisih)}</td>
                 </tr>
             `;
         });
+
         htmlTablePemakaian += `
                     </tbody>
                     <tfoot>
-                        <tr style="background:#f8fafc; font-weight:bold; border-top:2px solid #cbd5e1;">
-                            <td style="padding:8px;">TOTAL PEMAKAIAN INTERNAL</td>
-                            <td style="padding:8px; text-align:right;">${nf.format(lr.totalPemakaianQty)} Kg</td>
+                        <tr style="background:#f1f5f9; font-weight:bold; border-top:2px solid #cbd5e1;">
+                            <td style="padding:8px; color:#0f172a;">TOTAL PEMAKAIAN INTERNAL (HOLDING)</td>
+                            <td style="padding:8px; text-align:right; color:#0f172a;">${nf.format(lr.totalPemakaianQty)} Kg</td>
                             <td style="padding:8px; text-align:right; color:#c2410c;">Rp ${nf.format(lr.totalPemakaianHpp)}</td>
-                            <td style="padding:8px; text-align:right;">Rp ${nf.format(lr.totalPemakaianJual)}</td>
+                            <td style="padding:8px; text-align:right; color:#0f172a;">Rp ${nf.format(lr.totalPemakaianJual)}</td>
                             <td style="padding:8px; text-align:right; color:#15803d;">+Rp ${nf.format(lr.totalSubsidiInternal)}</td>
                         </tr>
                     </tfoot>
@@ -3035,13 +3177,33 @@ function exportLabaRugi(fmt) {
     rows.push({ 'Pos Akun': '', 'Keterangan': '', 'Jumlah (Rp)': '' });
 
     rows.push({ 'Pos Akun': 'IV. ALOKASI KONSUMSI PAKAN TERNAK SENDIRI', 'Keterangan': '', 'Jumlah (Rp)': '' });
-    Object.values(lr.pemakaianKandangDetail).forEach(u => {
-        rows.push({
-            'Pos Akun': `Pemakaian ${u.unit} (${u.totalQty} Kg)`,
-            'Keterangan': `HPP: Rp ${u.totalHpp.toLocaleString('id-ID')} | Pasar: Rp ${u.totalJual.toLocaleString('id-ID')}`,
-            'Jumlah (Rp)': -u.totalHpp
+    let activeBranches = Object.values(lr.pemakaianKandangPerCabang || {}).filter(b => Object.keys(b.items).length > 0);
+    if (activeBranches.length > 0) {
+        activeBranches.forEach(branch => {
+            rows.push({ 'Pos Akun': `[${branch.label}]`, 'Keterangan': '', 'Jumlah (Rp)': '' });
+            Object.values(branch.items).sort((a, b) => b.totalHpp - a.totalHpp).forEach(u => {
+                rows.push({
+                    'Pos Akun': `  • ${u.unit} (${u.totalQty.toLocaleString('id-ID')} Kg)`,
+                    'Keterangan': `HPP: Rp ${u.totalHpp.toLocaleString('id-ID')} | Pasar: Rp ${u.totalJual.toLocaleString('id-ID')}`,
+                    'Jumlah (Rp)': -u.totalHpp
+                });
+            });
+            rows.push({
+                'Pos Akun': `  Subtotal ${branch.label}`,
+                'Keterangan': `${branch.totalQty.toLocaleString('id-ID')} Kg`,
+                'Jumlah (Rp)': -branch.totalHpp
+            });
+            rows.push({ 'Pos Akun': '', 'Keterangan': '', 'Jumlah (Rp)': '' });
         });
-    });
+    } else {
+        Object.values(lr.pemakaianKandangDetail).forEach(u => {
+            rows.push({
+                'Pos Akun': `Pemakaian ${u.unit} (${u.totalQty} Kg)`,
+                'Keterangan': `HPP: Rp ${u.totalHpp.toLocaleString('id-ID')} | Pasar: Rp ${u.totalJual.toLocaleString('id-ID')}`,
+                'Jumlah (Rp)': -u.totalHpp
+            });
+        });
+    }
 
     rows.push({ 'Pos Akun': 'TOTAL ALOKASI MODAL PAKAN INTERNAL', 'Keterangan': `Efisiensi Subsidi: Rp ${lr.totalSubsidiInternal.toLocaleString('id-ID')}`, 'Jumlah (Rp)': -lr.totalPemakaianHpp });
     rows.push({ 'Pos Akun': '', 'Keterangan': '', 'Jumlah (Rp)': '' });
