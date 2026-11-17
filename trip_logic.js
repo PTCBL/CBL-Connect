@@ -3683,7 +3683,7 @@ async function loadLogBBMAdmin() {
 
     tbodyExpenses.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat data operasional armada...</td></tr>`;
     if (tbodyTrips) {
-        tbodyTrips.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat riwayat perjalanan armada...</td></tr>`;
+        tbodyTrips.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Memuat riwayat perjalanan armada...</td></tr>`;
     }
 
     let now = new Date();
@@ -3964,7 +3964,7 @@ function renderArmadaLogViews() {
     // 3. Render Tabel Riwayat Perjalanan (Tracking Kemana Aja)
     if (tbodyTrips) {
         if (filteredTrips.length === 0) {
-            tbodyTrips.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada riwayat pengantaran untuk armada ini.</td></tr>`;
+            tbodyTrips.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada riwayat pengantaran untuk armada ini.</td></tr>`;
         } else {
             let users = window.tripState.cachedUsers || [];
             let userMap = {};
@@ -4001,11 +4001,17 @@ function renderArmadaLogViews() {
                 let armLabel = tr.armada || '-';
                 if (armLabel.includes('D 8707 UE') || armLabel.includes('D 8070 UE')) armLabel = 'D 8707 UE (Hilman)';
                 else if (armLabel.includes('D 8142 UK')) armLabel = 'D 8142 UK (Adi)';
+                else if (armLabel.includes('D 8749 UA') || armLabel.includes('8749') || armLabel.includes('Truk')) armLabel = 'D 8749 UA (Agus)';
+
+                let ritBadge = `<span style="background:#e0f2fe; color:#0369a1; font-size:10px; font-weight:700; padding:1px 5px; border-radius:4px; margin-left:4px;">Rit ${tr.urutan_rit || 1}</span>`;
+                let titikBadge = (parseInt(tr.jumlah_titik) > 1) 
+                    ? `<span style="background:#fef3c7; color:#92400e; font-size:10px; font-weight:700; padding:1px 5px; border-radius:4px; margin-left:3px;">${tr.jumlah_titik} Titik</span>` 
+                    : '';
 
                 return `
                     <tr style="border-bottom:1px solid #e2e8f0; font-size:11px;">
                         <td style="padding:10px 8px; font-weight:700; color:#1e293b;">${tglDisplay}</td>
-                        <td style="padding:10px 8px; font-weight:800; color:#0f766e;">${armLabel}</td>
+                        <td style="padding:10px 8px; font-weight:800; color:#0f766e;">${armLabel} ${ritBadge} ${titikBadge}</td>
                         <td style="padding:10px 8px; font-weight:700; color:#1e3a8a;">${relasiList} ${mapsBtn}</td>
                         <td style="padding:10px 8px; color:#334155; font-size:10px; max-width:200px;">${pakanList}</td>
                         <td style="padding:10px 8px; text-align:right; font-weight:800; color:#15803d;">${nf.format(tr.total_kg || 0)} Kg</td>
@@ -4014,10 +4020,359 @@ function renderArmadaLogViews() {
                         <td style="padding:10px 8px; text-align:center;">
                             <span style="background:#dcfce7; color:#15803d; font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px;">${tr.status_trip || 'SELESAI'}</span>
                         </td>
+                        <td style="padding:10px 8px; text-align:center; white-space:nowrap;">
+                            <button type="button" onclick="bukaModalKelolaTripAdmin(${tr.id})" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; padding:4px 8px; border-radius:6px; font-weight:700; font-size:11px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
+                                <span class="material-symbols-outlined" style="font-size:13px;">tune</span> Kelola
+                            </button>
+                        </td>
                     </tr>
                 `;
             }).join('');
         }
+    }
+}
+
+// ====================================================================
+// MODAL KELOLA TRIP PENGIRIMAN & MULTI-DROP OLEH ADMIN
+// ====================================================================
+
+function bukaModalKelolaTripAdmin(tripId) {
+    let modal = document.getElementById('modal-kelola-trip-admin');
+    if (!modal) return;
+
+    let trips = window._cacheArmadaData?.trips || window.tripState?.cachedTrips || [];
+    let tr = trips.find(t => t.id == tripId);
+    if (!tr) {
+        alert("Data trip tidak ditemukan.");
+        return;
+    }
+
+    let nf = new Intl.NumberFormat('id-ID');
+    let elId = document.getElementById('kelola-trip-id');
+    let elTgl = document.getElementById('kelola-trip-tgl');
+    let elArm = document.getElementById('kelola-trip-armada');
+    let elTuj = document.getElementById('kelola-trip-tujuan');
+    let elKg = document.getElementById('kelola-trip-kg');
+    let elRit = document.getElementById('kelola-trip-input-rit');
+    let elTitik = document.getElementById('kelola-trip-input-titik');
+
+    if (elId) elId.value = tr.id;
+    if (elTgl) elTgl.innerText = tr.tanggal || '-';
+
+    let armLabel = tr.armada || '-';
+    if (armLabel.includes('8707') || armLabel.includes('8070')) armLabel = 'D 8707 UE (Hilman)';
+    else if (armLabel.includes('8142')) armLabel = 'D 8142 UK (Adi)';
+    else if (armLabel.includes('8749') || armLabel.includes('Truk')) armLabel = 'D 8749 UA (Truk Pak Agus)';
+    if (elArm) elArm.innerText = armLabel;
+
+    let manifest = tr.manifest_items || [];
+    let relasiList = [...new Set(manifest.map(m => m.relasi).filter(Boolean))].join(', ') || tr.catatan || 'Konsumen';
+    if (elTuj) elTuj.innerText = relasiList;
+    if (elKg) elKg.innerText = `${nf.format(tr.total_kg || 0)} Kg`;
+
+    if (elRit) elRit.value = tr.urutan_rit || 1;
+    if (elTitik) elTitik.value = tr.jumlah_titik || 1;
+
+    // Reset dan aktifkan highlight button armada
+    document.querySelectorAll('.btn-kelola-armada').forEach(b => {
+        b.style.borderColor = '#cbd5e1';
+        b.style.background = '#ffffff';
+    });
+    let curArm = tr.armada || '';
+    if (curArm.includes('8707') || curArm.includes('8070')) {
+        let b = document.getElementById('btn-kelola-arm-8707');
+        if (b) { b.style.borderColor = '#2563eb'; b.style.background = '#eff6ff'; }
+    } else if (curArm.includes('8142')) {
+        let b = document.getElementById('btn-kelola-arm-8142');
+        if (b) { b.style.borderColor = '#ea580c'; b.style.background = '#fff7ed'; }
+    } else if (curArm.includes('8749') || curArm.includes('Truk')) {
+        let b = document.getElementById('btn-kelola-arm-8749');
+        if (b) { b.style.borderColor = '#0f766e'; b.style.background = '#f0fdfa'; }
+    }
+
+    // Populate dropdown target gabung trip pada tanggal yang sama
+    let selTarget = document.getElementById('kelola-trip-select-target');
+    if (selTarget) {
+        selTarget.innerHTML = `<option value="">-- Pilih Trip Utama Tujuan Gabung --</option>`;
+        let otherTrips = trips.filter(t => t.id != tr.id && t.tanggal === tr.tanggal);
+        if (otherTrips.length === 0) {
+            selTarget.innerHTML += `<option value="" disabled>(Tidak ada trip lain pada tanggal ${tr.tanggal})</option>`;
+        } else {
+            otherTrips.forEach(ot => {
+                let otManifest = ot.manifest_items || [];
+                let otRelasi = [...new Set(otManifest.map(m => m.relasi).filter(Boolean))].join(', ') || ot.catatan || 'Trip';
+                let otArm = ot.armada || '';
+                if (otArm.includes('8707')) otArm = 'D 8707 UE';
+                else if (otArm.includes('8142')) otArm = 'D 8142 UK';
+                else if (otArm.includes('8749')) otArm = 'D 8749 UA';
+                selTarget.innerHTML += `<option value="${ot.id}">[Rit ${ot.urutan_rit || 1}] ${otArm} - ${otRelasi} (${nf.format(ot.total_kg || 0)} Kg)</option>`;
+            });
+        }
+    }
+
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+}
+
+function tutupModalKelolaTripAdmin() {
+    let modal = document.getElementById('modal-kelola-trip-admin');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
+}
+
+async function pindahArmadaTripAdmin(armadaTujuan) {
+    let tripId = document.getElementById('kelola-trip-id')?.value;
+    if (!tripId) return;
+
+    let trips = window._cacheArmadaData?.trips || window.tripState?.cachedTrips || [];
+    let tr = trips.find(t => t.id == tripId);
+    if (!tr) return;
+
+    if (tr.armada === armadaTujuan) {
+        alert(`Trip ini sudah berada di armada ${armadaTujuan}`);
+        return;
+    }
+
+    if (!confirm(`Yakin ingin memindahkan pengiriman ini ke armada ${armadaTujuan}?`)) {
+        return;
+    }
+
+    let sopirId = null;
+    if (armadaTujuan.includes('8707') || armadaTujuan.includes('8070')) sopirId = 6; // Hilman
+    else if (armadaTujuan.includes('8142')) sopirId = 7; // Adi
+    else if (armadaTujuan.includes('8749')) {
+        let users = window.tripState?.cachedUsers || [];
+        let agusUser = users.find(u => (u.nama || '').toLowerCase().includes('agus') && (u.role || '').toLowerCase() === 'sopir');
+        if (agusUser) sopirId = agusUser.id;
+    }
+
+    try {
+        let patchData = { armada: armadaTujuan };
+        if (sopirId) patchData.sopir_user_id = sopirId;
+
+        let res = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${tripId}`, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPA_ANON_KEY,
+                'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify(patchData)
+        });
+
+        if (!res.ok) {
+            let err = await res.json();
+            throw new Error(err.message || 'Gagal mengubah armada');
+        }
+
+        // Sinkronkan juga kolom armada di tabel transaksi_pakan jika ada transaksi terkait trip ini
+        try {
+            await fetch(`${SUPA_URL}/rest/v1/transaksi_pakan?trip_id=eq.${tripId}`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPA_ANON_KEY,
+                    'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ armada: armadaTujuan })
+            });
+        } catch (eTx) {
+            console.warn("Gagal sinkron armada ke transaksi_pakan:", eTx);
+        }
+
+        alert(`✅ Berhasil memindahkan trip ke armada ${armadaTujuan}!`);
+        tutupModalKelolaTripAdmin();
+        if (typeof loadLogBBMAdmin === 'function') await loadLogBBMAdmin();
+    } catch (e) {
+        alert("Gagal memindahkan armada: " + e.message);
+    }
+}
+
+async function simpanRitTripAdmin() {
+    let tripId = document.getElementById('kelola-trip-id')?.value;
+    if (!tripId) return;
+
+    let ritVal = parseInt(document.getElementById('kelola-trip-input-rit')?.value) || 1;
+    let titikVal = parseInt(document.getElementById('kelola-trip-input-titik')?.value) || 1;
+
+    let btn = document.getElementById('btn-simpan-rit-admin');
+    let origText = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerText = "Menyimpan..."; }
+
+    try {
+        let res = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${tripId}`, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPA_ANON_KEY,
+                'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify({
+                urutan_rit: ritVal,
+                jumlah_titik: titikVal
+            })
+        });
+
+        if (!res.ok) {
+            let err = await res.json();
+            throw new Error(err.message || 'Gagal menyimpan perubahan');
+        }
+
+        alert(`✅ Rit berhasil diatur ke Rit ${ritVal} (${titikVal} Titik Drop)!`);
+        tutupModalKelolaTripAdmin();
+        if (typeof loadLogBBMAdmin === 'function') await loadLogBBMAdmin();
+    } catch (e) {
+        alert("Gagal mengubah rit: " + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = origText; }
+    }
+}
+
+async function eksekusiGabungTripAdmin() {
+    let sourceId = document.getElementById('kelola-trip-id')?.value;
+    let targetId = document.getElementById('kelola-trip-select-target')?.value;
+
+    if (!sourceId || !targetId) {
+        alert("Pilih salah satu trip utama tujuan penggabungan!");
+        return;
+    }
+
+    let trips = window._cacheArmadaData?.trips || window.tripState?.cachedTrips || [];
+    let trSource = trips.find(t => t.id == sourceId);
+    let trTarget = trips.find(t => t.id == targetId);
+
+    if (!trSource || !trTarget) {
+        alert("Data trip tidak ditemukan.");
+        return;
+    }
+
+    let nf = new Intl.NumberFormat('id-ID');
+    let totalKgGabung = (parseFloat(trTarget.total_kg) || 0) + (parseFloat(trSource.total_kg) || 0);
+    let totalTitik = (parseInt(trTarget.jumlah_titik) || 1) + (parseInt(trSource.jumlah_titik) || 1);
+
+    let msg = `Gabungkan trip ini ke Rit ${trTarget.urutan_rit || 1} (${trTarget.armada})?\n\n`
+            + `• Total Beban Fisik Baru: ${nf.format(totalKgGabung)} Kg\n`
+            + `• Jumlah Titik Drop: ${totalTitik} Titik\n`
+            + `• Baris trip asal akan dilebur (catatan perjalanan digabung menjadi 1 rit fisik).\n\n`
+            + `Lanjutkan penggabungan?`;
+
+    if (!confirm(msg)) return;
+
+    let btn = document.getElementById('btn-gabung-trip-admin');
+    let origText = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerText = "Menggabungkan..."; }
+
+    try {
+        let combinedManifest = (trTarget.manifest_items || []).concat(trSource.manifest_items || []);
+        let combinedCatatan = `${trTarget.catatan || ''} | Drop: ${trSource.catatan || ''}`.trim();
+
+        let resPatch = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${targetId}`, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPA_ANON_KEY,
+                'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify({
+                total_kg: totalKgGabung,
+                jumlah_titik: totalTitik,
+                manifest_items: combinedManifest,
+                catatan: combinedCatatan
+            })
+        });
+
+        if (!resPatch.ok) {
+            let err = await resPatch.json();
+            throw new Error(err.message || 'Gagal memperbarui trip tujuan');
+        }
+
+        let resDel = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${sourceId}`, {
+            method: 'DELETE',
+            headers: {
+                'apikey': SUPA_ANON_KEY,
+                'Authorization': `Bearer ${SUPA_ANON_KEY}`
+            }
+        });
+
+        if (!resDel.ok) {
+            console.warn("Source trip berhasil dilebur tapi gagal dihapus baris asalnya.");
+        }
+
+        // Pindahkan referensi transaksi_pakan yang sebelumnya terhubung ke source trip agar mengarah ke target trip
+        try {
+            await fetch(`${SUPA_URL}/rest/v1/transaksi_pakan?trip_id=eq.${sourceId}`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPA_ANON_KEY,
+                    'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    trip_id: targetId,
+                    armada: trTarget.armada
+                })
+            });
+        } catch (eTx) {
+            console.warn("Gagal update referensi trip_id transaksi_pakan:", eTx);
+        }
+
+        alert(`✅ Sukses! Kedua pengiriman berhasil digabung menjadi 1 Rit Fisik (${totalTitik} Titik Drop, Total ${nf.format(totalKgGabung)} Kg).`);
+        tutupModalKelolaTripAdmin();
+        if (typeof loadLogBBMAdmin === 'function') await loadLogBBMAdmin();
+    } catch (e) {
+        alert("Gagal menggabungkan trip: " + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = origText; }
+    }
+}
+
+async function hapusTripAdminDariLog() {
+    let tripId = document.getElementById('kelola-trip-id')?.value;
+    if (!tripId) return;
+
+    if (!confirm("Yakin ingin menghapus baris trip ini dari catatan perjalanan armada?\n\nCatatan: Data transaksi pakan & omzet tetap aman, hanya baris perjalanan ini yang dihapus.")) {
+        return;
+    }
+
+    try {
+        let res = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${tripId}`, {
+            method: 'DELETE',
+            headers: {
+                'apikey': SUPA_ANON_KEY,
+                'Authorization': `Bearer ${SUPA_ANON_KEY}`
+            }
+        });
+
+        if (!res.ok) {
+            let err = await res.json();
+            throw new Error(err.message || 'Gagal menghapus');
+        }
+
+        // Lepas relasi trip_id di transaksi_pakan (jadikan null) agar tidak mengarah ke trip yang sudah dihapus
+        try {
+            await fetch(`${SUPA_URL}/rest/v1/transaksi_pakan?trip_id=eq.${tripId}`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPA_ANON_KEY,
+                    'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ trip_id: null })
+            });
+        } catch (eTx) {
+            console.warn("Gagal lepas relasi trip_id di transaksi_pakan:", eTx);
+        }
+
+        alert("✅ Baris trip berhasil dihapus dari log armada.");
+        tutupModalKelolaTripAdmin();
+        if (typeof loadLogBBMAdmin === 'function') await loadLogBBMAdmin();
+    } catch (e) {
+        alert("Gagal menghapus trip: " + e.message);
     }
 }
 
@@ -4081,6 +4436,12 @@ window.renderBarometerArmada = renderBarometerArmada;
 window.updateDatalistTujuan = updateDatalistTujuan;
 window.setAdminPayrollFilter = setAdminPayrollFilter;
 window.cetakFormKlaimDariAdmin = cetakFormKlaimDariAdmin;
+window.bukaModalKelolaTripAdmin = bukaModalKelolaTripAdmin;
+window.tutupModalKelolaTripAdmin = tutupModalKelolaTripAdmin;
+window.pindahArmadaTripAdmin = pindahArmadaTripAdmin;
+window.simpanRitTripAdmin = simpanRitTripAdmin;
+window.eksekusiGabungTripAdmin = eksekusiGabungTripAdmin;
+window.hapusTripAdminDariLog = hapusTripAdminDariLog;
 window.bukaShortcutCashflow = function() {
     if (typeof gantiHalaman === 'function') gantiHalaman('laporan');
     let radioCF = document.querySelector('input[name="mode_input"][value="cashflow"]');
