@@ -324,7 +324,7 @@ function hitungAkumulasiInsentifPeriode(trips = [], users = []) {
         // Hanya hitung upah / insentif jika trip sudah SELESAI
         if (tr.status_trip && tr.status_trip !== 'SELESAI') return;
 
-        let isTruk = (tr.armada === 'Truk');
+        let isTruk = (tr.armada === 'Truk' || tr.armada === 'D 8749 UA' || (tr.armada || '').includes('8749'));
         let isAmbilMandiri = (tr.armada === 'Ambil Mandiri');
         let kg = parseFloat(tr.total_kg) || 0;
         let km = parseFloat(tr.jarak_tempuh_km) || 0;
@@ -477,7 +477,7 @@ async function initDriverPortal() {
         else btnArmadaTop.classList.remove('hidden');
     }
 
-    // Default Armada sesuai supir yang login: Adi -> D 8142 UK, Hilman -> D 8707 UE
+    // Default Armada sesuai supir yang login: Adi -> D 8142 UK, Hilman -> D 8707 UE, Agus -> D 8749 UA
     let myNameLower = (activeUser || '').toLowerCase();
     let armadaDesc = 'Grand Max Pick-up';
     if (myNameLower.includes('adi')) {
@@ -486,6 +486,9 @@ async function initDriverPortal() {
     } else if (myNameLower.includes('hilman')) {
         window.tripState.currentArmada = 'D 8707 UE';
         armadaDesc = 'Grand Max Pick-up';
+    } else if (myNameLower.includes('agus')) {
+        window.tripState.currentArmada = 'D 8749 UA';
+        armadaDesc = 'Truk';
     } else {
         window.tripState.currentArmada = 'D 8707 UE';
     }
@@ -587,7 +590,7 @@ async function loadDriverMonthlyStats(mode = currentStatBulanMode) {
 
         myMonthlyTrips.forEach(tr => {
             let kg = parseFloat(tr.total_kg) || 0;
-            let isTruk = (tr.armada === 'Truk');
+            let isTruk = (tr.armada === 'Truk' || tr.armada === 'D 8749 UA' || (tr.armada || '').includes('8749'));
             let isMandiri = (tr.armada === 'Ambil Mandiri');
 
             if (isTruk || isMandiri) {
@@ -730,7 +733,7 @@ function renderArmadaKernekPills() {
 
 function selectArmadaPill(armadaPlat) {
     window.tripState.currentArmada = armadaPlat;
-    let desc = (armadaPlat === 'D 8142 UK') ? 'Pick-up Putih' : 'Grand Max Pick-up';
+    let desc = (armadaPlat === 'D 8142 UK') ? 'Pick-up Putih' : (armadaPlat === 'D 8749 UA' ? 'Truk' : 'Grand Max Pick-up');
     let elArmadaName = document.getElementById('driver-portal-armada-name');
     if (elArmadaName) {
         elArmadaName.innerText = `${armadaPlat} (${desc})`;
@@ -806,6 +809,7 @@ function selectPartnerChip(userId, type) {
                 let sName = (selUser.nama || '').toLowerCase();
                 if (sName.includes('adi')) selectArmadaPill('D 8142 UK');
                 else if (sName.includes('hilman')) selectArmadaPill('D 8707 UE');
+                else if (sName.includes('agus')) selectArmadaPill('D 8749 UA');
             }
         }
     } else if (type === 'kernek_extra') {
@@ -1540,7 +1544,7 @@ function isUserInTrip(tr, userId) {
 }
 
 function hitungUpahSayaDiTrip(tr, userId) {
-    let isTruk = (tr.armada === 'Truk');
+    let isTruk = (tr.armada === 'Truk' || tr.armada === 'D 8749 UA' || (tr.armada || '').includes('8749'));
     let isMandiri = (tr.armada === 'Ambil Mandiri');
     let kg = parseFloat(tr.total_kg) || 0;
     let upah = 0;
@@ -1694,7 +1698,7 @@ async function loadDompetDriver(filterMode = currentDompetFilter) {
         } else {
             let listHtml = myPeriodTrips.map(tr => {
                 let isMandiri = (tr.armada === 'Ambil Mandiri');
-                let isTruk = (tr.armada === 'Truk');
+                let isTruk = (tr.armada === 'Truk' || tr.armada === 'D 8749 UA' || (tr.armada || '').includes('8749'));
                 let isBantuMuat = (isMandiri || isTruk);
                 let rNama = tr.manifest_items?.[0]?.relasi || tr.catatan || 'Pengantaran';
                 let trKg = parseFloat(tr.total_kg) || 0;
@@ -1852,7 +1856,7 @@ function bukaModalRincianMutasiDriver(tripId) {
     (window.tripState.cachedUsers || []).forEach(u => { userDict[u.id] = u.nama; });
 
     let isMandiri = (tr.armada === 'Ambil Mandiri');
-    let isTruk = (tr.armada === 'Truk');
+    let isTruk = (tr.armada === 'Truk' || tr.armada === 'D 8749 UA' || (tr.armada || '').includes('8749'));
     let isBantuMuat = (isMandiri || isTruk);
     let rNama = tr.manifest_items?.[0]?.relasi || tr.catatan || 'Pengantaran';
     let trKg = parseFloat(tr.total_kg) || 0;
@@ -1945,8 +1949,12 @@ function bukaModalCatatBBM() {
     if (katSel) katSel.value = 'BBM / Solar';
 
     let armadaSel = document.getElementById('bbm-input-armada');
-    if (armadaSel && window.tripState.currentArmada) {
-        armadaSel.value = window.tripState.currentArmada;
+    if (armadaSel) {
+        if (window._armadaActiveFilter && window._armadaActiveFilter !== 'all') {
+            armadaSel.value = window._armadaActiveFilter;
+        } else if (window.tripState && window.tripState.currentArmada) {
+            armadaSel.value = window.tripState.currentArmada;
+        }
     }
 
     let tglInput = document.getElementById('bbm-input-tanggal');
@@ -2385,7 +2393,7 @@ function cetakSlipKlaimDriver(targetUserParam = null, customTripsParam = null, c
 
     tripsToPrint.forEach(tr => {
         let isMandiri = (tr.armada === 'Ambil Mandiri');
-        let isTruk = (tr.armada === 'Truk');
+        let isTruk = (tr.armada === 'Truk' || tr.armada === 'D 8749 UA' || (tr.armada || '').includes('8749'));
         let rNama = tr.manifest_items?.[0]?.relasi || tr.catatan || 'Pengantaran';
         let trKg = parseFloat(tr.total_kg) || 0;
         totalGrossKg += trKg;
@@ -2884,7 +2892,7 @@ async function bukaModalAuditKlaimPublik(kruNama, periodeLabel) {
 
         let cardsHtml = userTrips.map(tr => {
             let isMandiri = (tr.armada === 'Ambil Mandiri');
-            let isTruk = (tr.armada === 'Truk');
+            let isTruk = (tr.armada === 'Truk' || tr.armada === 'D 8749 UA' || (tr.armada || '').includes('8749'));
             let rNama = tr.manifest_items?.[0]?.relasi || tr.catatan || 'Pengantaran';
             let trKg = parseFloat(tr.total_kg) || 0;
             let kmVal = parseFloat(tr.total_km) || 0;
@@ -2984,7 +2992,7 @@ async function bukaModalDetailAuditSingle(tripId, userId) {
         let nf = new Intl.NumberFormat('id-ID');
         let rNama = tr.manifest_items?.[0]?.relasi || tr.catatan || 'Pengantaran';
         let isMandiri = (tr.armada === 'Ambil Mandiri');
-        let isTruk = (tr.armada === 'Truk');
+        let isTruk = (tr.armada === 'Truk' || tr.armada === 'D 8749 UA' || (tr.armada || '').includes('8749'));
         let trKg = parseFloat(tr.total_kg) || 0;
         let kmVal = parseFloat(tr.total_km) || 0;
         let { upah, porsiKg } = hitungUpahSayaDiTrip(tr, userId);
@@ -3336,7 +3344,7 @@ async function simpanKeberangkatanTruk() {
     let payload = {
         tanggal: new Date().toISOString().split('T')[0],
         cabang: 'PM',
-        armada: 'Truk',
+        armada: 'D 8749 UA',
         total_kg: totalKg,
         status_trip: 'BERANGKAT',
         waktu_berangkat: new Date().toISOString(),
@@ -3724,8 +3732,9 @@ async function loadLogBBMAdmin() {
 
             let isArmadaRelated = kat.includes('bbm') || kat.includes('solar') || 
                                   kat.includes('kendaraan') || kat.includes('servis') || 
-                                  kat.includes('operasional') || rel.includes('armada') || 
-                                  rel.includes('spbu') || rel.includes('bengkel') ||
+                                  kat.includes('operasional') || kat.includes('ekspedisi') ||
+                                  rel.includes('armada') || rel.includes('spbu') || rel.includes('bengkel') ||
+                                  rel.includes('8749') || ket.includes('d 8749 ua') || ket.includes('8749') ||
                                   ket.includes('d 8707 ue') || ket.includes('d 8070 ue') || 
                                   ket.includes('d 8142 uk') || ket.includes('truk') || 
                                   ket.includes('ban') || ket.includes('angin') || ket.includes('oli');
@@ -3801,6 +3810,9 @@ function renderArmadaLogViews() {
     function matchArmada(targetArmada, itemArmada, relasi, keterangan) {
         if (targetArmada === 'all') return true;
         let str = `${itemArmada || ''} ${relasi || ''} ${keterangan || ''}`.toUpperCase();
+        if (targetArmada === 'D 8749 UA' || targetArmada === 'Truk') {
+            return str.includes('D 8749 UA') || str.includes('8749') || str.includes('TRUK');
+        }
         return str.includes(targetArmada.toUpperCase());
     }
 
@@ -3812,7 +3824,11 @@ function renderArmadaLogViews() {
         // 1. Filter Armada
         if (filter !== 'all') {
             let arm = (t.armada || '').toUpperCase();
-            if (!arm.includes(filter.toUpperCase())) return false;
+            if (filter === 'D 8749 UA' || filter === 'Truk') {
+                if (!arm.includes('8749') && !arm.includes('TRUK')) return false;
+            } else {
+                if (!arm.includes(filter.toUpperCase())) return false;
+            }
         }
 
         // 2. Filter Pencarian Tujuan (Autocomplete / Rekomendasi Ketik)
@@ -3838,7 +3854,7 @@ function renderArmadaLogViews() {
     let lastNoteAdi = expensesAdi[0] || null;
 
     let totalBiaya = filteredExpenses.reduce((sum, item) => sum + (parseFloat(item.nominal) || 0), 0);
-    let lastOdoMap = { 'D 8707 UE': '-', 'D 8142 UK': '-', 'Truk': '-' };
+    let lastOdoMap = { 'D 8707 UE': '-', 'D 8142 UK': '-', 'D 8749 UA': '-', 'Truk': '-' };
 
     allExpenses.forEach(item => {
         let ket = item.keterangan || '';
@@ -3847,17 +3863,20 @@ function renderArmadaLogViews() {
         if (!arm || arm === 'SPBU' || arm === 'Bengkel / Perawatan') {
             if (ket.includes('D 8707 UE') || ket.includes('D 8070 UE')) arm = 'D 8707 UE';
             else if (ket.includes('D 8142 UK')) arm = 'D 8142 UK';
-            else if (ket.includes('Truk')) arm = 'Truk';
+            else if (ket.includes('D 8749 UA') || ket.includes('8749') || ket.includes('Truk')) arm = 'D 8749 UA';
         }
-        if (odoMatch && lastOdoMap[arm] === '-') {
-            lastOdoMap[arm] = `${nf.format(odoMatch[1])} KM`;
+        if (odoMatch) {
+            let armKey = (arm === 'Truk' || arm.includes('8749')) ? 'D 8749 UA' : arm;
+            if (lastOdoMap[armKey] === '-') {
+                lastOdoMap[armKey] = `${nf.format(odoMatch[1])} KM`;
+            }
         }
     });
 
     if (summaryBox) {
         let filterLabel = (filter === 'all') ? 'Semua Armada' : filter;
         summaryBox.innerHTML = `
-            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:10px; margin-bottom:15px;">
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:15px;">
                 <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px;">
                     <span style="font-size:11px; color:#1e40af; font-weight:700;">Total Biaya (${filterLabel})</span>
                     <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#1d4ed8;">Rp ${nf.format(totalBiaya)}</h3>
@@ -3872,6 +3891,11 @@ function renderArmadaLogViews() {
                     <span style="font-size:11px; color:#c2410c; font-weight:700;">KM Odometer D 8142 UK</span>
                     <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#ea580c;">${lastOdoMap['D 8142 UK']}</h3>
                     <div style="font-size:10px; color:#c2410c; margin-top:2px;">Pick-up Putih (Adi)</div>
+                </div>
+                <div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:10px; padding:12px;">
+                    <span style="font-size:11px; color:#047857; font-weight:700;">KM Odometer D 8749 UA</span>
+                    <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#059669;">${lastOdoMap['D 8749 UA']}</h3>
+                    <div style="font-size:10px; color:#047857; margin-top:2px;">Truk (Pak Agus)</div>
                 </div>
                 <div style="background:#f5f3ff; border:1px solid #ddd6fe; border-radius:10px; padding:12px;">
                     <span style="font-size:11px; color:#6d28d9; font-weight:700;">Total Rit Pengiriman</span>
@@ -3896,17 +3920,20 @@ function renderArmadaLogViews() {
                 let armName = 'Armada';
                 if (ket.includes('D 8707 UE') || ket.includes('D 8070 UE') || (item.relasi || '').includes('D 8707 UE') || (item.relasi || '').includes('D 8070 UE')) armName = 'D 8707 UE (Hilman)';
                 else if (ket.includes('D 8142 UK') || (item.relasi || '').includes('D 8142 UK')) armName = 'D 8142 UK (Adi)';
-                else if (ket.includes('Truk') || (item.relasi || '').includes('Truk')) armName = 'Truk';
+                else if (ket.includes('D 8749 UA') || ket.includes('8749') || ket.includes('Truk') || (item.relasi || '').includes('D 8749 UA') || (item.relasi || '').includes('Truk')) armName = 'D 8749 UA (Agus)';
 
                 let katBadge = `<span style="background:#eff6ff; color:#1d4ed8; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px;">receipt</span> ${item.kategori || 'Operasional'}</span>`;
-                if ((item.kategori || '').includes('BBM')) {
-                    katBadge = `<span style="background:#fef3c7; color:#b45309; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#d97706;">local_gas_station</span> BBM/Solar</span>`;
-                } else if (ket.toLowerCase().includes('ban') || ket.toLowerCase().includes('angin')) {
-                    katBadge = `<span style="background:#fee2e2; color:#b91c1c; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#dc2626;">tire_repair</span> Ban/Angin</span>`;
-                } else if (ket.toLowerCase().includes('oli') || ket.toLowerCase().includes('servis')) {
-                    katBadge = `<span style="background:#dbeafe; color:#1e40af; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#2563eb;">build</span> Servis/Oli</span>`;
-                } else if (ket.toLowerCase().includes('cuci')) {
-                    katBadge = `<span style="background:#e0f2fe; color:#0369a1; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#0284c7;">local_car_wash</span> Cuci Mobil</span>`;
+                let kText = `${item.kategori || ''} ${ket}`.toLowerCase();
+                if (kText.includes('bbm') || kText.includes('solar')) {
+                    katBadge = `<span style="background:#fef3c7; color:#b45309; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#d97706;">local_gas_station</span> ${item.kategori || 'BBM/Solar'}</span>`;
+                } else if (kText.includes('ban') || kText.includes('angin')) {
+                    katBadge = `<span style="background:#fee2e2; color:#b91c1c; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#dc2626;">tire_repair</span> ${item.kategori || 'Ban/Angin'}</span>`;
+                } else if (kText.includes('oli') || kText.includes('servis') || kText.includes('perbaikan') || kText.includes('tune up')) {
+                    katBadge = `<span style="background:#dbeafe; color:#1e40af; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#2563eb;">build</span> ${item.kategori || 'Servis/Oli'}</span>`;
+                } else if (kText.includes('cuci')) {
+                    katBadge = `<span style="background:#e0f2fe; color:#0369a1; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#0284c7;">local_car_wash</span> ${item.kategori || 'Cuci Mobil'}</span>`;
+                } else if (kText.includes('tol') || kText.includes('jalan') || kText.includes('parkir')) {
+                    katBadge = `<span style="background:#f3e8ff; color:#7e22ce; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px; color:#9333ea;">toll</span> ${item.kategori || 'Tol/Parkir'}</span>`;
                 }
 
                 let fotoLink = (item.bukti_url && item.bukti_url !== '-')
@@ -4054,6 +4081,20 @@ window.renderBarometerArmada = renderBarometerArmada;
 window.updateDatalistTujuan = updateDatalistTujuan;
 window.setAdminPayrollFilter = setAdminPayrollFilter;
 window.cetakFormKlaimDariAdmin = cetakFormKlaimDariAdmin;
+window.bukaShortcutCashflow = function() {
+    if (typeof gantiHalaman === 'function') gantiHalaman('laporan');
+    let radioCF = document.querySelector('input[name="mode_input"][value="cashflow"]');
+    if (radioCF) {
+        radioCF.checked = true;
+        if (typeof toggleModeInput === 'function') toggleModeInput();
+    }
+    let radioKeluar = document.getElementById('cf_keluar');
+    if (radioKeluar) {
+        radioKeluar.checked = true;
+        if (typeof updateKategoriCashflow === 'function') updateKategoriCashflow();
+    }
+};
+
 window.renderRekapPayrollAdmin = renderRekapPayrollAdmin;
 
 
