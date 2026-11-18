@@ -497,13 +497,13 @@ async function initDriverPortal() {
 
     // Default Armada sesuai supir yang login: Adi -> D 8142 UK, Hilman -> D 8707 UE, Agus -> D 8749 UA
     let myNameLower = (activeUser || '').toLowerCase();
-    let armadaDesc = 'Grand Max Pick-up';
+    let armadaDesc = 'Suzuki Carry';
     if (myNameLower.includes('adi')) {
         window.tripState.currentArmada = 'D 8142 UK';
-        armadaDesc = 'Pick-up Putih';
+        armadaDesc = 'Daihatsu Grand Max';
     } else if (myNameLower.includes('hilman')) {
         window.tripState.currentArmada = 'D 8707 UE';
-        armadaDesc = 'Grand Max Pick-up';
+        armadaDesc = 'Suzuki Carry';
     } else if (myNameLower.includes('agus')) {
         window.tripState.currentArmada = 'D 8749 UA';
         armadaDesc = 'Truk';
@@ -751,7 +751,7 @@ function renderArmadaKernekPills() {
 
 function selectArmadaPill(armadaPlat) {
     window.tripState.currentArmada = armadaPlat;
-    let desc = (armadaPlat === 'D 8142 UK') ? 'Pick-up Putih' : (armadaPlat === 'D 8749 UA' ? 'Truk' : 'Grand Max Pick-up');
+    let desc = (armadaPlat === 'D 8142 UK') ? 'Daihatsu Grand Max' : (armadaPlat === 'D 8749 UA' ? 'Truk' : 'Suzuki Carry');
     let elArmadaName = document.getElementById('driver-portal-armada-name');
     if (elArmadaName) {
         elArmadaName.innerText = `${armadaPlat} (${desc})`;
@@ -2191,21 +2191,21 @@ async function loadArmadaDriver() {
     
     let targetArmada = 'D 8707 UE';
     let supirLabel = 'Hilman';
-    let armadaDesc = 'Grand Max Pick-up';
+    let armadaDesc = 'Suzuki Carry';
 
     if (uName.includes('adi')) {
         targetArmada = 'D 8142 UK';
         supirLabel = 'Adi';
-        armadaDesc = 'Pick-up Putih';
+        armadaDesc = 'Daihatsu Grand Max';
     } else if (uName.includes('hilman')) {
         targetArmada = 'D 8707 UE';
         supirLabel = 'Hilman';
-        armadaDesc = 'Grand Max Pick-up';
+        armadaDesc = 'Suzuki Carry';
     } else {
         // Kernek atau staf lain
         targetArmada = window.tripState.currentArmada || 'D 8707 UE';
         supirLabel = (targetArmada === 'D 8142 UK') ? 'Adi' : 'Hilman';
-        armadaDesc = (targetArmada === 'D 8142 UK') ? 'Pick-up Putih' : 'Grand Max Pick-up';
+        armadaDesc = (targetArmada === 'D 8142 UK') ? 'Daihatsu Grand Max' : 'Suzuki Carry';
     }
 
     let titleEl = document.getElementById('driver-armada-title');
@@ -2435,9 +2435,9 @@ function cetakSlipKlaimDriver(targetUserParam = null, customTripsParam = null, c
     let userRoleLower = (meUser.role || '').toLowerCase();
     if (userRoleLower.includes('sopir') || userRoleLower.includes('supir')) {
         if (userNamaLower.includes('hilman')) {
-            armadaStandar = 'D 8707 UE (Grand Max)';
+            armadaStandar = 'D 8707 UE (Suzuki Carry)';
         } else if (userNamaLower.includes('adi')) {
-            armadaStandar = 'D 8142 UK (Pick-up Putih)';
+            armadaStandar = 'D 8142 UK (Daihatsu Grand Max)';
         } else if (meUser.armada_default) {
             armadaStandar = meUser.armada_default;
         }
@@ -3861,7 +3861,7 @@ async function loadLogBBMAdmin() {
 
     try {
         // 1. Ambil data pengeluaran armada (BBM, Servis, Ban, Cuci) dari cashflow
-        let p1 = fetch(`${SUPA_URL}/rest/v1/cashflow?jenis=eq.Keluar&order=tanggal.desc,created_at.desc&limit=250`, {
+        let p1 = fetch(`${SUPA_URL}/rest/v1/cashflow?jenis=eq.Keluar&tanggal=gte.${startDate}&tanggal=lte.${endDate}&order=tanggal.desc,created_at.desc&limit=500`, {
             headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
         }).then(r => r.json());
 
@@ -3889,15 +3889,29 @@ async function loadLogBBMAdmin() {
             let kat = (item.kategori || '').toLowerCase();
             let rel = (item.relasi || '').toLowerCase();
             let ket = (item.keterangan || '').toLowerCase();
+            let arm = (item.armada || '').toLowerCase();
+            let allText = `${kat} ${rel} ${ket} ${arm}`;
 
-            let isArmadaRelated = kat.includes('bbm') || kat.includes('solar') || 
-                                  kat.includes('kendaraan') || kat.includes('servis') || 
-                                  kat.includes('operasional') || kat.includes('ekspedisi') ||
-                                  rel.includes('armada') || rel.includes('spbu') || rel.includes('bengkel') ||
-                                  rel.includes('8749') || ket.includes('d 8749 ua') || ket.includes('8749') ||
-                                  ket.includes('d 8707 ue') || ket.includes('d 8070 ue') || 
-                                  ket.includes('d 8142 uk') || ket.includes('truk') || 
-                                  ket.includes('ban') || ket.includes('angin') || ket.includes('oli');
+            // Abaikan transaksi Keswan atau supir bantuan luar (Pak Yaya & Uje)
+            if (allText.includes('keswan') || allText.includes('yaya') || allText.includes('uje')) return false;
+
+            let isArmadaRelated = 
+                kat.includes('bbm') || kat.includes('solar') || kat.includes('bensin') ||
+                kat.includes('kendaraan') || kat.includes('servis') || kat.includes('service') ||
+                kat.includes('operasional') || kat.includes('ekspedisi') ||
+                kat.includes('ban') || kat.includes('angin') ||
+                kat.includes('cuci') || kat.includes('perawatan') ||
+                kat.includes('sparepart') || kat.includes('oli') ||
+                kat.includes('tol') || kat.includes('parkir') ||
+                rel.includes('armada') || rel.includes('spbu') || rel.includes('bengkel') ||
+                rel.includes('8749') || rel.includes('8707') || rel.includes('8070') || rel.includes('8142') ||
+                rel.includes('truk') || rel.includes('grand max') || rel.includes('carry') ||
+                ket.includes('8749') || ket.includes('8707') || ket.includes('8070') || ket.includes('8142') ||
+                ket.includes('truk') || ket.includes('grand max') || ket.includes('carry') ||
+                ket.includes('ban') || ket.includes('angin') || ket.includes('oli') || ket.includes('servis') ||
+                ket.includes('bensin') || ket.includes('solar') ||
+                arm.includes('8749') || arm.includes('8707') || arm.includes('8070') || arm.includes('8142');
+
             return isArmadaRelated;
         });
 
@@ -4348,6 +4362,12 @@ function renderArmadaLogViews() {
         if (targetArmada === 'D 8749 UA' || targetArmada === 'Truk') {
             return str.includes('D 8749 UA') || str.includes('8749') || str.includes('TRUK');
         }
+        if (targetArmada === 'D 8707 UE') {
+            return str.includes('8707') || str.includes('8070');
+        }
+        if (targetArmada === 'D 8142 UK') {
+            return str.includes('8142');
+        }
         return str.includes(targetArmada.toUpperCase());
     }
 
@@ -4420,12 +4440,12 @@ function renderArmadaLogViews() {
                 <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px;">
                     <span style="font-size:11px; color:#15803d; font-weight:700;">KM Odometer D 8707 UE</span>
                     <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#16a34a;">${lastOdoMap['D 8707 UE']}</h3>
-                    <div style="font-size:10px; color:#15803d; margin-top:2px;">Grand Max Pick-up (Hilman)</div>
+                    <div style="font-size:10px; color:#15803d; margin-top:2px;">Suzuki Carry (Hilman)</div>
                 </div>
                 <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:10px; padding:12px;">
                     <span style="font-size:11px; color:#c2410c; font-weight:700;">KM Odometer D 8142 UK</span>
                     <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#ea580c;">${lastOdoMap['D 8142 UK']}</h3>
-                    <div style="font-size:10px; color:#c2410c; margin-top:2px;">Pick-up Putih (Adi)</div>
+                    <div style="font-size:10px; color:#c2410c; margin-top:2px;">Daihatsu Grand Max (Adi)</div>
                 </div>
                 <div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:10px; padding:12px;">
                     <span style="font-size:11px; color:#047857; font-weight:700;">KM Odometer D 8749 UA</span>
@@ -4447,15 +4467,17 @@ function renderArmadaLogViews() {
             tbodyExpenses.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada catatan operasional untuk filter ini.</td></tr>`;
         } else {
             tbodyExpenses.innerHTML = filteredExpenses.map(item => {
-                let ket = item.keterangan || '-';
-                let odoMatch = ket.match(/Spido:\s*([0-9]+)\s*KM/i);
+                let rawKet = (item.keterangan || '').trim();
+                let ket = (rawKet && rawKet !== '-') ? rawKet : (item.kategori || '-');
+                let odoMatch = rawKet.match(/Spido:\s*([0-9]+)\s*KM/i);
                 let odoStr = odoMatch ? `${nf.format(odoMatch[1])} KM` : '-';
 
                 // Deteksi armada & supir badge
+                let rAndK = `${item.relasi || ''} ${item.keterangan || ''} ${item.armada || ''}`.toUpperCase();
                 let armName = 'Armada';
-                if (ket.includes('D 8707 UE') || ket.includes('D 8070 UE') || (item.relasi || '').includes('D 8707 UE') || (item.relasi || '').includes('D 8070 UE')) armName = 'D 8707 UE (Hilman)';
-                else if (ket.includes('D 8142 UK') || (item.relasi || '').includes('D 8142 UK')) armName = 'D 8142 UK (Adi)';
-                else if (ket.includes('D 8749 UA') || ket.includes('8749') || ket.includes('Truk') || (item.relasi || '').includes('D 8749 UA') || (item.relasi || '').includes('Truk')) armName = 'D 8749 UA (Agus)';
+                if (rAndK.includes('8707') || rAndK.includes('8070')) armName = 'D 8707 UE (Hilman)';
+                else if (rAndK.includes('8142')) armName = 'D 8142 UK (Adi)';
+                else if (rAndK.includes('8749') || rAndK.includes('TRUK')) armName = 'D 8749 UA (Agus)';
 
                 let katBadge = `<span style="background:#eff6ff; color:#1d4ed8; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; display:inline-flex; align-items:center; gap:2px;"><span class="material-symbols-outlined" style="font-size:12px;">receipt</span> ${item.kategori || 'Operasional'}</span>`;
                 let kText = `${item.kategori || ''} ${ket}`.toLowerCase();
@@ -5721,10 +5743,19 @@ function getFleetReportMetrics(targetArmada, allTrips, allExpenses, ongkirRows) 
     let totalKm = trips.reduce((sum, t) => sum + (parseFloat(t.jarak_tempuh_km) || 0), 0);
     let avgKgPerRit = totalRit > 0 ? Math.round(totalKg / totalRit) : 0;
 
-    let bbm = 0, servis = 0, ban = 0, cuci = 0, lainnya = 0;
+    let bbm = 0, servis = 0, ban = 0, cuci = 0, lainnya = 0, inboundHpp = 0;
     expenses.forEach(item => {
         let nom = parseFloat(item.nominal) || 0;
         let text = `${item.kategori || ''} ${item.keterangan || ''}`.toLowerCase();
+        
+        // ⚡ Solar pengambilan pakan masuk (SJM / KF / Tebon / Inbound) masuk komponen HPP gudang,
+        // BUKAN beban pengantaran ekspedisi konsumen agar rapor armada pengantaran tidak bengkak!
+        let isInboundHpp = text.includes('ambil sjm') || text.includes('ambil kf') || text.includes('tebon') || text.includes('sjm cimaung') || text.includes('ambil kfzs');
+        if (isInboundHpp) {
+            inboundHpp += nom;
+            return;
+        }
+
         if (text.includes('bbm') || text.includes('solar') || text.includes('bensin') || text.includes('pertalite') || text.includes('dexlite')) {
             bbm += nom;
         } else if (text.includes('servis') || text.includes('service') || text.includes('oli') || text.includes('tune up') || text.includes('perbaikan') || text.includes('bengkel') || text.includes('sparepart')) {
@@ -5861,7 +5892,7 @@ function renderRaporArmadaView() {
                         <div>
                             <span style="font-size:10px; font-weight:700; color:#2563eb; background:#eff6ff; padding:2px 6px; border-radius:4px;">PICK-UP UTAMA</span>
                             <h4 style="margin:4px 0 0 0; font-size:15px; font-weight:800; color:#1e293b;">D 8707 UE</h4>
-                            <div style="font-size:11px; color:#64748b;">Grand Max • Supir: Hilman</div>
+                            <div style="font-size:11px; color:#64748b;">Suzuki Carry • Supir: Hilman</div>
                         </div>
                         <span style="font-size:10px; font-weight:700; color:#475569; background:#ffffff; border:1px solid #cbd5e1; padding:3px 8px; border-radius:6px;">1.5 TON</span>
                     </div>
@@ -5929,7 +5960,7 @@ function renderRaporArmadaView() {
                         <div>
                             <span style="font-size:10px; font-weight:700; color:#ea580c; background:#fff7ed; padding:2px 6px; border-radius:4px;">PICK-UP CADANGAN</span>
                             <h4 style="margin:4px 0 0 0; font-size:15px; font-weight:800; color:#1e293b;">D 8142 UK</h4>
-                            <div style="font-size:11px; color:#64748b;">Pick-up Putih • Supir: Adi</div>
+                            <div style="font-size:11px; color:#64748b;">Daihatsu Grand Max • Supir: Adi</div>
                         </div>
                         <span style="font-size:10px; font-weight:700; color:#475569; background:#ffffff; border:1px solid #cbd5e1; padding:3px 8px; border-radius:6px;">1.5 TON</span>
                     </div>
@@ -6375,7 +6406,7 @@ function cetakRaporArmada() {
                         <div class="card-head">
                             <div>
                                 <div class="card-plat">D 8707 UE</div>
-                                <div style="font-size:9.5px; color:#64748b;">Grand Max • Supir: Hilman</div>
+                                <div style="font-size:9.5px; color:#64748b;">Suzuki Carry • Supir: Hilman</div>
                             </div>
                             <span class="card-type">1.5 TON</span>
                         </div>
@@ -6407,7 +6438,7 @@ function cetakRaporArmada() {
                         <div class="card-head">
                             <div>
                                 <div class="card-plat">D 8142 UK</div>
-                                <div style="font-size:9.5px; color:#64748b;">Pick-up Putih • Supir: Adi</div>
+                                <div style="font-size:9.5px; color:#64748b;">Daihatsu Grand Max • Supir: Adi</div>
                             </div>
                             <span class="card-type">1.5 TON</span>
                         </div>
