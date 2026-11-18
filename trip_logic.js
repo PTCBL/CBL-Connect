@@ -4408,54 +4408,69 @@ function renderArmadaLogViews() {
     let lastNoteHilman = expensesHilman[0] || null;
     let lastNoteAdi = expensesAdi[0] || null;
 
-    let totalBiaya = filteredExpenses.reduce((sum, item) => sum + (parseFloat(item.nominal) || 0), 0);
-    let lastOdoMap = { 'D 8707 UE': '-', 'D 8142 UK': '-', 'D 8749 UA': '-', 'Truk': '-' };
+    let ongkirRows = window._cacheArmadaData?.ongkirRows || [];
+    let totalOngkir = 0;
+    if (filter === 'all') {
+        totalOngkir = ongkirRows.reduce((sum, r) => sum + ((parseFloat(r.harga_satuan) || 0) * (parseFloat(r.qty) || 1)), 0);
+    } else {
+        let mFleet = getFleetReportMetrics(filter, allTrips, allExpenses, ongkirRows);
+        totalOngkir = mFleet.pendapatanOngkir || 0;
+    }
 
-    allExpenses.forEach(item => {
-        let ket = item.keterangan || '';
-        let odoMatch = ket.match(/Spido:\s*([0-9]+)\s*KM/i);
-        let arm = (item.relasi || '').replace('SPBU (', '').replace('Bengkel / Perawatan (', '').replace(')', '').trim();
-        if (!arm || arm === 'SPBU' || arm === 'Bengkel / Perawatan') {
-            if (ket.includes('D 8707 UE') || ket.includes('D 8070 UE')) arm = 'D 8707 UE';
-            else if (ket.includes('D 8142 UK')) arm = 'D 8142 UK';
-            else if (ket.includes('D 8749 UA') || ket.includes('8749') || ket.includes('Truk')) arm = 'D 8749 UA';
-        }
-        if (odoMatch) {
-            let armKey = (arm === 'Truk' || arm.includes('8749')) ? 'D 8749 UA' : arm;
-            if (lastOdoMap[armKey] === '-') {
-                lastOdoMap[armKey] = `${nf.format(odoMatch[1])} KM`;
-            }
+    let biayaPengantaran = 0;
+    let biayaHppBahanBaku = 0;
+
+    filteredExpenses.forEach(item => {
+        let nom = parseFloat(item.nominal) || 0;
+        let kat = (item.kategori || '').toLowerCase();
+        let ket = (item.keterangan || '').toLowerCase();
+        let text = `${kat} ${ket}`;
+
+        let isAmbilPakan = kat.includes('ekspedisi') || 
+                           text.includes('ambil sjm') || 
+                           text.includes('ambil kf') || 
+                           text.includes('tebon') || 
+                           text.includes('sjm cimaung') || 
+                           text.includes('ambil kfzs');
+
+        if (isAmbilPakan) {
+            biayaHppBahanBaku += nom;
+        } else {
+            biayaPengantaran += nom;
         }
     });
+
+    let marginLogistik = totalOngkir - biayaPengantaran;
 
     if (summaryBox) {
         let filterLabel = (filter === 'all') ? 'Semua Armada' : filter;
         summaryBox.innerHTML = `
-            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:15px;">
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; margin-bottom:15px;">
                 <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px;">
-                    <span style="font-size:11px; color:#1e40af; font-weight:700;">Total Biaya (${filterLabel})</span>
-                    <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#1d4ed8;">Rp ${nf.format(totalBiaya)}</h3>
-                    <div style="font-size:10px; color:#64748b; margin-top:2px;">BBM, Servis, Ban, Angin, Cuci</div>
+                    <span style="font-size:11px; color:#1e40af; font-weight:700;">Biaya Pengantaran (${filterLabel})</span>
+                    <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#1d4ed8;">Rp ${nf.format(biayaPengantaran)}</h3>
+                    <div style="font-size:10px; color:#64748b; margin-top:3px; line-height:1.35;">
+                        BBM, Servis, Ban, Cuci ${biayaHppBahanBaku > 0 ? `<br><span style="color:#d97706; font-weight:600;">HPP Ambil Bahan Baku: Rp ${nf.format(biayaHppBahanBaku)}</span>` : ''}
+                    </div>
                 </div>
                 <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px;">
-                    <span style="font-size:11px; color:#15803d; font-weight:700;">KM Odometer D 8707 UE</span>
-                    <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#16a34a;">${lastOdoMap['D 8707 UE']}</h3>
-                    <div style="font-size:10px; color:#15803d; margin-top:2px;">Suzuki Carry (Hilman)</div>
+                    <span style="font-size:11px; color:#15803d; font-weight:700;">Pendapatan Ongkir (${filterLabel})</span>
+                    <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#16a34a;">Rp ${nf.format(totalOngkir)}</h3>
+                    <div style="font-size:10px; color:#15803d; margin-top:3px;">Tagihan Ongkir Pengiriman</div>
                 </div>
-                <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:10px; padding:12px;">
-                    <span style="font-size:11px; color:#c2410c; font-weight:700;">KM Odometer D 8142 UK</span>
-                    <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#ea580c;">${lastOdoMap['D 8142 UK']}</h3>
-                    <div style="font-size:10px; color:#c2410c; margin-top:2px;">Daihatsu Grand Max (Adi)</div>
-                </div>
-                <div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:10px; padding:12px;">
-                    <span style="font-size:11px; color:#047857; font-weight:700;">KM Odometer D 8749 UA</span>
-                    <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#059669;">${lastOdoMap['D 8749 UA']}</h3>
-                    <div style="font-size:10px; color:#047857; margin-top:2px;">Truk (Pak Agus)</div>
+                <div style="background:${marginLogistik >= 0 ? '#f0fdf4' : '#fef2f2'}; border:1px solid ${marginLogistik >= 0 ? '#bbf7d0' : '#fecaca'}; border-radius:10px; padding:12px;">
+                    <span style="font-size:11px; color:${marginLogistik >= 0 ? '#15803d' : '#991b1b'}; font-weight:700;">Margin Logistik (${filterLabel})</span>
+                    <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:${marginLogistik >= 0 ? '#15803d' : '#dc2626'};">
+                        ${marginLogistik >= 0 ? '+' : ''}Rp ${nf.format(marginLogistik)}
+                    </h3>
+                    <div style="font-size:10px; color:${marginLogistik >= 0 ? '#15803d' : '#dc2626'}; margin-top:3px; font-weight:600;">
+                        ${marginLogistik >= 0 ? 'Surplus Logistik' : 'Subsidi Ongkir CBL'}
+                    </div>
                 </div>
                 <div style="background:#f5f3ff; border:1px solid #ddd6fe; border-radius:10px; padding:12px;">
-                    <span style="font-size:11px; color:#6d28d9; font-weight:700;">Total Rit Pengiriman</span>
+                    <span style="font-size:11px; color:#6d28d9; font-weight:700;">Total Pengiriman (${filterLabel})</span>
                     <h3 style="margin:4px 0 0 0; font-size:18px; font-weight:800; color:#7c3aed;">${filteredTrips.length} Pengantaran</h3>
-                    <div style="font-size:10px; color:#6d28d9; margin-top:2px;">Armada CBL (${window._cacheArmadaData.labelPeriode})</div>
+                    <div style="font-size:10px; color:#6d28d9; margin-top:3px;">Armada CBL (${window._cacheArmadaData.labelPeriode})</div>
                 </div>
             </div>
         `;
@@ -5750,7 +5765,12 @@ function getFleetReportMetrics(targetArmada, allTrips, allExpenses, ongkirRows) 
         
         // ⚡ Solar pengambilan pakan masuk (SJM / KF / Tebon / Inbound) masuk komponen HPP gudang,
         // BUKAN beban pengantaran ekspedisi konsumen agar rapor armada pengantaran tidak bengkak!
-        let isInboundHpp = text.includes('ambil sjm') || text.includes('ambil kf') || text.includes('tebon') || text.includes('sjm cimaung') || text.includes('ambil kfzs');
+        let isInboundHpp = (item.kategori || '').toLowerCase().includes('ekspedisi') ||
+                           text.includes('ambil sjm') || 
+                           text.includes('ambil kf') || 
+                           text.includes('tebon') || 
+                           text.includes('sjm cimaung') || 
+                           text.includes('ambil kfzs');
         if (isInboundHpp) {
             inboundHpp += nom;
             return;
