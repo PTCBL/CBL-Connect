@@ -5135,10 +5135,11 @@
                                     style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #86efac; font-size:12px; font-weight:800; box-sizing:border-box; background:#fff;">
                             </div>
                             <div style="flex:1;">
-                                <label style="font-size:10px; font-weight:700; color:#166534; display:block; margin-bottom:2px;">Rit Fisik (Opsional):</label>
-                                <input type="number" id="kelola-trip-jumlah-rit" min="1" placeholder="Auto"
+                                <label style="font-size:10px; font-weight:700; color:#166534; display:block; margin-bottom:2px;">Beban Muatan (Kg):</label>
+                                <input type="number" id="kelola-trip-input-kg" min="1" placeholder="Kg"
                                     style="width:100%; padding:7px 10px; border-radius:6px; border:1px solid #86efac; font-size:12px; font-weight:800; box-sizing:border-box; background:#fff;">
                             </div>
+                            <input type="hidden" id="kelola-trip-jumlah-rit">
                         </div>
                         <button type="button" id="btn-simpan-rit-titik" onclick="simpanRitTripAdmin()"
                             style="width:100%; background:#16a34a; color:white; border:none; padding:8px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
@@ -7899,7 +7900,8 @@
                 const ICON_SYNCING = `<span class="material-symbols-outlined icon-spin" style="font-size:16px; vertical-align:middle; color:#FEA405;" title="Menyinkronkan...">sync</span>`;
                 const ICON_SYNCED = `<span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle; color:#8AA624;" title="Sinkronisasi Selesai">cloud_done</span>`;
 
-                let currentLoggedPin = "";
+                let currentLoggedPin = localStorage.getItem('cbl_user_pin') || "";
+                window.currentLoggedPin = currentLoggedPin;
                 const RESTRICTED_PINS = ["0000", "8888"];
 
                 let activeUser = "", currentItems = [], activeKeyboardIndex = null, keranjangLaporan = [];
@@ -9348,6 +9350,8 @@
                     if (data.length > 0) {
                         let user = data[0];
                         currentLoggedPin = user.pin; // <--- BARIS INI WAJIB DITAMBAHKAN
+                        window.currentLoggedPin = user.pin;
+                        localStorage.setItem('cbl_user_pin', user.pin);
                         activeUser = user.nama;
                         currentRole = user.role; // gunakan role untuk membatasi menu, bukan mengecek string PIN
                         document.getElementById('nama-petugas').innerText = activeUser;
