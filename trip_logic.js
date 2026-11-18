@@ -320,6 +320,24 @@ function hitungAkumulasiInsentifPeriode(trips = [], users = []) {
 
     let totalKmSemuaPickup = 0;
 
+    function getTripJumlahTitik(tr) {
+        if (!tr) return 1;
+        if (typeof tr.jumlah_titik !== 'undefined' && tr.jumlah_titik !== null) {
+            let v = parseInt(tr.jumlah_titik);
+            if (!isNaN(v) && v > 0) return v;
+        }
+        let m = (tr.catatan || '').match(/\[(\d+)\s*Titik\]/i);
+        if (m) {
+            let v = parseInt(m[1]);
+            if (!isNaN(v) && v > 0) return v;
+        }
+        let relCount = (Array.isArray(tr.manifest_items) && tr.manifest_items.length > 0)
+            ? new Set(tr.manifest_items.map(x => x.relasi).filter(Boolean)).size
+            : 1;
+        return Math.max(1, relCount);
+    }
+    window.getTripJumlahTitik = getTripJumlahTitik;
+
     trips.forEach(tr => {
         // Hanya hitung upah / insentif jika trip sudah SELESAI
         if (tr.status_trip && tr.status_trip !== 'SELESAI') return;
@@ -332,7 +350,7 @@ function hitungAkumulasiInsentifPeriode(trips = [], users = []) {
         if (isTruk || isAmbilMandiri) {
             // 1. Truk / Ambil Mandiri: Aktivitas Bantu Muat Gudang (Flat Rp 15/kg Kru Muat)
             if (isTruk) {
-                let titik = parseInt(tr.jumlah_titik) || 1;
+                let titik = getTripJumlahTitik(tr);
                 let solar = parseFloat(tr.uang_jalan_sopir) || (titik * UANG_SOLAR_TRUK_PER_TITIK);
                 if (tr.sopir_user_id && userMap[tr.sopir_user_id]) {
                     userMap[tr.sopir_user_id].uangSolarTruk += solar;
@@ -1562,7 +1580,7 @@ function hitungUpahSayaDiTrip(tr, userId) {
             porsiKg += Math.round(kg / nKru);
         }
         if (isTruk && tr.sopir_user_id === userId) {
-            let titik = parseInt(tr.jumlah_titik) || 1;
+            let titik = (typeof getTripJumlahTitik === 'function') ? getTripJumlahTitik(tr) : (parseInt(tr.jumlah_titik) || 1);
             let solar = parseFloat(tr.uang_jalan_sopir) || (titik * UANG_SOLAR_TRUK_PER_TITIK);
             upah += solar;
         }
@@ -3290,6 +3308,83 @@ function tutupModalMuatTruk() {
     document.getElementById('modal-muat-truk')?.classList.add('hidden');
 }
 
+// ====================================================================
+// SINKRONISASI BIAYA SOLAR TRUK (RP 100.000 / TITIK) KE TABEL CASHFLOW
+// ====================================================================
+async function syncSolarTrukToCashflow(tripId, armada, tanggal, jumlahTitik, relasiTujuan) {
+    if (!tripId) return;
+    let isTruk = (armada || '').includes('8749') || (armada || '').toLowerCase().includes('truk');
+    let titik = parseInt(jumlahTitik) || 1;
+    let nominalSolar = titik * 100000;
+    let tag = `[TRIP:${tripId}]`;
+
+    try {
+        let resCheck = await fetch(`${SUPA_URL}/rest/v1/cashflow?keterangan=like.*${encodeURIComponent(tag)}*&select=id,nominal,keterangan`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        });
+        let existingRows = resCheck.ok ? await resCheck.json() : [];
+
+        if (!isTruk) {
+            // Jika armada BUKAN truk (misal diubah jadi pick-up), hapus entri solar truk jika sebelumnya ada
+            if (Array.isArray(existingRows) && existingRows.length > 0) {
+                await fetch(`${SUPA_URL}/rest/v1/cashflow?keterangan=like.*${encodeURIComponent(tag)}*`, {
+                    method: 'DELETE',
+                    headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+                });
+            }
+            return;
+        }
+
+        // Armada ADALAH Truk
+        let tgl = tanggal || new Date().toISOString().split('T')[0];
+        let relasi = relasiTujuan ? `Truk Pak Agus (${relasiTujuan})` : 'Truk Pak Agus (D 8749 UA)';
+        let ket = `Uang Jalan Solar Truk (${titik} Titik Penurunan: ${relasiTujuan || '-'}) ${tag}`;
+
+        if (Array.isArray(existingRows) && existingRows.length > 0) {
+            let cfId = existingRows[0].id;
+            await fetch(`${SUPA_URL}/rest/v1/cashflow?id=eq.${cfId}`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPA_ANON_KEY,
+                    'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    nominal: nominalSolar,
+                    keterangan: ket,
+                    tanggal: tgl,
+                    relasi: relasi
+                })
+            });
+        } else {
+            let cfPayload = {
+                tanggal: tgl,
+                cabang: 'PM',
+                jenis: 'Keluar',
+                kategori: 'BBM / Solar',
+                relasi: relasi,
+                nominal: nominalSolar,
+                metode: 'Cash',
+                keterangan: ket,
+                petugas: 'Sistem Logistik',
+                created_at: new Date().toISOString()
+            };
+            await fetch(`${SUPA_URL}/rest/v1/cashflow`, {
+                method: 'POST',
+                headers: {
+                    'apikey': SUPA_ANON_KEY,
+                    'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(cfPayload)
+            });
+        }
+    } catch (errSync) {
+        console.error("Gagal sinkron solar truk ke cashflow:", errSync);
+    }
+}
+window.syncSolarTrukToCashflow = syncSolarTrukToCashflow;
+
 // Simpan Keberangkatan Truk oleh Admin
 async function simpanKeberangkatanTruk() {
     let namaRelasi = document.getElementById('modal-truk-relasi')?.innerText;
@@ -3359,7 +3454,7 @@ async function simpanKeberangkatanTruk() {
                 'apikey': SUPA_ANON_KEY,
                 'Authorization': `Bearer ${SUPA_ANON_KEY}`,
                 'Content-Type': 'application/json',
-                'Prefer': 'return=minimal',
+                'Prefer': 'return=representation',
                 'x-pin-karyawan': (typeof currentLoggedPin !== 'undefined' && currentLoggedPin) ? currentLoggedPin : '1234'
             },
             body: JSON.stringify(payload)
@@ -3370,7 +3465,12 @@ async function simpanKeberangkatanTruk() {
             throw new Error(err.message || "Gagal menyimpan pengiriman truk");
         }
 
-        alert(`✅ Pengiriman Truk Berhasil Diberangkatkan!\nMuatan: ${totalKg.toLocaleString('id-ID')} Kg\nKru: ${kruIds.length} Orang\nSolar Sopir: Rp 100.000`);
+        let createdTrips = await res.json();
+        if (Array.isArray(createdTrips) && createdTrips[0]?.id) {
+            await syncSolarTrukToCashflow(createdTrips[0].id, 'D 8749 UA', payload.tanggal, 1, namaRelasi);
+        }
+
+        alert(`✅ Pengiriman Truk Berhasil Diberangkatkan!\nMuatan: ${totalKg.toLocaleString('id-ID')} Kg\nKru: ${kruIds.length} Orang\nSolar Sopir: Rp 100.000 (Otomatis tercatat di Cashflow)`);
         tutupModalMuatTruk();
 
         let today = new Date().toISOString().split('T')[0];
@@ -3636,10 +3736,14 @@ window._armadaActiveFilter = 'all';
 window._armadaActivePeriod = 'bulanan';
 window._armadaActiveSubtab = 'biaya';
 window._armadaTujuanFilter = '';
-window._cacheArmadaData = { expenses: [], trips: [], labelPeriode: 'Bulan Ini' };
+window._armadaMonthOffset = 0;
+window._ruteSubFilterMode = 'antar';
+window._selectedOrderToAssign = null;
+window._cacheArmadaData = { expenses: [], trips: [], ongkirRows: [], unassignedOrders: [], labelPeriode: 'Bulan Ini' };
 
 function setArmadaPeriodFilter(mode) {
     window._armadaActivePeriod = mode;
+    window._armadaMonthOffset = 0; // reset offset saat ganti tipe periode
     ['mingguan', 'bulanan', 'tahunan'].forEach(m => {
         let btn = document.getElementById(`btn-period-${m}`);
         if (btn) {
@@ -3649,6 +3753,31 @@ function setArmadaPeriodFilter(mode) {
     });
     loadLogBBMAdmin();
 }
+
+function navigateArmadaPeriod(delta) {
+    window._armadaMonthOffset = (window._armadaMonthOffset || 0) + delta;
+    loadLogBBMAdmin();
+}
+window.navigateArmadaPeriod = navigateArmadaPeriod;
+
+function switchFilterRuteMode(mode) {
+    window._ruteSubFilterMode = mode;
+    let btnAntar = document.getElementById('tab-subview-antar');
+    let btnAmbil = document.getElementById('tab-subview-ambil');
+    let hint = document.getElementById('subview-rute-hint');
+
+    if (mode === 'antar') {
+        if (btnAntar) { btnAntar.style.background = '#0f766e'; btnAntar.style.color = 'white'; btnAntar.style.borderColor = '#0f766e'; }
+        if (btnAmbil) { btnAmbil.style.background = '#ffffff'; btnAmbil.style.color = '#475569'; btnAmbil.style.borderColor = '#cbd5e1'; }
+        if (hint) hint.innerText = "Riwayat pengantaran armada mobil CBL";
+    } else {
+        if (btnAntar) { btnAntar.style.background = '#ffffff'; btnAntar.style.color = '#475569'; btnAntar.style.borderColor = '#cbd5e1'; }
+        if (btnAmbil) { btnAmbil.style.background = '#0f766e'; btnAmbil.style.color = 'white'; btnAmbil.style.borderColor = '#0f766e'; }
+        if (hint) hint.innerText = "Orderan yang diambil sendiri atau belum ditentukan armada pengantarnya";
+    }
+    renderArmadaLogViews();
+}
+window.switchFilterRuteMode = switchFilterRuteMode;
 
 function onTujuanFilterChange(val) {
     window._armadaTujuanFilter = (val || '').trim().toLowerCase();
@@ -3702,22 +3831,28 @@ async function loadLogBBMAdmin() {
     let now = new Date();
     let pad = n => String(n).padStart(2, '0');
     let startDate, endDate, labelPeriode;
+    let offset = window._armadaMonthOffset || 0;
 
     if (window._armadaActivePeriod === 'mingguan') {
-        let dStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+        let baseDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (offset * 7));
+        let dStart = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() - 6);
         startDate = `${dStart.getFullYear()}-${pad(dStart.getMonth() + 1)}-${pad(dStart.getDate())}`;
-        endDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-        labelPeriode = `7 Hari Terakhir (${dStart.getDate()}/${dStart.getMonth() + 1} - ${now.getDate()}/${now.getMonth() + 1})`;
+        endDate = `${baseDate.getFullYear()}-${pad(baseDate.getMonth() + 1)}-${pad(baseDate.getDate())}`;
+        labelPeriode = `7 Hari (${dStart.getDate()}/${dStart.getMonth() + 1} - ${baseDate.getDate()}/${baseDate.getMonth() + 1}/${baseDate.getFullYear()})`;
     } else if (window._armadaActivePeriod === 'tahunan') {
-        startDate = `${now.getFullYear()}-01-01`;
-        endDate = `${now.getFullYear()}-12-31`;
-        labelPeriode = `Tahun ${now.getFullYear()}`;
+        let targetYear = now.getFullYear() + offset;
+        startDate = `${targetYear}-01-01`;
+        endDate = `${targetYear}-12-31`;
+        labelPeriode = `Tahun ${targetYear}`;
     } else {
         // bulanan
-        let lastDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        startDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
-        endDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(lastDate.getDate())}`;
-        labelPeriode = now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+        let targetDate = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+        let y = targetDate.getFullYear();
+        let m = targetDate.getMonth();
+        let lastDate = new Date(y, m + 1, 0);
+        startDate = `${y}-${pad(m + 1)}-01`;
+        endDate = `${y}-${pad(m + 1)}-${pad(lastDate.getDate())}`;
+        labelPeriode = targetDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
     }
 
     if (badgePeriode) badgePeriode.innerText = labelPeriode;
@@ -3736,7 +3871,12 @@ async function loadLogBBMAdmin() {
             headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
         }).then(r => r.json()).catch(() => []);
 
-        let [rawCF, rawTrips, rawOngkir] = await Promise.all([p1, p2, p3]);
+        // 4. Ambil transaksi penjualan/mutasi keluar dalam periode aktif untuk tab Ambil Mandiri / Belum Diantar
+        let p4 = fetch(`${SUPA_URL}/rest/v1/transaksi_pakan?status=in.(Keluar,Mutasi)&tanggal=gte.${startDate}&tanggal=lte.${endDate}&pakan=neq.Ongkir Pengiriman&select=id,tanggal,waktu_input,status,relasi,alamat,pakan,qty,satuan,armada,trip_id,catatan`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        }).then(r => r.json()).catch(() => []);
+
+        let [rawCF, rawTrips, rawOngkir, rawKeluar] = await Promise.all([p1, p2, p3, p4]);
 
         // Filter cashflow yang relevan dengan armada (BBM, Ban, Servis, Cuci, atau ada sebutan plat)
         let armadaExpenses = (Array.isArray(rawCF) ? rawCF : []).filter(item => {
@@ -3767,10 +3907,299 @@ async function loadLogBBMAdmin() {
             return !isAmbil;
         });
 
+        // ⚡ AUTO-SPLIT KAPASITAS OTOMATIS:
+        // Cek jika ada trip yang melebihi kapasitas armada (Pick-up > 1.500 Kg, Truk > 7.500 Kg)
+        // ATAU ada muatan manifest yang belum lengkap baris rit-nya di database Supabase!
+        let supaPinHeader = (typeof currentLoggedPin !== 'undefined' && currentLoggedPin) ? currentLoggedPin : '1234';
+
+        function getTripRelasiClean(trItem) {
+            let mList = trItem.manifest_items || [];
+            let relFromManifest = (Array.isArray(mList) ? mList : []).map(m => m.relasi).find(Boolean);
+            if (relFromManifest) return relFromManifest.trim().toLowerCase();
+            let cat = trItem.catatan || '';
+            return cat.replace(/\[.*?\]/g, '').replace(/Rit\s*\d+/gi, '').replace(/D\s*\d+\s*[A-Z]+/gi, '').replace(/^-+/, '').trim().toLowerCase();
+        }
+
+        let tripSumsByRelasi = {};
+        fleetTrips.forEach(t => {
+            let rKey = `${t.tanggal}__${getTripRelasiClean(t)}`;
+            tripSumsByRelasi[rKey] = (tripSumsByRelasi[rKey] || 0) + (parseFloat(t.total_kg) || 0);
+        });
+
+        let shouldReloadTrips = false;
+        for (let tr of fleetTrips) {
+            if ((tr.catatan || '').includes('[SPLIT:')) continue; // Lewati chunk pecahan agar tidak di-split ulang
+
+            let arm = (tr.armada || '').toUpperCase();
+            let isTruk = arm.includes('8749') || arm.includes('TRUK');
+            let maxCap = isTruk ? 7500 : 1500;
+
+            let currentKg = parseFloat(tr.total_kg) || 0;
+            let manifestKg = (tr.manifest_items || []).reduce((sum, m) => sum + (parseFloat(m.qty) || 0), 0);
+            let relClean = getTripRelasiClean(tr);
+            let rKey = `${tr.tanggal}__${relClean}`;
+            let loggedKg = tripSumsByRelasi[rKey] || currentKg;
+
+            let sopirId = tr.sopir_user_id;
+            if (!sopirId) {
+                if (arm.includes('8707') || arm.includes('8070')) sopirId = 6;
+                else if (arm.includes('8142')) sopirId = 7;
+                else if (arm.includes('8749')) sopirId = 12;
+            }
+
+            let cleanCatatan = (tr.catatan || '').replace(/\s*\(Rit\s*\d+\)/gi, '').replace(/\s*\[SPLIT:\d+\]/gi, '').trim();
+
+            // Kasus 1: Baris ini sendiri total_kg-nya > maxCap
+            if (currentKg > maxCap) {
+                let totalChunks = Math.max(1, Math.ceil(currentKg / maxCap));
+                let baseRit = tr.urutan_rit || 1;
+                let chunk1Kg = maxCap;
+
+                let patchRes = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${tr.id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': SUPA_ANON_KEY,
+                        'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                        'Content-Type': 'application/json',
+                        'x-pin-karyawan': supaPinHeader
+                    },
+                    body: JSON.stringify({
+                        total_kg: chunk1Kg,
+                        catatan: cleanCatatan ? `${cleanCatatan} (Rit ${baseRit})` : `Rit ${baseRit}`
+                    })
+                });
+
+                if (patchRes.ok) {
+                    shouldReloadTrips = true;
+                    tr.total_kg = chunk1Kg;
+                    tripSumsByRelasi[rKey] = chunk1Kg;
+
+                    for (let i = 1; i < totalChunks; i++) {
+                        let cKg = (i === totalChunks - 1) ? (currentKg - (i * maxCap)) : maxCap;
+                        let ritNum = baseRit + i;
+                        let payloadChunk = {
+                            tanggal: tr.tanggal,
+                            cabang: tr.cabang || 'PM',
+                            armada: tr.armada,
+                            sopir_user_id: sopirId,
+                            urutan_rit: ritNum,
+                            total_kg: cKg,
+                            jarak_tempuh_km: 0,
+                            status_trip: tr.status_trip || 'SELESAI',
+                            catatan: cleanCatatan ? `${cleanCatatan} (Rit ${ritNum}) [SPLIT:${tr.id}]` : `${tr.armada} (Rit ${ritNum}) [SPLIT:${tr.id}]`,
+                            manifest_items: tr.manifest_items || []
+                        };
+                        if (tr.kernek_1_user_id) payloadChunk.kernek_1_user_id = tr.kernek_1_user_id;
+                        if (tr.kernek_2_user_id) payloadChunk.kernek_2_user_id = tr.kernek_2_user_id;
+
+                        let resNew = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman`, {
+                            method: 'POST',
+                            headers: {
+                                'apikey': SUPA_ANON_KEY,
+                                'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                                'Content-Type': 'application/json',
+                                'Prefer': 'return=representation',
+                                'x-pin-karyawan': supaPinHeader
+                            },
+                            body: JSON.stringify(payloadChunk)
+                        });
+
+                        if (resNew.ok) {
+                            tripSumsByRelasi[rKey] = (tripSumsByRelasi[rKey] || 0) + cKg;
+                            if (isTruk) {
+                                let created = await resNew.json();
+                                if (created?.[0]?.id) {
+                                    await syncSolarTrukToCashflow(created[0].id, tr.armada, tr.tanggal, 1, payloadChunk.catatan);
+                                }
+                            }
+                        } else {
+                            let errBody = await resNew.text();
+                            console.error("Gagal insert chunk trip Kasus 1:", resNew.status, errBody);
+                        }
+                    }
+                    await resequenceTripsForDateAndArmada(tr.tanggal, tr.armada);
+                }
+            }
+            // Kasus 2: Baris ini total_kg-nya 1.500 Kg, tapi manifest totalnya (misal Rudi 3.451 Kg) belum lengkap chunk-nya di database
+            else if (manifestKg > maxCap && loggedKg < manifestKg) {
+                let missingKg = manifestKg - loggedKg;
+                let neededChunks = Math.ceil(missingKg / maxCap);
+                let createdAny = false;
+
+                for (let i = 0; i < neededChunks; i++) {
+                    let cKg = (i === neededChunks - 1) ? (missingKg - (i * maxCap)) : maxCap;
+                    let nextRitNum = (tr.urutan_rit || 1) + 1 + i;
+                    let payloadChunk = {
+                        tanggal: tr.tanggal,
+                        cabang: tr.cabang || 'PM',
+                        armada: tr.armada,
+                        sopir_user_id: sopirId,
+                        urutan_rit: nextRitNum,
+                        total_kg: cKg,
+                        jarak_tempuh_km: 0,
+                        status_trip: tr.status_trip || 'SELESAI',
+                        catatan: cleanCatatan ? `${cleanCatatan} (Rit ${nextRitNum}) [SPLIT:${tr.id}]` : `${tr.armada} (Rit ${nextRitNum}) [SPLIT:${tr.id}]`,
+                        manifest_items: tr.manifest_items || []
+                    };
+                    if (tr.kernek_1_user_id) payloadChunk.kernek_1_user_id = tr.kernek_1_user_id;
+                    if (tr.kernek_2_user_id) payloadChunk.kernek_2_user_id = tr.kernek_2_user_id;
+
+                    let resNew = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman`, {
+                        method: 'POST',
+                        headers: {
+                            'apikey': SUPA_ANON_KEY,
+                            'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                            'Content-Type': 'application/json',
+                            'Prefer': 'return=representation',
+                            'x-pin-karyawan': supaPinHeader
+                        },
+                        body: JSON.stringify(payloadChunk)
+                    });
+
+                    if (resNew.ok) {
+                        createdAny = true;
+                        tripSumsByRelasi[rKey] = (tripSumsByRelasi[rKey] || 0) + cKg;
+                        if (isTruk) {
+                            let created = await resNew.json();
+                            if (created?.[0]?.id) {
+                                await syncSolarTrukToCashflow(created[0].id, tr.armada, tr.tanggal, 1, payloadChunk.catatan);
+                            }
+                        }
+                    } else {
+                        let errBody = await resNew.text();
+                        console.error("Gagal insert chunk trip Kasus 2:", resNew.status, errBody);
+                    }
+                }
+
+                if (createdAny) {
+                    shouldReloadTrips = true;
+                    await resequenceTripsForDateAndArmada(tr.tanggal, tr.armada);
+                }
+            }
+        }
+
+        if (shouldReloadTrips) {
+            rawTrips = await fetchTripsByDateRange(startDate, endDate);
+            fleetTrips = (Array.isArray(rawTrips) ? rawTrips : []).filter(tr => {
+                let arm = (tr.armada || '').toLowerCase();
+                let cat = (tr.catatan || '').toLowerCase();
+                let isAmbil = arm === 'ambil mandiri' || arm.includes('ambil') || cat.includes('ambil sendiri') || cat.includes('ambil di gudang');
+                return !isAmbil;
+            });
+        }
+
+        // Auto-sinkron baris ongkir yang armada-nya masih belum cocok dengan trip fisik hari itu
+        fleetTrips.forEach(tr => {
+            let rels = (tr.manifest_items || []).map(m => m.relasi).filter(Boolean);
+            if (rels.length === 0 && tr.catatan) rels.push(tr.catatan);
+            rels.forEach(r => {
+                let matchingOngkir = (Array.isArray(rawOngkir) ? rawOngkir : []).find(o => 
+                    o.tanggal === tr.tanggal && (o.relasi || '').trim().toLowerCase() === (r || '').trim().toLowerCase()
+                );
+                if (matchingOngkir && (matchingOngkir.armada !== tr.armada || matchingOngkir.trip_id !== tr.id)) {
+                    fetch(`${SUPA_URL}/rest/v1/transaksi_pakan?id=eq.${matchingOngkir.id}`, {
+                        method: 'PATCH',
+                        headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ armada: tr.armada, trip_id: tr.id })
+                    }).catch(() => {});
+                    matchingOngkir.armada = tr.armada;
+                    matchingOngkir.trip_id = tr.id;
+                }
+            });
+        });
+
+        // Auto-sinkron solar truk ke cashflow jika ada trip truk yang belum tercatat di cashflow
+        fleetTrips.filter(t => (t.armada || '').includes('8749') || (t.armada || '').toLowerCase().includes('truk')).forEach(tr => {
+            let tag = `[TRIP:${tr.id}]`;
+            let exists = armadaExpenses.some(e => (e.keterangan || '').includes(tag));
+            if (!exists) {
+                let manifest = tr.manifest_items || [];
+                let rName = [...new Set(manifest.map(m => m.relasi).filter(Boolean))].join(', ') || tr.catatan;
+                let titik = (typeof getTripJumlahTitik === 'function') ? getTripJumlahTitik(tr) : (parseInt(tr.jumlah_titik) || 1);
+                syncSolarTrukToCashflow(tr.id, tr.armada, tr.tanggal, titik, rName);
+            }
+        });
+
+        // Kelompokkan pesanan keluar yang diambil mandiri atau belum punya armada
+        // KECUALIKAN: Pemakaian Kandang / Kelompok Sapi, Mutasi ke Kandang, dan Pakan Gilingan (RD/RL)
+        const KELOMPOK_SAPI = ['kapalang', 'dewasa', 'jantan', 'pedet', 'kerbau', 'bunting', 'bx', 'domba'];
+        let groupedUnassigned = {};
+        (Array.isArray(rawKeluar) ? rawKeluar : []).forEach(row => {
+            let arm = (row.armada || '').toLowerCase();
+            let cat = (row.catatan || '').toLowerCase();
+            let rel = (row.relasi || '').toLowerCase().trim();
+            let pkn = (row.pakan || '').toLowerCase().trim();
+            let stat = (row.status || '').toLowerCase().trim();
+
+            // 1. Cek apakah ini pemakaian internal kandang / kelompok sapi
+            if (stat.includes('pemakaian')) return;
+            let isPemakaianKandang = KELOMPOK_SAPI.some(k => rel === k || rel.includes(k)) || 
+                                     rel.includes('kandang') || 
+                                     rel.includes('pembibitan');
+            if (isPemakaianKandang) return;
+
+            // 2. Cek apakah ini gilingan / RD / RL / Darbun / Laktasi
+            let isGilingan = /\b(rl|rd)\b/i.test(row.relasi) || /\b(rl|rd)\b/i.test(row.pakan) ||
+                             rel.includes('darbun') || rel.includes('laktasi') || rel.includes('giling') ||
+                             pkn.includes('darbun') || pkn.includes('laktasi') || pkn.includes('giling');
+            if (isGilingan) return;
+
+            // 3. Jika mutasi, hanya mutasi antar gudang resmi (SPN, RPH, PM)
+            if (stat.includes('mutasi')) {
+                let isAntarGudang = (rel.includes('spn') || rel.includes('rph') || rel.includes('pm') || rel.includes('gudang')) && !rel.includes('kandang');
+                if (!isAntarGudang) return;
+            }
+
+            let isAmbil = !row.armada || arm === 'ambil mandiri' || arm.includes('ambil') || cat.includes('ambil');
+            // Hanya yang belum punya trip_id ATAU memang berstatus ambil mandiri
+            if (!row.trip_id || isAmbil) {
+                let key = `${row.tanggal || ''}__${(row.relasi || '-').trim()}`;
+                if (!groupedUnassigned[key]) {
+                    groupedUnassigned[key] = {
+                        tanggal: row.tanggal,
+                        relasi: row.relasi || '-',
+                        alamat: row.alamat || '-',
+                        items: [],
+                        manifestItems: [],
+                        totalKg: 0,
+                        txIds: [],
+                        catatan: row.catatan || '',
+                        latestTime: row.waktu_input || ''
+                    };
+                }
+                let q = parseFloat(row.qty) || 0;
+                groupedUnassigned[key].totalKg += q;
+                groupedUnassigned[key].txIds.push(row.id);
+                groupedUnassigned[key].items.push(`${row.pakan} (${q} ${row.satuan || 'Kg'})`);
+                groupedUnassigned[key].manifestItems.push({
+                    relasi: row.relasi || '-',
+                    pakan: row.pakan,
+                    qty: q
+                });
+                if (row.waktu_input && row.waktu_input > (groupedUnassigned[key].latestTime || '')) {
+                    groupedUnassigned[key].latestTime = row.waktu_input;
+                }
+            }
+        });
+
+        let unassignedOrders = Object.values(groupedUnassigned).map(u => {
+            u.pakanText = u.items.join(', ');
+            return u;
+        });
+
+        // Urutkan tanggal secara kronologis menurun (tanggal terbaru dan input terbaru di atas)
+        unassignedOrders.sort((a, b) => {
+            let tglA = a.tanggal || '';
+            let tglB = b.tanggal || '';
+            if (tglA !== tglB) return tglB.localeCompare(tglA);
+            return (b.latestTime || '').localeCompare(a.latestTime || '');
+        });
+
         window._cacheArmadaData = {
             expenses: armadaExpenses,
             trips: fleetTrips,
             ongkirRows: Array.isArray(rawOngkir) ? rawOngkir : [],
+            unassignedOrders: unassignedOrders,
             labelPeriode: labelPeriode
         };
 
@@ -3989,104 +4418,157 @@ function renderArmadaLogViews() {
         }
     }
 
-    // 3. Render Tabel Riwayat Perjalanan (Tracking Kemana Aja)
+    // 3. Render Tabel Riwayat Perjalanan (Tracking Kemana Aja vs Ambil Mandiri)
+    let unassignedList = window._cacheArmadaData?.unassignedOrders || [];
+    if (window._armadaTujuanFilter) {
+        unassignedList = unassignedList.filter(u => (u.relasi || '').toLowerCase().includes(window._armadaTujuanFilter));
+    }
+
+    let countAntarEl = document.getElementById('count-rute-antar');
+    let countAmbilEl = document.getElementById('count-rute-ambil');
+    if (countAntarEl) countAntarEl.innerText = filteredTrips.length;
+    if (countAmbilEl) countAmbilEl.innerText = unassignedList.length;
+
     if (tbodyTrips) {
-        if (filteredTrips.length === 0) {
-            tbodyTrips.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada riwayat pengantaran untuk armada ini.</td></tr>`;
+        if (window._ruteSubFilterMode === 'ambil') {
+            // Tampilan Ambil Mandiri / Belum Diantar
+            if (unassignedList.length === 0) {
+                tbodyTrips.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Tidak ada orderan ambil mandiri / belum diantar pada periode ini.</td></tr>`;
+            } else {
+                tbodyTrips.innerHTML = unassignedList.map((ord, idx) => {
+                    return `
+                        <tr style="border-bottom:1px solid #e2e8f0; font-size:11px;">
+                            <td style="padding:10px 8px; font-weight:700; color:#1e293b;">${ord.tanggal || '-'}</td>
+                            <td style="padding:10px 8px; text-align:center; white-space:nowrap;">
+                                <span style="background:#f1f5f9; color:#64748b; font-size:10px; font-weight:700; padding:2px 6px; border-radius:6px; display:inline-block;">Mandiri</span>
+                            </td>
+                            <td style="padding:10px 8px; font-weight:700; color:#94a3b8; font-style:italic;">(Belum Diantar)</td>
+                            <td style="padding:10px 8px; font-weight:800; color:#1e3a8a;">${ord.relasi}</td>
+                            <td style="padding:10px 8px; color:#334155; font-size:10px; max-width:200px;">${ord.pakanText || '-'}</td>
+                            <td style="padding:10px 8px; text-align:right; font-weight:800; color:#15803d;">${nf.format(ord.totalKg)} Kg</td>
+                            <td style="padding:10px 8px; color:#64748b; font-size:10px; max-width:140px;">${ord.catatan || '-'}</td>
+                            <td style="padding:10px 8px; text-align:right; font-weight:700; color:#94a3b8;">-</td>
+                            <td style="padding:10px 8px; text-align:center;">
+                                <span style="background:#fef3c7; color:#92400e; font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px;">AMBIL MANDIRI</span>
+                            </td>
+                            <td style="padding:10px 8px; text-align:center; white-space:nowrap;">
+                                <button type="button" onclick="bukaModalTugaskanArmada(${idx})" style="background:#0f766e; color:white; border:none; padding:4px 8px; border-radius:6px; font-weight:700; font-size:11px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">local_shipping</span> Kirim Pakai Armada
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
         } else {
-            let users = window.tripState.cachedUsers || [];
-            let userMap = {};
-            users.forEach(u => { userMap[u.id] = u.nama; });
+            // Tampilan Pengantaran Armada CBL
+            if (filteredTrips.length === 0) {
+                tbodyTrips.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:25px; color:#94a3b8; font-style:italic;">Belum ada riwayat pengantaran untuk armada ini.</td></tr>`;
+            } else {
+                let users = window.tripState.cachedUsers || [];
+                let userMap = {};
+                users.forEach(u => { userMap[u.id] = u.nama; });
 
-            // Hitung nomor urutan rit otomatis kronologis per armada per tanggal
-            let tripRitAutoMap = {};
-            let tripGroups = {};
+                // Hitung nomor urutan rit otomatis kronologis per armada per tanggal
+                let tripRitAutoMap = {};
+                let tripGroups = {};
 
-            allTrips.forEach(tr => {
-                let armStd = 'D 8707 UE';
-                let a = (tr.armada || '').toUpperCase();
-                if (a.includes('8142')) armStd = 'D 8142 UK';
-                else if (a.includes('8749') || a.includes('TRUK')) armStd = 'D 8749 UA';
-                
-                let key = `${tr.tanggal || ''}_${armStd}`;
-                if (!tripGroups[key]) tripGroups[key] = [];
-                tripGroups[key].push(tr);
-            });
-
-            Object.keys(tripGroups).forEach(key => {
-                tripGroups[key].sort((a, b) => {
-                    let tA = a.waktu_berangkat || a.created_at || a.id || 0;
-                    let tB = b.waktu_berangkat || b.created_at || b.id || 0;
-                    return tA > tB ? 1 : (tA < tB ? -1 : 0);
+                allTrips.forEach(tr => {
+                    let armStd = 'D 8707 UE';
+                    let a = (tr.armada || '').toUpperCase();
+                    if (a.includes('8142')) armStd = 'D 8142 UK';
+                    else if (a.includes('8749') || a.includes('TRUK')) armStd = 'D 8749 UA';
+                    
+                    let key = `${tr.tanggal || ''}_${armStd}`;
+                    if (!tripGroups[key]) tripGroups[key] = [];
+                    tripGroups[key].push(tr);
                 });
-                tripGroups[key].forEach((tr, idx) => {
-                    tripRitAutoMap[tr.id] = idx + 1;
+
+                Object.keys(tripGroups).forEach(key => {
+                    tripGroups[key].sort((a, b) => {
+                        let tA = a.waktu_berangkat || a.created_at || a.id || 0;
+                        let tB = b.waktu_berangkat || b.created_at || b.id || 0;
+                        return tA > tB ? 1 : (tA < tB ? -1 : 0);
+                    });
+                    tripGroups[key].forEach((tr, idx) => {
+                        let expected = idx + 1;
+                        tripRitAutoMap[tr.id] = expected;
+                        if (tr.urutan_rit !== expected) {
+                            fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${tr.id}`, {
+                                method: 'PATCH',
+                                headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ urutan_rit: expected })
+                            }).catch(() => {});
+                            tr.urutan_rit = expected;
+                        }
+                    });
                 });
-            });
-            window._tripRitAutoMap = tripRitAutoMap;
+                window._tripRitAutoMap = tripRitAutoMap;
 
-            tbodyTrips.innerHTML = filteredTrips.map(tr => {
-                let waktuStr = tr.waktu_berangkat 
-                    ? new Date(tr.waktu_berangkat).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) 
-                    : '-';
-                let tglDisplay = `${tr.tanggal} (${waktuStr})`;
+                tbodyTrips.innerHTML = filteredTrips.map(tr => {
+                    let waktuStr = tr.waktu_berangkat 
+                        ? new Date(tr.waktu_berangkat).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) 
+                        : '-';
+                    let tglDisplay = `${tr.tanggal} (${waktuStr})`;
 
-                let manifest = tr.manifest_items || [];
-                let relasiList = [...new Set(manifest.map(m => m.relasi).filter(Boolean))].join(', ') || tr.catatan || 'Konsumen';
-                let pakanList = manifest.map(m => `${m.pakan} (${m.qty} Kg)`).join(', ') || '-';
+                    let manifest = tr.manifest_items || [];
+                    let relasiList = [...new Set(manifest.map(m => m.relasi).filter(Boolean))].join(', ') || tr.catatan || 'Konsumen';
+                    let pakanList = manifest.map(m => `${m.pakan} (${m.qty} Kg)`).join(', ') || '-';
 
-                // Tambahkan Maps button jika kandang terdaftar di master_relasi
-                let firstRelasi = manifest[0]?.relasi || tr.catatan;
-                let rData = firstRelasi ? (window.tripState.cachedRelasiMap[firstRelasi] || {}) : {};
-                let rLat = rData.lat ? parseFloat(rData.lat) : null;
-                let rLng = rData.lng ? parseFloat(rData.lng) : null;
-                let mapsBtn = (rLat && rLng)
-                    ? `<a href="https://www.google.com/maps/dir/?api=1&origin=${LAT_GUDANG_CBL},${LNG_GUDANG_CBL}&destination=${rLat},${rLng}" target="_blank" title="Cek rute di Google Maps" style="display:inline-flex; align-items:center; gap:2px; font-size:10px; font-weight:700; color:#1d4ed8; background:#eff6ff; padding:2px 6px; border-radius:4px; text-decoration:none; margin-left:4px; border:1px solid #bfdbfe;">
-                         <span class="material-symbols-outlined" style="font-size:12px; color:#2563eb;">map</span> Maps
-                       </a>`
-                    : '';
+                    // Tambahkan Maps button jika kandang terdaftar di master_relasi
+                    let firstRelasi = manifest[0]?.relasi || tr.catatan;
+                    let rData = firstRelasi ? (window.tripState.cachedRelasiMap[firstRelasi] || {}) : {};
+                    let rLat = rData.lat ? parseFloat(rData.lat) : null;
+                    let rLng = rData.lng ? parseFloat(rData.lng) : null;
+                    let mapsBtn = (rLat && rLng)
+                        ? `<a href="https://www.google.com/maps/dir/?api=1&origin=${LAT_GUDANG_CBL},${LNG_GUDANG_CBL}&destination=${rLat},${rLng}" target="_blank" title="Cek rute di Google Maps" style="display:inline-flex; align-items:center; gap:2px; font-size:10px; font-weight:700; color:#1d4ed8; background:#eff6ff; padding:2px 6px; border-radius:4px; text-decoration:none; margin-left:4px; border:1px solid #bfdbfe;">
+                             <span class="material-symbols-outlined" style="font-size:12px; color:#2563eb;">map</span> Maps
+                           </a>`
+                        : '';
 
-                let sopirNama = userMap[tr.sopir_user_id] || 'Supir';
-                let kernekNama = userMap[tr.kernek_1_user_id] || '-';
-                if (tr.kernek_2_user_id && userMap[tr.kernek_2_user_id]) {
-                    kernekNama += `, ${userMap[tr.kernek_2_user_id]}`;
-                }
-                let kruStr = `<b>${sopirNama}</b>${kernekNama !== '-' ? ` & ${kernekNama}` : ''}`;
+                    let sopirNama = userMap[tr.sopir_user_id] || 'Supir';
+                    let kernekNama = userMap[tr.kernek_1_user_id] || '-';
+                    if (tr.kernek_2_user_id && userMap[tr.kernek_2_user_id]) {
+                        kernekNama += `, ${userMap[tr.kernek_2_user_id]}`;
+                    }
+                    let kruStr = `<b>${sopirNama}</b>${kernekNama !== '-' ? ` & ${kernekNama}` : ''}`;
 
-                let armLabel = tr.armada || '-';
-                if (armLabel.includes('D 8707 UE') || armLabel.includes('D 8070 UE')) armLabel = 'D 8707 UE (Hilman)';
-                else if (armLabel.includes('D 8142 UK')) armLabel = 'D 8142 UK (Adi)';
-                else if (armLabel.includes('D 8749 UA') || armLabel.includes('8749') || armLabel.includes('Truk')) armLabel = 'D 8749 UA (Agus)';
+                    let armLabel = tr.armada || '-';
+                    if (armLabel.includes('D 8707 UE') || armLabel.includes('D 8070 UE')) armLabel = 'D 8707 UE (Hilman)';
+                    else if (armLabel.includes('D 8142 UK')) armLabel = 'D 8142 UK (Adi)';
+                    else if (armLabel.includes('D 8749 UA') || armLabel.includes('8749') || armLabel.includes('Truk')) armLabel = 'D 8749 UA (Agus)';
 
-                let autoRit = tripRitAutoMap[tr.id] || tr.urutan_rit || 1;
-                let titikBadge = (parseInt(tr.jumlah_titik) > 1) 
-                    ? `<div style="margin-top:2px;"><span style="background:#fef3c7; color:#92400e; font-size:9.5px; font-weight:700; padding:1px 5px; border-radius:4px;">${tr.jumlah_titik} Titik Drop</span></div>` 
-                    : '';
+                    let autoRit = tripRitAutoMap[tr.id] || tr.urutan_rit || 1;
+                    let tripTitikVal = (typeof getTripJumlahTitik === 'function') ? getTripJumlahTitik(tr) : (parseInt(tr.jumlah_titik) || 1);
+                    let titikBadge = (tripTitikVal > 1) 
+                        ? `<div style="margin-top:2px;"><span style="background:#fef3c7; color:#92400e; font-size:9.5px; font-weight:700; padding:1px 5px; border-radius:4px;">${tripTitikVal} Titik Drop</span></div>` 
+                        : '';
 
-                return `
-                    <tr style="border-bottom:1px solid #e2e8f0; font-size:11px;">
-                        <td style="padding:10px 8px; font-weight:700; color:#1e293b;">${tglDisplay}</td>
-                        <td style="padding:10px 8px; text-align:center; white-space:nowrap;">
-                            <span style="background:#e0f2fe; color:#0369a1; font-size:11px; font-weight:800; padding:3px 8px; border-radius:10px; display:inline-block;">Rit ${autoRit}</span>
-                            ${titikBadge}
-                        </td>
-                        <td style="padding:10px 8px; font-weight:800; color:#0f766e;">${armLabel}</td>
-                        <td style="padding:10px 8px; font-weight:700; color:#1e3a8a;">${relasiList} ${mapsBtn}</td>
-                        <td style="padding:10px 8px; color:#334155; font-size:10px; max-width:200px;">${pakanList}</td>
-                        <td style="padding:10px 8px; text-align:right; font-weight:800; color:#15803d;">${nf.format(tr.total_kg || 0)} Kg</td>
-                        <td style="padding:10px 8px; color:#334155;">${kruStr}</td>
-                        <td style="padding:10px 8px; text-align:right; font-weight:700; color:#475569;">${tr.jarak_tempuh_km || 0} Km</td>
-                        <td style="padding:10px 8px; text-align:center;">
-                            <span style="background:#dcfce7; color:#15803d; font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px;">${tr.status_trip || 'SELESAI'}</span>
-                        </td>
-                        <td style="padding:10px 8px; text-align:center; white-space:nowrap;">
-                            <button type="button" onclick="bukaModalKelolaTripAdmin(${tr.id})" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; padding:4px 8px; border-radius:6px; font-weight:700; font-size:11px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
-                                <span class="material-symbols-outlined" style="font-size:13px;">tune</span> Kelola
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
+                    return `
+                        <tr style="border-bottom:1px solid #e2e8f0; font-size:11px;">
+                            <td style="padding:10px 8px; font-weight:700; color:#1e293b;">${tglDisplay}</td>
+                            <td style="padding:10px 8px; text-align:center; white-space:nowrap;">
+                                <span style="background:#e0f2fe; color:#0369a1; font-size:11px; font-weight:800; padding:3px 8px; border-radius:10px; display:inline-block;">Rit ${autoRit}</span>
+                                ${titikBadge}
+                            </td>
+                            <td style="padding:10px 8px; font-weight:800; color:#0f766e;">${armLabel}</td>
+                            <td style="padding:10px 8px; font-weight:700; color:#1e3a8a;">${relasiList} ${mapsBtn}</td>
+                            <td style="padding:10px 8px; color:#334155; font-size:10px; max-width:200px;">${pakanList}</td>
+                            <td style="padding:10px 8px; text-align:right; font-weight:800; color:#15803d;">${nf.format(tr.total_kg || 0)} Kg</td>
+                            <td style="padding:10px 8px; color:#334155;">${kruStr}</td>
+                            <td style="padding:10px 8px; text-align:right; font-weight:700; color:#475569;">${tr.jarak_tempuh_km || 0} Km</td>
+                            <td style="padding:10px 8px; text-align:center;">
+                                <span style="background:#dcfce7; color:#15803d; font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px;">${tr.status_trip || 'SELESAI'}</span>
+                            </td>
+                            <td style="padding:10px 8px; text-align:center; white-space:nowrap;">
+                                <button type="button" onclick="bukaModalKelolaTripAdmin(${tr.id})" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; padding:4px 8px; border-radius:6px; font-weight:700; font-size:11px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
+                                    <span class="material-symbols-outlined" style="font-size:13px;">tune</span> Kelola
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
         }
     }
 
@@ -4201,6 +4683,25 @@ function bukaModalKelolaTripAdmin(tripId) {
         }
     }
 
+    // Populate urutan rit, titik drop, dan rit fisik
+    let elUrutan = document.getElementById('kelola-trip-urutan-rit');
+    let elTitik = document.getElementById('kelola-trip-titik-drop');
+    let elRitFisik = document.getElementById('kelola-trip-jumlah-rit');
+    let curAutoRit = autoRitMap[tr.id] || tr.urutan_rit || 1;
+    if (elUrutan) elUrutan.value = tr.urutan_rit || curAutoRit;
+    if (elTitik) elTitik.value = (typeof getTripJumlahTitik === 'function') ? getTripJumlahTitik(tr) : (tr.jumlah_titik || 1);
+    if (elRitFisik) elRitFisik.value = tr.jumlah_rit || '';
+
+    // Setup tombol auto-pecah kapasitas sesuai armada
+    let btnAutoPecah = document.getElementById('btn-auto-pecah-kapasitas');
+    if (btnAutoPecah) {
+        let isTruk = (tr.armada || '').includes('8749') || (tr.armada || '').includes('Truk');
+        let maxCap = isTruk ? 7500 : 1500;
+        let labelCap = isTruk ? 'Truk (7.500 Kg / Rit)' : 'Pick-up (1.500 Kg / Rit)';
+        btnAutoPecah.innerHTML = `<span class="material-symbols-outlined" style="font-size:15px;">splitscreen</span> ⚡ Pecah Otomatis Sesuai Kapasitas ${labelCap}`;
+        btnAutoPecah.style.display = (curKgVal > maxCap) ? 'flex' : 'none';
+    }
+
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 }
@@ -4212,6 +4713,391 @@ function tutupModalKelolaTripAdmin() {
         modal.style.display = 'none';
     }
 }
+
+function bukaModalTugaskanArmada(idx) {
+    let unassignedList = window._cacheArmadaData?.unassignedOrders || [];
+    if (window._armadaTujuanFilter) {
+        unassignedList = unassignedList.filter(u => (u.relasi || '').toLowerCase().includes(window._armadaTujuanFilter));
+    }
+    let order = unassignedList[idx];
+    if (!order) return;
+
+    window._selectedOrderToAssign = order;
+    let modal = document.getElementById('modal-tambah-trip-manual');
+    if (!modal) return;
+
+    let nf = new Intl.NumberFormat('id-ID');
+    let tglEl = document.getElementById('tugaskan-tgl-display');
+    let relEl = document.getElementById('tugaskan-relasi-display');
+    let kgEl = document.getElementById('tugaskan-kg-display');
+    let pknEl = document.getElementById('tugaskan-pakan-display');
+
+    if (tglEl) tglEl.innerText = order.tanggal || '-';
+    if (relEl) relEl.innerText = order.relasi || '-';
+    if (kgEl) kgEl.innerText = `${nf.format(order.totalKg || 0)} Kg`;
+    if (pknEl) pknEl.innerText = order.pakanText || '-';
+
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+}
+window.bukaModalTugaskanArmada = bukaModalTugaskanArmada;
+
+// Resequence kolom urutan_rit di database Supabase agar berurutan 1, 2, 3... tanpa lompatan
+async function resequenceTripsForDateAndArmada(tanggal, armada) {
+    if (!tanggal || !armada) return;
+    try {
+        let res = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?tanggal=eq.${tanggal}&armada=eq.${encodeURIComponent(armada)}&order=id.asc`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        });
+        if (!res.ok) return;
+        let trips = await res.json();
+        if (!Array.isArray(trips) || trips.length === 0) return;
+
+        for (let idx = 0; idx < trips.length; idx++) {
+            let tr = trips[idx];
+            let expectedRit = idx + 1;
+            let patchObj = {};
+            if (tr.urutan_rit !== expectedRit) {
+                patchObj.urutan_rit = expectedRit;
+            }
+            if (tr.catatan && /Rit\s*\d+/i.test(tr.catatan)) {
+                let updatedCat = tr.catatan.replace(/Rit\s*\d+/gi, `Rit ${expectedRit}`);
+                if (updatedCat !== tr.catatan) {
+                    patchObj.catatan = updatedCat;
+                }
+            }
+            if (Object.keys(patchObj).length > 0) {
+                await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${tr.id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': SUPA_ANON_KEY,
+                        'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                        'Content-Type': 'application/json',
+                        'x-pin-karyawan': (typeof currentLoggedPin !== 'undefined' && currentLoggedPin) ? currentLoggedPin : '1234'
+                    },
+                    body: JSON.stringify(patchObj)
+                });
+            }
+        }
+    } catch (eSeq) {
+        console.warn("Gagal resequence trip urutan_rit:", eSeq);
+    }
+}
+window.resequenceTripsForDateAndArmada = resequenceTripsForDateAndArmada;
+
+// 1-Klik Cepat Tugaskan Armada untuk Orderan yang Belum Diantar
+async function eksekusiTugaskanArmadaCepat(targetArmada) {
+    let order = window._selectedOrderToAssign;
+    if (!order) {
+        alert("Pilih pesanan terlebih dahulu!");
+        return;
+    }
+
+    let sopirId = null;
+    if (targetArmada.includes('8707') || targetArmada.includes('8070')) sopirId = 6; // Hilman
+    else if (targetArmada.includes('8142')) sopirId = 7; // Adi
+    else if (targetArmada.includes('8749')) {
+        let users = window.tripState?.cachedUsers || [];
+        let agusUser = users.find(u => (u.nama || '').toLowerCase().includes('agus') && (u.role || '').toLowerCase() === 'sopir');
+        sopirId = agusUser ? agusUser.id : 12; // Pak Agus
+    }
+
+    let isTruk = targetArmada.includes('8749') || targetArmada.toLowerCase().includes('truk');
+    let maxCap = isTruk ? 7500 : 1500;
+    let totalKg = order.totalKg || 0;
+    let totalChunks = Math.max(1, Math.ceil(totalKg / maxCap));
+
+    // Hitung urutan rit hari ini secara dinamis
+    let nextRit = 1;
+    try {
+        let resCount = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?tanggal=eq.${order.tanggal}&armada=eq.${encodeURIComponent(targetArmada)}&select=id`, {
+            headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+        });
+        if (resCount.ok) {
+            let tripsHariIni = await resCount.json();
+            nextRit = (Array.isArray(tripsHariIni) ? tripsHariIni.length : 0) + 1;
+        }
+    } catch (eC) {}
+
+    let primaryTripId = null;
+
+    try {
+        for (let i = 0; i < totalChunks; i++) {
+            let chunkKg = (i === totalChunks - 1) ? (totalKg - (i * maxCap)) : maxCap;
+            let ritNum = nextRit + i;
+            let catatanTrip = totalChunks > 1
+                ? `${targetArmada} (Rit ${ritNum}) - ${order.relasi} (${chunkKg} Kg)`
+                : `${targetArmada} (Rit ${ritNum}) - ${order.relasi}`;
+
+            let tripPayload = {
+                tanggal: order.tanggal,
+                cabang: 'PM',
+                armada: targetArmada,
+                sopir_user_id: sopirId,
+                urutan_rit: ritNum,
+                total_kg: chunkKg,
+                jarak_tempuh_km: 0,
+                status_trip: 'SELESAI',
+                catatan: catatanTrip,
+                manifest_items: order.manifestItems || [{ relasi: order.relasi, pakan: order.pakanText || 'Pakan', qty: chunkKg }]
+            };
+
+            let res = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman`, {
+                method: 'POST',
+                headers: {
+                    'apikey': SUPA_ANON_KEY,
+                    'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation',
+                    'x-pin-karyawan': (typeof currentLoggedPin !== 'undefined' && currentLoggedPin) ? currentLoggedPin : '1234'
+                },
+                body: JSON.stringify(tripPayload)
+            });
+
+            if (res.ok) {
+                let created = await res.json();
+                if (created?.[0]?.id) {
+                    if (i === 0) primaryTripId = created[0].id;
+                    if (isTruk) {
+                        await syncSolarTrukToCashflow(created[0].id, targetArmada, order.tanggal, 1, order.relasi);
+                    }
+                }
+            } else {
+                let errBody = await res.text();
+                console.error("Gagal tugaskan armada:", res.status, errBody);
+                throw new Error(`Gagal membuat trip pengantaran rit ke-${ritNum}: ${errBody}`);
+            }
+        }
+
+        // 1a: UPDATE KOLOM ARMADA & TRIP_ID DI transaksi_pakan SECARA REAL-TIME!
+        if (primaryTripId && Array.isArray(order.txIds) && order.txIds.length > 0) {
+            let inIds = order.txIds.join(',');
+            await fetch(`${SUPA_URL}/rest/v1/transaksi_pakan?id=in.(${inIds})`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPA_ANON_KEY,
+                    'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    trip_id: primaryTripId,
+                    armada: targetArmada
+                })
+            });
+
+            // Juga update baris Ongkir Pengiriman untuk relasi dan tanggal ini jika ada agar armada-nya ikut berubah!
+            await fetch(`${SUPA_URL}/rest/v1/transaksi_pakan?pakan=eq.Ongkir Pengiriman&tanggal=eq.${order.tanggal}&relasi=eq.${encodeURIComponent(order.relasi)}`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPA_ANON_KEY,
+                    'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    trip_id: primaryTripId,
+                    armada: targetArmada
+                })
+            });
+        }
+
+        // Rapikan nomor urutan rit di database untuk armada ini pada tanggal ini
+        await resequenceTripsForDateAndArmada(order.tanggal, targetArmada);
+
+        window._selectedOrderToAssign = null;
+        alert(`✅ Sukses menugaskan ${order.relasi} ke armada ${targetArmada}!`);
+        tutupModalTambahTripManual();
+        await loadLogBBMAdmin();
+    } catch (eTugaskan) {
+        alert("Gagal menugaskan armada: " + eTugaskan.message);
+    }
+}
+window.eksekusiTugaskanArmadaCepat = eksekusiTugaskanArmadaCepat;
+
+async function simpanRitTripAdmin() {
+    let tripId = document.getElementById('kelola-trip-id')?.value;
+    if (!tripId) return;
+
+    let trips = window._cacheArmadaData?.trips || [];
+    let tr = trips.find(t => t.id == tripId);
+    if (!tr) return;
+
+    let urutanVal = parseInt(document.getElementById('kelola-trip-urutan-rit')?.value);
+    let titikVal = parseInt(document.getElementById('kelola-trip-titik-drop')?.value) || 1;
+    let ritFisikVal = parseInt(document.getElementById('kelola-trip-jumlah-rit')?.value);
+
+    let btn = document.getElementById('btn-simpan-rit-titik');
+    let orig = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerText = "Menyimpan..."; }
+
+    try {
+        let patchData = {};
+        if (!isNaN(urutanVal) && urutanVal > 0) patchData.urutan_rit = urutanVal;
+        let cleanCat = (tr.catatan || '').replace(/\s*\[\d+\s*Titik\]/gi, '').trim();
+        patchData.catatan = titikVal > 1 ? `${cleanCat} [${titikVal} Titik]` : cleanCat;
+
+        let res = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${tripId}`, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPA_ANON_KEY,
+                'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'x-pin-karyawan': (typeof currentLoggedPin !== 'undefined' && currentLoggedPin) ? currentLoggedPin : '1234'
+            },
+            body: JSON.stringify(patchData)
+        });
+
+        if (!res.ok) {
+            let err = await res.json();
+            throw new Error(err.message || 'Gagal menyimpan perubahan rit & titik');
+        }
+
+        // Sinkronkan solar truk ke cashflow jika armada Truk
+        let isTruk = (tr.armada || '').includes('8749') || (tr.armada || '').includes('Truk');
+        if (isTruk) {
+            await syncSolarTrukToCashflow(tripId, tr.armada, tr.tanggal, titikVal, tr.catatan);
+        }
+
+        alert("✅ Pengaturan urutan rit & titik drop berhasil diperbarui!");
+        tutupModalKelolaTripAdmin();
+        if (typeof loadLogBBMAdmin === 'function') await loadLogBBMAdmin();
+    } catch (e) {
+        alert("Gagal: " + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+    }
+}
+window.simpanRitTripAdmin = simpanRitTripAdmin;
+
+async function autoPecahTripKapasitasAdmin() {
+    let tripId = document.getElementById('kelola-trip-id')?.value;
+    if (!tripId) return;
+
+    let trips = window._cacheArmadaData?.trips || [];
+    let tr = trips.find(t => t.id == tripId);
+    if (!tr) return;
+
+    let totalKg = parseFloat(tr.total_kg) || 0;
+    let isTruk = (tr.armada || '').includes('8749') || (tr.armada || '').includes('Truk');
+    let maxCap = isTruk ? 7500 : 1500;
+
+    if (totalKg <= maxCap) {
+        alert(`Total muatan (${totalKg} Kg) tidak melebihi kapasitas maksimal (${maxCap} Kg). Tidak perlu dipecah.`);
+        return;
+    }
+
+    let totalChunks = Math.ceil(totalKg / maxCap);
+    let nf = new Intl.NumberFormat('id-ID');
+
+    let confirmMsg = `Pecah pengiriman ${nf.format(totalKg)} Kg menjadi ${totalChunks} rit sesuai kapasitas armada?\n\n`
+        + `• Rit 1: ${nf.format(maxCap)} Kg (memperbarui baris saat ini)\n`;
+    for (let i = 1; i < totalChunks; i++) {
+        let cKg = (i === totalChunks - 1) ? (totalKg - (i * maxCap)) : maxCap;
+        confirmMsg += `• Rit ${i + 1}: ${nf.format(cKg)} Kg (buat pengiriman baru)\n`;
+    }
+    confirmMsg += `\nLanjutkan pemecahan rit?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    let btn = document.getElementById('btn-auto-pecah-kapasitas');
+    let orig = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerText = "Memproses pemecahan rit..."; }
+
+    try {
+        let baseRit = tr.urutan_rit || window._tripRitAutoMap?.[tr.id] || 1;
+        let chunk1Kg = maxCap;
+
+        // 1. Update trip saat ini menjadi Rit 1 dengan maxCap
+        let patchData = {
+            total_kg: chunk1Kg,
+            urutan_rit: baseRit,
+            catatan: tr.catatan ? `${tr.catatan} (Rit ${baseRit})` : `Rit ${baseRit}`
+        };
+
+        let res1 = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${tripId}`, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPA_ANON_KEY,
+                'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'x-pin-karyawan': (typeof currentLoggedPin !== 'undefined' && currentLoggedPin) ? currentLoggedPin : '1234'
+            },
+            body: JSON.stringify(patchData)
+        });
+
+        if (!res1.ok) {
+            let err = await res1.json();
+            throw new Error(err.message || 'Gagal memperbarui trip rit pertama');
+        }
+
+        if (isTruk) {
+            await syncSolarTrukToCashflow(tripId, tr.armada, tr.tanggal, 1, tr.catatan);
+        }
+
+        let sopirIdAuto = tr.sopir_user_id;
+        if (!sopirIdAuto) {
+            if (tr.armada.includes('8707') || tr.armada.includes('8070')) sopirIdAuto = 6;
+            else if (tr.armada.includes('8142')) sopirIdAuto = 7;
+            else if (tr.armada.includes('8749')) sopirIdAuto = 12;
+        }
+
+        // 2. Buat row baru untuk chunk 2..N
+        for (let i = 1; i < totalChunks; i++) {
+            let cKg = (i === totalChunks - 1) ? (totalKg - (i * maxCap)) : maxCap;
+            let ritNum = baseRit + i;
+            let payloadChunk = {
+                tanggal: tr.tanggal,
+                cabang: tr.cabang || 'PM',
+                armada: tr.armada,
+                sopir_user_id: sopirIdAuto,
+                urutan_rit: ritNum,
+                total_kg: cKg,
+                jarak_tempuh_km: 0,
+                status_trip: 'SELESAI',
+                catatan: tr.catatan ? `${tr.catatan} (Rit ${ritNum}) [SPLIT:${tr.id}]` : `Rit ${ritNum} [SPLIT:${tr.id}]`,
+                manifest_items: tr.manifest_items || []
+            };
+            if (tr.kernek_1_user_id) payloadChunk.kernek_1_user_id = tr.kernek_1_user_id;
+            if (tr.kernek_2_user_id) payloadChunk.kernek_2_user_id = tr.kernek_2_user_id;
+
+            let resNew = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman`, {
+                method: 'POST',
+                headers: {
+                    'apikey': SUPA_ANON_KEY,
+                    'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation',
+                    'x-pin-karyawan': (typeof currentLoggedPin !== 'undefined' && currentLoggedPin) ? currentLoggedPin : '1234'
+                },
+                body: JSON.stringify(payloadChunk)
+            });
+
+            if (!resNew.ok) {
+                let errBody = await resNew.text();
+                console.error("Gagal buat rit pecahan:", resNew.status, errBody);
+                throw new Error(`Gagal menyimpan rit pecahan ke-${ritNum}: ${errBody}`);
+            }
+
+            if (isTruk) {
+                let created = await resNew.json();
+                if (created?.[0]?.id) {
+                    await syncSolarTrukToCashflow(created[0].id, tr.armada, tr.tanggal, 1, tr.catatan);
+                }
+            }
+        }
+
+        // Pastikan urutan rit kembali berurutan 1, 2, 3...
+        await resequenceTripsForDateAndArmada(tr.tanggal, tr.armada);
+
+        alert(`✅ Sukses! Pengiriman berhasil dipecah menjadi ${totalChunks} rit.`);
+        tutupModalKelolaTripAdmin();
+        if (typeof loadLogBBMAdmin === 'function') await loadLogBBMAdmin();
+    } catch (e) {
+        alert("Gagal memecah rit: " + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+    }
+}
+window.autoPecahTripKapasitasAdmin = autoPecahTripKapasitasAdmin;
 
 async function pindahArmadaTripAdmin(armadaTujuan) {
     let tripId = document.getElementById('kelola-trip-id')?.value;
@@ -4249,7 +5135,8 @@ async function pindahArmadaTripAdmin(armadaTujuan) {
                 'apikey': SUPA_ANON_KEY,
                 'Authorization': `Bearer ${SUPA_ANON_KEY}`,
                 'Content-Type': 'application/json',
-                'Prefer': 'return=representation'
+                'Prefer': 'return=representation',
+                'x-pin-karyawan': (typeof currentLoggedPin !== 'undefined' && currentLoggedPin) ? currentLoggedPin : '1234'
             },
             body: JSON.stringify(patchData)
         });
@@ -4273,6 +5160,29 @@ async function pindahArmadaTripAdmin(armadaTujuan) {
         } catch (eTx) {
             console.warn("Gagal sinkron armada ke transaksi_pakan:", eTx);
         }
+
+        // Sinkronkan juga baris Ongkir Pengiriman di transaksi_pakan untuk relasi dan tanggal ini
+        let relasiList = [...new Set((tr.manifest_items || []).map(m => m.relasi).filter(Boolean))];
+        if (relasiList.length === 0 && tr.catatan) relasiList.push(tr.catatan);
+
+        for (let rName of relasiList) {
+            try {
+                await fetch(`${SUPA_URL}/rest/v1/transaksi_pakan?tanggal=eq.${tr.tanggal}&relasi=eq.${encodeURIComponent(rName)}&pakan=eq.Ongkir Pengiriman`, {
+                    method: 'PATCH',
+                    headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ armada: armadaTujuan, trip_id: tripId })
+                });
+            } catch (eOngkir) {}
+        }
+
+        // Sinkronkan solar truk ke cashflow jika berpindah ke atau dari armada Truk
+        let titikPindah = (typeof getTripJumlahTitik === 'function') ? getTripJumlahTitik(tr) : (parseInt(tr.jumlah_titik) || 1);
+        await syncSolarTrukToCashflow(tripId, armadaTujuan, tr.tanggal, titikPindah, tr.catatan);
+
+        // Rapikan urutan rit untuk armada asal dan armada tujuan pada tanggal ini
+        let oldArmada = tr.armada;
+        await resequenceTripsForDateAndArmada(tr.tanggal, oldArmada);
+        await resequenceTripsForDateAndArmada(tr.tanggal, armadaTujuan);
 
         alert(`✅ Berhasil memindahkan trip ke armada ${armadaTujuan}!`);
         tutupModalKelolaTripAdmin();
@@ -4379,7 +5289,8 @@ async function eksekusiPecahTripAdmin() {
                 'apikey': SUPA_ANON_KEY,
                 'Authorization': `Bearer ${SUPA_ANON_KEY}`,
                 'Content-Type': 'application/json',
-                'Prefer': 'return=representation'
+                'Prefer': 'return=representation',
+                'x-pin-karyawan': (typeof currentLoggedPin !== 'undefined' && currentLoggedPin) ? currentLoggedPin : '1234'
             },
             body: JSON.stringify({
                 total_kg: sisaKg,
@@ -4410,7 +5321,6 @@ async function eksekusiPecahTripAdmin() {
             total_kg: splitKg,
             jarak_tempuh_km: 0,
             status_trip: tr.status_trip || 'SELESAI',
-            jumlah_titik: 1,
             catatan: `(Pecahan ${nf.format(splitKg)} Kg dari ${tr.armada}) Antar ke ${tr.catatan || 'Konsumen'}`,
             manifest_items: splitManifest.length > 0 ? splitManifest : manifestSumber
         };
@@ -4421,7 +5331,8 @@ async function eksekusiPecahTripAdmin() {
                 'apikey': SUPA_ANON_KEY,
                 'Authorization': `Bearer ${SUPA_ANON_KEY}`,
                 'Content-Type': 'application/json',
-                'Prefer': 'return=representation'
+                'Prefer': 'return=representation',
+                'x-pin-karyawan': (typeof currentLoggedPin !== 'undefined' && currentLoggedPin) ? currentLoggedPin : '1234'
             },
             body: JSON.stringify(newTripPayload)
         });
@@ -4430,6 +5341,14 @@ async function eksekusiPecahTripAdmin() {
             let err = await resInsert.json();
             throw new Error(err.message || 'Gagal membuat trip pecahan');
         }
+
+        let newTripData = await resInsert.json();
+        if (newTripData?.[0]?.id && (targetArmada.includes('8749') || targetArmada.toLowerCase().includes('truk'))) {
+            await syncSolarTrukToCashflow(newTripData[0].id, targetArmada, tr.tanggal, 1, newTripPayload.catatan);
+        }
+
+        await resequenceTripsForDateAndArmada(tr.tanggal, tr.armada);
+        await resequenceTripsForDateAndArmada(tr.tanggal, targetArmada);
 
         alert(`✅ Sukses memecah muatan!\n\n• ${tr.armada}: ${nf.format(sisaKg)} Kg\n• ${targetArmada}: ${nf.format(splitKg)} Kg`);
         tutupModalKelolaTripAdmin();
@@ -4461,7 +5380,7 @@ async function eksekusiGabungTripAdmin() {
 
     let nf = new Intl.NumberFormat('id-ID');
     let totalKgGabung = (parseFloat(trTarget.total_kg) || 0) + (parseFloat(trSource.total_kg) || 0);
-    let totalTitik = (parseInt(trTarget.jumlah_titik) || 1) + (parseInt(trSource.jumlah_titik) || 1);
+    let totalTitik = ((typeof getTripJumlahTitik === 'function') ? getTripJumlahTitik(trTarget) : 1) + ((typeof getTripJumlahTitik === 'function') ? getTripJumlahTitik(trSource) : 1);
 
     let msg = `Gabungkan trip ini ke Rit ${trTarget.urutan_rit || 1} (${trTarget.armada})?\n\n`
             + `• Total Beban Fisik Baru: ${nf.format(totalKgGabung)} Kg\n`
@@ -4477,7 +5396,9 @@ async function eksekusiGabungTripAdmin() {
 
     try {
         let combinedManifest = (trTarget.manifest_items || []).concat(trSource.manifest_items || []);
-        let combinedCatatan = `${trTarget.catatan || ''} | Drop: ${trSource.catatan || ''}`.trim();
+        let cleanCatTarget = (trTarget.catatan || '').replace(/\s*\[\d+\s*Titik\]/gi, '').trim();
+        let cleanCatSource = (trSource.catatan || '').replace(/\s*\[\d+\s*Titik\]/gi, '').trim();
+        let combinedCatatan = `${cleanCatTarget} | Drop: ${cleanCatSource} [${totalTitik} Titik]`.trim();
 
         let resPatch = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?id=eq.${targetId}`, {
             method: 'PATCH',
@@ -4485,11 +5406,11 @@ async function eksekusiGabungTripAdmin() {
                 'apikey': SUPA_ANON_KEY,
                 'Authorization': `Bearer ${SUPA_ANON_KEY}`,
                 'Content-Type': 'application/json',
-                'Prefer': 'return=representation'
+                'Prefer': 'return=representation',
+                'x-pin-karyawan': (typeof currentLoggedPin !== 'undefined' && currentLoggedPin) ? currentLoggedPin : '1234'
             },
             body: JSON.stringify({
                 total_kg: totalKgGabung,
-                jumlah_titik: totalTitik,
                 manifest_items: combinedManifest,
                 catatan: combinedCatatan
             })
@@ -4504,7 +5425,8 @@ async function eksekusiGabungTripAdmin() {
             method: 'DELETE',
             headers: {
                 'apikey': SUPA_ANON_KEY,
-                'Authorization': `Bearer ${SUPA_ANON_KEY}`
+                'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                'x-pin-karyawan': (typeof currentLoggedPin !== 'undefined' && currentLoggedPin) ? currentLoggedPin : '1234'
             }
         });
 
@@ -4530,6 +5452,25 @@ async function eksekusiGabungTripAdmin() {
             console.warn("Gagal update referensi trip_id transaksi_pakan:", eTx);
         }
 
+        // Sinkronkan cashflow: hapus solar source trip & update solar target trip jika Truk
+        try {
+            await fetch(`${SUPA_URL}/rest/v1/cashflow?keterangan=like.*${encodeURIComponent(`[TRIP:${sourceId}]`)}*`, {
+                method: 'DELETE',
+                headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+            });
+        } catch (eDelCF) {}
+
+        let isTargetTruk = (trTarget.armada || '').includes('8749') || (trTarget.armada || '').includes('Truk');
+        if (isTargetTruk) {
+            await syncSolarTrukToCashflow(targetId, trTarget.armada, trTarget.tanggal, totalTitik, combinedCatatan);
+        }
+
+        // Pastikan urutan rit kedua armada kembali rapi berurutan
+        await resequenceTripsForDateAndArmada(trSource.tanggal, trSource.armada);
+        if (trTarget.armada !== trSource.armada) {
+            await resequenceTripsForDateAndArmada(trTarget.tanggal, trTarget.armada);
+        }
+
         alert(`✅ Sukses! Kedua pengiriman berhasil digabung menjadi 1 Rit Fisik (${totalTitik} Titik Drop, Total ${nf.format(totalKgGabung)} Kg).`);
         tutupModalKelolaTripAdmin();
         if (typeof loadLogBBMAdmin === 'function') await loadLogBBMAdmin();
@@ -4544,6 +5485,11 @@ async function hapusTripAdminDariLog() {
     let tripId = document.getElementById('kelola-trip-id')?.value;
     if (!tripId) return;
 
+    let trips = window._cacheArmadaData?.trips || window.tripState?.cachedTrips || [];
+    let tr = trips.find(t => t.id == tripId);
+    let trTanggal = tr?.tanggal;
+    let trArmada = tr?.armada;
+
     if (!confirm("Yakin ingin menghapus baris trip ini dari catatan perjalanan armada?\n\nCatatan: Data transaksi pakan & omzet tetap aman, hanya baris perjalanan ini yang dihapus.")) {
         return;
     }
@@ -4553,7 +5499,8 @@ async function hapusTripAdminDariLog() {
             method: 'DELETE',
             headers: {
                 'apikey': SUPA_ANON_KEY,
-                'Authorization': `Bearer ${SUPA_ANON_KEY}`
+                'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                'x-pin-karyawan': (typeof currentLoggedPin !== 'undefined' && currentLoggedPin) ? currentLoggedPin : '1234'
             }
         });
 
@@ -4577,6 +5524,19 @@ async function hapusTripAdminDariLog() {
             console.warn("Gagal lepas relasi trip_id di transaksi_pakan:", eTx);
         }
 
+        // Hapus entri solar truk di cashflow jika sebelumnya tercatat
+        try {
+            await fetch(`${SUPA_URL}/rest/v1/cashflow?keterangan=like.*${encodeURIComponent(`[TRIP:${tripId}]`)}*`, {
+                method: 'DELETE',
+                headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+            });
+        } catch (eDelCF) {}
+
+        // Resequence nomor urutan rit yang tersisa
+        if (trTanggal && trArmada) {
+            await resequenceTripsForDateAndArmada(trTanggal, trArmada);
+        }
+
         alert("✅ Baris trip berhasil dihapus dari log armada.");
         tutupModalKelolaTripAdmin();
         if (typeof loadLogBBMAdmin === 'function') await loadLogBBMAdmin();
@@ -4591,8 +5551,7 @@ async function hapusTripAdminDariLog() {
 
 window._raporSettings = window._raporSettings || {
     showPendapatan: true,
-    printPendapatan: false,
-    autoSolarTruk: true
+    printPendapatan: false
 };
 
 function toggleRaporSetting(key, val) {
@@ -4600,7 +5559,7 @@ function toggleRaporSetting(key, val) {
     renderRaporArmadaView();
 }
 
-function getFleetReportMetrics(targetArmada, allTrips, allExpenses, ongkirRows, autoSolarTruk = true) {
+function getFleetReportMetrics(targetArmada, allTrips, allExpenses, ongkirRows) {
     let trips = (allTrips || []).filter(t => {
         let arm = (t.armada || '').toUpperCase();
         if (targetArmada === 'D 8707 UE') return arm.includes('8707') || arm.includes('8070');
@@ -4610,6 +5569,30 @@ function getFleetReportMetrics(targetArmada, allTrips, allExpenses, ongkirRows, 
     });
 
     let tripIdSet = new Set(trips.map(t => t.id));
+    let tripRelasiDates = new Set();
+    trips.forEach(t => {
+        let rList = (t.manifest_items || []).map(m => (m.relasi || '').trim().toLowerCase()).filter(Boolean);
+        if (rList.length === 0 && t.catatan) {
+            let cleanCat = t.catatan.replace(/\[.*?\]/g, '').replace(/Rit\s*\d+/gi, '').replace(/D\s*\d+\s*[A-Z]+/gi, '').trim().toLowerCase();
+            if (cleanCat) rList.push(cleanCat);
+        }
+        rList.forEach(r => {
+            if (r) tripRelasiDates.add(`${t.tanggal}__${r}`);
+        });
+    });
+
+    // Cek apakah relasi tersebut ada di armada lain pada tanggal yang sama
+    let otherTripsRelasiDates = new Set();
+    (allTrips || []).filter(t => !tripIdSet.has(t.id)).forEach(t => {
+        let rList = (t.manifest_items || []).map(m => (m.relasi || '').trim().toLowerCase()).filter(Boolean);
+        if (rList.length === 0 && t.catatan) {
+            let cleanCat = t.catatan.replace(/\[.*?\]/g, '').replace(/Rit\s*\d+/gi, '').replace(/D\s*\d+\s*[A-Z]+/gi, '').trim().toLowerCase();
+            if (cleanCat) rList.push(cleanCat);
+        }
+        rList.forEach(r => {
+            if (r) otherTripsRelasiDates.add(`${t.tanggal}__${r}`);
+        });
+    });
 
     let expenses = (allExpenses || []).filter(item => {
         let str = `${item.armada || ''} ${item.relasi || ''} ${item.keterangan || ''}`.toUpperCase();
@@ -4620,7 +5603,7 @@ function getFleetReportMetrics(targetArmada, allTrips, allExpenses, ongkirRows, 
     });
 
     let totalRit = trips.length;
-    let totalTitik = trips.reduce((sum, t) => sum + (parseInt(t.jumlah_titik) || 1), 0);
+    let totalTitik = trips.reduce((sum, t) => sum + ((typeof getTripJumlahTitik === 'function') ? getTripJumlahTitik(t) : (parseInt(t.jumlah_titik) || 1)), 0);
     let totalKg = trips.reduce((sum, t) => sum + (parseFloat(t.total_kg) || 0), 0);
     let totalKm = trips.reduce((sum, t) => sum + (parseFloat(t.jarak_tempuh_km) || 0), 0);
     let avgKgPerRit = totalRit > 0 ? Math.round(totalKg / totalRit) : 0;
@@ -4642,28 +5625,33 @@ function getFleetReportMetrics(targetArmada, allTrips, allExpenses, ongkirRows, 
         }
     });
 
-    // Otomatisasi Solar Truk (Pak Agus): Standar Rp 100.000 per titik pengantaran jika tidak ada catatan SPBU manual
-    let isSolarTrukAuto = false;
-    if (targetArmada === 'D 8749 UA' && autoSolarTruk) {
-        if (bbm === 0 && totalTitik > 0) {
-            bbm = totalTitik * 100000;
-            isSolarTrukAuto = true;
-        }
-    }
-
     let totalBiaya = bbm + servis + ban + cuci + lainnya;
     let costPerKg = totalKg > 0 ? (totalBiaya / totalKg) : 0;
     let costPerKm = totalKm > 0 ? (totalBiaya / totalKm) : 0;
 
     // Hitung Pendapatan Ongkir yang diperoleh armada ini
     let armadaOngkir = (ongkirRows || []).filter(row => {
+        // Prioritas 1: Jika baris ongkir terhubung langsung ke trip_id armada ini
+        if (row.trip_id) {
+            return tripIdSet.has(row.trip_id);
+        }
+        // Prioritas 2: Jika baris ongkir memiliki relasi dan tanggal yang diantar oleh trip armada ini
+        let relClean = (row.relasi || '').trim().toLowerCase();
+        let keyRel = `${row.tanggal}__${relClean}`;
+        if (tripRelasiDates.has(keyRel)) {
+            return true;
+        }
+        // Jika relasi ini diantar oleh armada lain pada tanggal yang sama, jangan klaim
+        if (otherTripsRelasiDates.has(keyRel)) {
+            return false;
+        }
+        // Prioritas 3: Jika tidak ada trip fisik hari itu, gunakan kolom armada bawaan
         let arm = (row.armada || '').toUpperCase();
         if (arm) {
             if (targetArmada === 'D 8707 UE') return arm.includes('8707') || arm.includes('8070');
             if (targetArmada === 'D 8142 UK') return arm.includes('8142');
             if (targetArmada === 'D 8749 UA') return arm.includes('8749') || arm.includes('TRUK');
         }
-        if (row.trip_id && tripIdSet.has(row.trip_id)) return true;
         return false;
     });
 
@@ -4677,7 +5665,7 @@ function getFleetReportMetrics(targetArmada, allTrips, allExpenses, ongkirRows, 
         totalKm,
         avgKgPerRit,
         bbm,
-        isSolarTrukAuto,
+        isSolarTrukAuto: false,
         servis,
         ban,
         cuci,
@@ -4700,11 +5688,11 @@ function renderRaporArmadaView() {
     let ongkirRows = window._cacheArmadaData?.ongkirRows || [];
     let labelPeriode = window._cacheArmadaData?.labelPeriode || 'Periode Aktif';
 
-    let settings = window._raporSettings || { showPendapatan: true, printPendapatan: false, autoSolarTruk: true };
+    let settings = window._raporSettings || { showPendapatan: true, printPendapatan: false };
 
-    let mHilman = getFleetReportMetrics('D 8707 UE', allTrips, allExpenses, ongkirRows, settings.autoSolarTruk);
-    let mAdi = getFleetReportMetrics('D 8142 UK', allTrips, allExpenses, ongkirRows, settings.autoSolarTruk);
-    let mTruk = getFleetReportMetrics('D 8749 UA', allTrips, allExpenses, ongkirRows, settings.autoSolarTruk);
+    let mHilman = getFleetReportMetrics('D 8707 UE', allTrips, allExpenses, ongkirRows);
+    let mAdi = getFleetReportMetrics('D 8142 UK', allTrips, allExpenses, ongkirRows);
+    let mTruk = getFleetReportMetrics('D 8749 UA', allTrips, allExpenses, ongkirRows);
 
     let totRit = mHilman.totalRit + mAdi.totalRit + mTruk.totalRit;
     let totTitik = mHilman.totalTitik + mAdi.totalTitik + mTruk.totalTitik;
@@ -4742,10 +5730,6 @@ function renderRaporArmadaView() {
 
             <!-- Opsi Pengaturan Rapor & Tampilan -->
             <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; background:#f8fafc; border:1px solid #e2e8f0; padding:9px 12px; border-radius:8px; margin-bottom:16px; font-size:11px; color:#334155;">
-                <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:600;">
-                    <input type="checkbox" ${settings.autoSolarTruk ? 'checked' : ''} onchange="toggleRaporSetting('autoSolarTruk', this.checked)">
-                    Hitung Solar Truk Standar (Rp 100.000 / titik)
-                </label>
                 <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:600;">
                     <input type="checkbox" ${settings.showPendapatan ? 'checked' : ''} onchange="toggleRaporSetting('showPendapatan', this.checked)">
                     Tampilkan Pendapatan Ongkir & Margin di Layar
@@ -4927,7 +5911,7 @@ function renderRaporArmadaView() {
                     <div style="background:#ffffff; padding:10px; border-radius:8px; border:1px solid #e2e8f0; font-size:11px;">
                         <div style="display:flex; justify-content:space-between; margin-bottom:3px; color:#475569;">
                             <span>Solar / BBM:</span>
-                            <b>Rp ${nf.format(mTruk.bbm)} ${mTruk.isSolarTrukAuto ? '<span style="font-size:9.5px; color:#a16207; font-weight:600;">(Standar Titik)</span>' : ''}</b>
+                            <b>Rp ${nf.format(mTruk.bbm)}</b>
                         </div>
                         <div style="display:flex; justify-content:space-between; margin-bottom:3px; color:#475569;">
                             <span>Servis & Oli:</span>
@@ -4966,7 +5950,7 @@ function renderRaporArmadaView() {
             <!-- Tabel Komparasi Head-to-Head 3 Armada + Total CBL -->
             <div style="border-radius:10px; overflow:hidden; border:1px solid #e2e8f0; margin-top:10px;">
                 <table style="width:100%; border-collapse:collapse; font-size:11.5px; text-align:left;">
-                    <thead style="background:#1e293b; color:#ffffff;">
+                    <thead style="background:#1e3a8a; color:#ffffff;">
                         <tr>
                             <th style="padding:10px 12px; font-weight:700;">Parameter / Metrik Kinerja</th>
                             <th style="padding:10px 12px; text-align:right; font-weight:700;">D 8707 UE (Hilman)</th>
@@ -5008,7 +5992,7 @@ function renderRaporArmadaView() {
                             <td style="padding:9px 12px; color:#854d0e; font-weight:600;">Biaya BBM / Solar</td>
                             <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mHilman.bbm)}</td>
                             <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mAdi.bbm)}</td>
-                            <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mTruk.bbm)} ${mTruk.isSolarTrukAuto ? '<span style="font-size:9.5px; color:#a16207; font-weight:600;">(Standar Titik)</span>' : ''}</td>
+                            <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mTruk.bbm)}</td>
                             <td style="padding:9px 12px; text-align:right; font-weight:700; color:#854d0e; background:#fef9c3;">Rp ${nf.format(totBbm)}</td>
                         </tr>
                         <tr style="border-bottom:1px solid #e2e8f0;">
@@ -5032,12 +6016,12 @@ function renderRaporArmadaView() {
                             <td style="padding:9px 12px; text-align:right;">Rp ${nf.format(mTruk.cuci + mTruk.lainnya)}</td>
                             <td style="padding:9px 12px; text-align:right; font-weight:700; color:#0369a1; background:#f1f5f9;">Rp ${nf.format(totCuciLain)}</td>
                         </tr>
-                        <tr style="border-bottom:2px solid #cbd5e1; background:#fef2f2;">
-                            <td style="padding:10px 12px; font-weight:700; color:#991b1b;">Total Biaya Operasional</td>
-                            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#b91c1c;">Rp ${nf.format(mHilman.totalBiaya)}</td>
-                            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#b91c1c;">Rp ${nf.format(mAdi.totalBiaya)}</td>
-                            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#b91c1c;">Rp ${nf.format(mTruk.totalBiaya)}</td>
-                            <td style="padding:10px 12px; text-align:right; font-weight:800; background:#fee2e2; color:#991b1b;">Rp ${nf.format(totBiaya)}</td>
+                        <tr style="border-bottom:2px solid #ca8a04; background:#fef08a;">
+                            <td style="padding:10px 12px; font-weight:800; color:#854d0e;">TOTAL BIAYA OPERASIONAL</td>
+                            <td style="padding:10px 12px; text-align:right; font-weight:800; color:#854d0e;">Rp ${nf.format(mHilman.totalBiaya)}</td>
+                            <td style="padding:10px 12px; text-align:right; font-weight:800; color:#854d0e;">Rp ${nf.format(mAdi.totalBiaya)}</td>
+                            <td style="padding:10px 12px; text-align:right; font-weight:800; color:#854d0e;">Rp ${nf.format(mTruk.totalBiaya)}</td>
+                            <td style="padding:10px 12px; text-align:right; font-weight:900; background:#fde047; color:#713f12;">Rp ${nf.format(totBiaya)}</td>
                         </tr>
                         <tr style="background:#f0fdf4; border-bottom:${showPendapatan ? '1px solid #e2e8f0' : 'none'};">
                             <td style="padding:10px 12px; font-weight:700; color:#15803d;">Efisiensi: Biaya Logistik per Kg</td>
@@ -5076,11 +6060,11 @@ function cetakRaporArmada() {
     let ongkirRows = window._cacheArmadaData?.ongkirRows || [];
     let labelPeriode = window._cacheArmadaData?.labelPeriode || 'Periode Aktif';
 
-    let settings = window._raporSettings || { showPendapatan: true, printPendapatan: false, autoSolarTruk: true };
+    let settings = window._raporSettings || { showPendapatan: true, printPendapatan: false };
 
-    let mHilman = getFleetReportMetrics('D 8707 UE', allTrips, allExpenses, ongkirRows, settings.autoSolarTruk);
-    let mAdi = getFleetReportMetrics('D 8142 UK', allTrips, allExpenses, ongkirRows, settings.autoSolarTruk);
-    let mTruk = getFleetReportMetrics('D 8749 UA', allTrips, allExpenses, ongkirRows, settings.autoSolarTruk);
+    let mHilman = getFleetReportMetrics('D 8707 UE', allTrips, allExpenses, ongkirRows);
+    let mAdi = getFleetReportMetrics('D 8142 UK', allTrips, allExpenses, ongkirRows);
+    let mTruk = getFleetReportMetrics('D 8749 UA', allTrips, allExpenses, ongkirRows);
 
     let totRit = mHilman.totalRit + mAdi.totalRit + mTruk.totalRit;
     let totKg = mHilman.totalKg + mAdi.totalKg + mTruk.totalKg;
@@ -5112,7 +6096,7 @@ function cetakRaporArmada() {
                 <style>
                     @page {
                         size: A4 landscape;
-                        margin: 12mm 15mm;
+                        margin: 16mm 20mm;
                     }
                     * {
                         box-sizing: border-box;
@@ -5121,7 +6105,7 @@ function cetakRaporArmada() {
                     }
                     body {
                         font-family: Arial, Helvetica, sans-serif;
-                        padding: 0;
+                        padding: 8px 12px;
                         margin: 0;
                         color: #0f172a;
                         background: #ffffff;
@@ -5208,12 +6192,19 @@ function cetakRaporArmada() {
                         padding: 5px 8px;
                     }
                     .table-rapor th {
-                        background-color: #f1f5f9;
-                        color: #0f172a;
+                        background-color: #1e3a8a;
+                        color: #ffffff;
                         font-weight: 800;
                         text-align: left;
                     }
-                    .table-rapor td.right, .table-rapor th.right {
+                    .table-rapor th.right {
+                        text-align: right;
+                    }
+                    .table-rapor th.bg-total {
+                        background-color: #0f172a;
+                        color: #ffffff;
+                    }
+                    .table-rapor td.right {
                         text-align: right;
                     }
                     .bg-light {
@@ -5222,6 +6213,16 @@ function cetakRaporArmada() {
                     .bg-total {
                         background-color: #f1f5f9;
                         font-weight: 800;
+                    }
+                    .bg-biaya-kuning {
+                        background-color: #fef08a !important;
+                        color: #854d0e !important;
+                        font-weight: 800 !important;
+                    }
+                    .bg-biaya-kuning-total {
+                        background-color: #fde047 !important;
+                        color: #713f12 !important;
+                        font-weight: 900 !important;
                     }
                     .signatures {
                         display: flex;
@@ -5247,7 +6248,7 @@ function cetakRaporArmada() {
             <body>
                 <div class="header-box">
                     <div>
-                        <div class="company-name">PT CITRA BINTANG LOGISTIK (CBL)</div>
+                        <div class="company-name">PT CITA BENGGALA LESTARI (CBL)</div>
                         <div class="doc-title">RAPOR KINERJA DAN BIAYA OPERASIONAL ARMADA PENGIRIMAN</div>
                     </div>
                     <div class="doc-meta">
@@ -5334,7 +6335,7 @@ function cetakRaporArmada() {
                         <div class="row-kv"><span>Rata-rata/Rit:</span><span>${nf.format(mTruk.avgKgPerRit)} Kg</span></div>
                         <div class="row-kv"><span>Jarak Tempuh:</span><span>${nf.format(mTruk.totalKm)} Km</span></div>
                         <div style="border-top:1px dashed #cbd5e1; margin:4px 0;"></div>
-                        <div class="row-kv"><span>BBM / Solar:</span><span>Rp ${nf.format(mTruk.bbm)} ${mTruk.isSolarTrukAuto ? '(Standar Titik)' : ''}</span></div>
+                        <div class="row-kv"><span>BBM / Solar:</span><span>Rp ${nf.format(mTruk.bbm)}</span></div>
                         <div class="row-kv"><span>Servis & Sparepart:</span><span>Rp ${nf.format(mTruk.servis)}</span></div>
                         <div class="row-kv"><span>Ban & Angin:</span><span>Rp ${nf.format(mTruk.ban)}</span></div>
                         <div class="row-kv"><span>Cuci, Tol & Parkir:</span><span>Rp ${nf.format(mTruk.cuci + mTruk.lainnya)}</span></div>
@@ -5397,7 +6398,7 @@ function cetakRaporArmada() {
                             <td>Biaya BBM / Solar</td>
                             <td class="right">Rp ${nf.format(mHilman.bbm)}</td>
                             <td class="right">Rp ${nf.format(mAdi.bbm)}</td>
-                            <td class="right">Rp ${nf.format(mTruk.bbm)} ${mTruk.isSolarTrukAuto ? '(Standar Titik)' : ''}</td>
+                            <td class="right">Rp ${nf.format(mTruk.bbm)}</td>
                             <td class="right bg-total">Rp ${nf.format(totBbm)}</td>
                         </tr>
                         <tr>
@@ -5421,12 +6422,12 @@ function cetakRaporArmada() {
                             <td class="right">Rp ${nf.format(mTruk.cuci + mTruk.lainnya)}</td>
                             <td class="right bg-total">Rp ${nf.format(totCuciLain)}</td>
                         </tr>
-                        <tr class="bg-total">
-                            <td>TOTAL BIAYA OPERASIONAL</td>
-                            <td class="right">Rp ${nf.format(mHilman.totalBiaya)}</td>
-                            <td class="right">Rp ${nf.format(mAdi.totalBiaya)}</td>
-                            <td class="right">Rp ${nf.format(mTruk.totalBiaya)}</td>
-                            <td class="right bg-total">Rp ${nf.format(totBiaya)}</td>
+                        <tr class="bg-biaya-kuning">
+                            <td class="bg-biaya-kuning">TOTAL BIAYA OPERASIONAL</td>
+                            <td class="right bg-biaya-kuning">Rp ${nf.format(mHilman.totalBiaya)}</td>
+                            <td class="right bg-biaya-kuning">Rp ${nf.format(mAdi.totalBiaya)}</td>
+                            <td class="right bg-biaya-kuning">Rp ${nf.format(mTruk.totalBiaya)}</td>
+                            <td class="right bg-biaya-kuning-total">Rp ${nf.format(totBiaya)}</td>
                         </tr>
                         <tr class="bg-light">
                             <td>Efisiensi: Biaya Logistik per Kg</td>
@@ -5538,13 +6539,13 @@ async function simpanTripManualAdmin() {
 
     try {
         let fullCatatan = catatan ? `${tujuan} - ${catatan}` : tujuan;
+        if (titik > 1) fullCatatan += ` [${titik} Titik]`;
         let payload = {
             tanggal: tgl,
             cabang: 'PM',
             armada: armada,
             sopir_user_id: sopirId,
             total_kg: kg,
-            jumlah_titik: titik,
             status_trip: 'SELESAI',
             catatan: fullCatatan,
             manifest_items: [{ relasi: tujuan, pakan: 'Pakan Ternak', qty: kg }]
@@ -5564,6 +6565,36 @@ async function simpanTripManualAdmin() {
         if (!res.ok) {
             let err = await res.json();
             throw new Error(err.message || 'Gagal menyimpan pengantaran');
+        }
+
+        let createdTrips = await res.json();
+        let newTripId = Array.isArray(createdTrips) && createdTrips[0]?.id ? createdTrips[0].id : null;
+
+        // Jika admin menugaskan dari pesanan yang belum diantar (Ambil Mandiri)
+        if (newTripId && window._selectedOrderToAssign && Array.isArray(window._selectedOrderToAssign.txIds) && window._selectedOrderToAssign.txIds.length > 0) {
+            try {
+                let inIds = window._selectedOrderToAssign.txIds.join(',');
+                await fetch(`${SUPA_URL}/rest/v1/transaksi_pakan?id=in.(${inIds})`, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': SUPA_ANON_KEY,
+                        'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        trip_id: newTripId,
+                        armada: armada
+                    })
+                });
+            } catch (eLink) {
+                console.warn("Gagal hubungkan transaksi_pakan ke trip manual:", eLink);
+            }
+            window._selectedOrderToAssign = null;
+        }
+
+        // Sinkronkan solar truk ke cashflow jika armada Truk
+        if (newTripId && (armada.includes('8749') || armada.toLowerCase().includes('truk'))) {
+            await syncSolarTrukToCashflow(newTripId, armada, tgl, titik, tujuan);
         }
 
         alert(`✅ Sukses! Pengantaran ${armada} (${tujuan}, ${kg} Kg) berhasil ditambahkan ke log armada.`);
@@ -5666,6 +6697,13 @@ window.bukaShortcutCashflow = function() {
 };
 
 window.renderRekapPayrollAdmin = renderRekapPayrollAdmin;
+window.navigateArmadaPeriod = navigateArmadaPeriod;
+window.switchFilterRuteMode = switchFilterRuteMode;
+window.bukaModalTugaskanArmada = bukaModalTugaskanArmada;
+window.eksekusiTugaskanArmadaCepat = eksekusiTugaskanArmadaCepat;
+window.resequenceTripsForDateAndArmada = resequenceTripsForDateAndArmada;
+window.autoPecahTripKapasitasAdmin = autoPecahTripKapasitasAdmin;
+window.syncSolarTrukToCashflow = syncSolarTrukToCashflow;
 
 
 
