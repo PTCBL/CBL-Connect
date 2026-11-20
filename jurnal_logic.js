@@ -2729,20 +2729,21 @@ async function muatLabaRugi() {
             }
 
             // 3. KANDANG PM (Pembibitan Manoko: Kapalang, Dewasa, Jantan, BX, Domba, Pembibitan, Pedet PM)
-            let pmKelompok = ['kapalang', 'dewasa', 'jantan', 'bx', 'domba', 'pembibitan', 'pedet'];
-            let isPMMatch = pmKelompok.some(k => relLower.includes(k));
+            let pmKelompok = ['kapalang', 'dewasa', 'jantan', 'bx', 'domba', 'pembibitan', 'pedet', 'kambing'];
+            let isPMMatch = pmKelompok.includes(relLower);
             let isPMCabang = cab.includes('kandang pm') || (cab.includes('kandang') && !cab.includes('spn') && !cab.includes('rph'));
 
             if (isPMMatch || isPMCabang) {
                 if (relLower === 'kandang') return null; // Drop logistik umum jangan masuk
                 let unit = rel;
-                if (relLower.includes('kapalang')) unit = 'Kapalang';
-                else if (relLower.includes('dewasa')) unit = 'Dewasa';
-                else if (relLower.includes('jantan')) unit = 'Jantan';
-                else if (relLower.includes('bx')) unit = 'BX';
-                else if (relLower.includes('domba')) unit = 'Domba';
-                else if (relLower.includes('pembibitan')) unit = 'Pembibitan';
-                else if (relLower.includes('pedet')) unit = 'Pedet PM';
+                if (relLower === 'kapalang' || (isPMCabang && relLower.includes('kapalang'))) unit = 'Kapalang';
+                else if (relLower === 'dewasa' || (isPMCabang && relLower.includes('dewasa'))) unit = 'Dewasa';
+                else if (relLower === 'jantan' || (isPMCabang && relLower.includes('jantan'))) unit = 'Jantan';
+                else if (relLower === 'bx' || (isPMCabang && relLower.includes('bx'))) unit = 'BX';
+                else if (relLower === 'domba' || (isPMCabang && relLower.includes('domba'))) unit = 'Domba';
+                else if (relLower === 'pembibitan' || (isPMCabang && relLower.includes('pembibitan'))) unit = 'Pembibitan';
+                else if (relLower === 'pedet' || (isPMCabang && relLower.includes('pedet'))) unit = 'Pedet PM';
+                else if (!isPMMatch && !isPMCabang) return null;
                 return { cabangKey: 'PM', unit: unit };
             }
 

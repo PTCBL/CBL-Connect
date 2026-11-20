@@ -133,20 +133,19 @@ function isPenjualanMurniPM(row) {
     let catatanLower = String(row.catatan || '').toLowerCase().trim();
 
     // 1. Filter Giling Ransum
-    if (relasiLower.includes("rd") || relasiLower.includes("rl") || relasiLower.includes("darbun") || relasiLower.includes("laktasi")) {
+    let gilingList = ['rd', 'rl', 'darbun', 'laktasi'];
+    if (gilingList.includes(relasiLower) || relasiLower.includes("giling")) {
         return false;
     }
-    // 2. Filter Pemakaian Internal Kandang
-    if (cabangLower.includes('kandang') || relasiLower.includes("kandang") || 
-        relasiLower.includes('kapalang') || relasiLower.includes('dewasa') || 
-        relasiLower.includes('jantan') || relasiLower.includes('pedet') || 
-        relasiLower.includes('kerbau') || relasiLower.includes('bunting') ||
-        relasiLower.includes('bx') || relasiLower.includes('domba') ||
-        relasiLower.includes('cibulakan')) {
+    // 2. Filter Pemakaian Internal Kandang (hanya entitas ternak internal persis)
+    let kelompokKandang = ['kapalang', 'dewasa', 'jantan', 'pedet', 'kerbau', 'bunting', 'bx', 'domba', 'kambing'];
+    if (cabangLower.includes('kandang') || relasiLower === "kandang" || relasiLower === "kandang pm" || relasiLower === "kandang spn" ||
+        kelompokKandang.includes(relasiLower) ||
+        relasiLower === 'cibulakan') {
         return false;
     }
     // 3. Filter Mutasi Antar Gudang
-    if (relasiLower.includes("rph") || relasiLower.includes("spn") || relasiLower.includes("pembibitan") || catatanLower.includes("mutasi")) {
+    if (relasiLower === "rph" || relasiLower === "spn" || relasiLower === "pembibitan" || relasiLower.includes("mutasi") || catatanLower.includes("mutasi")) {
         return false;
     }
 

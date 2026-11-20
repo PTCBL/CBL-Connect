@@ -5014,7 +5014,7 @@
                             </button>
                             <button type="button" id="tab-subview-ambil" onclick="switchFilterRuteMode('ambil')"
                                 style="padding:6px 14px; font-size:11px; font-weight:700; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#475569; cursor:pointer;">
-                                Ambil Mandiri / Belum Diantar (<span id="count-rute-ambil">0</span>)
+                                Ambil Mandiri / Belum Ditentukan (<span id="count-rute-ambil">0</span>)
                             </button>
                         </div>
                         <div id="subview-rute-hint" style="font-size:11px; color:#64748b;">
@@ -5031,6 +5031,7 @@
                                     <th style="padding:10px 8px; text-align:left;">Tujuan (Konsumen / Kandang)</th>
                                     <th style="padding:10px 8px; text-align:left;">Muatan Pakan</th>
                                     <th style="padding:10px 8px; text-align:right;">Total Beban</th>
+                                    <th style="padding:10px 8px; text-align:right;">Pendapatan Ongkir</th>
                                     <th style="padding:10px 8px; text-align:left;">Kru (Supir & Kernek)</th>
                                     <th style="padding:10px 8px; text-align:right;">Jarak PP</th>
                                     <th style="padding:10px 8px; text-align:center;">Status</th>
@@ -5039,7 +5040,7 @@
                             </thead>
                             <tbody id="admin-armada-rute-tbody">
                                 <tr>
-                                    <td colspan="10" style="text-align:center; padding:25px; color:#94a3b8;">Memuat
+                                    <td colspan="11" style="text-align:center; padding:25px; color:#94a3b8;">Memuat
                                         riwayat perjalanan armada...</td>
                                 </tr>
                             </tbody>
@@ -5288,6 +5289,26 @@
                             </div>
                             <span class="material-symbols-outlined" style="font-size:18px; color:#0f766e;">arrow_forward</span>
                         </button>
+                        <button type="button" id="btn-tugaskan-sewaluar" onclick="bukaInputTugaskanSewaLuar()"
+                            style="width:100%; padding:10px 14px; border:1.5px solid #64748b; border-radius:10px; background:#f8fafc; font-size:12px; font-weight:800; color:#334155; cursor:pointer; text-align:left; display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <div style="display:flex; align-items:center; gap:4px;">
+                                    <span class="material-symbols-outlined" style="font-size:16px; color:#475569;">commute</span>
+                                    Armada Luar / Supir Sewa
+                                </div>
+                                <div style="font-size:10px; font-weight:600; color:#64748b; margin-top:2px;">Bantuan supir luar (Doyok, Uje, rental...)</div>
+                            </div>
+                            <span class="material-symbols-outlined" style="font-size:18px; color:#64748b;">arrow_forward</span>
+                        </button>
+                        <div id="container-tugaskan-sewaluar" style="display:none; background:#f1f5f9; border:1.5px solid #cbd5e1; border-radius:10px; padding:10px;">
+                            <label style="font-size:11px; font-weight:700; color:#334155; margin-bottom:4px; display:block;">Nama Supir / Armada Sewa Luar:</label>
+                            <div style="display:flex; gap:6px;">
+                                <input type="text" id="input-tugaskan-sewaluar-nama" placeholder="Cth: Doyok, Uje, Pick-up Sewa..." style="flex:1; padding:8px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+                                <button type="button" onclick="eksekusiTugaskanSewaLuar()" style="background:#0f766e; color:white; border:none; padding:8px 14px; border-radius:6px; font-weight:700; font-size:12px; cursor:pointer;">
+                                    Tugaskan
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <div style="text-align:right;">
@@ -6821,9 +6842,189 @@
                         style="margin:0; background:#0f766e; padding:12px; font-size: 15px; display:flex; align-items:center; justify-content:center; gap:8px;">
                         <span class="material-symbols-outlined">local_shipping</span> D 8749 UA (Truk - Pak Agus)
                     </button>
+                    <button type="button" class="btn-submit" onclick="bukaModalMultiArmada()"
+                        style="margin:0; background:#7c3aed; padding:12px; font-size: 15px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                        <span class="material-symbols-outlined">hub</span> Kirim Multi-Armada (Bagi Armada)
+                    </button>
+                    <button type="button" class="btn-submit" onclick="toggleInputArmadaLuar()"
+                        style="margin:0; background:#334155; padding:12px; font-size: 15px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                        <span class="material-symbols-outlined">commute</span> Armada Luar / Supir Sewa
+                    </button>
+                    <div id="container-input-armada-luar" style="display:none; background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:10px; padding:10px; margin-top:2px;">
+                        <label style="font-size:11px; font-weight:700; color:#334155; margin-bottom:4px; display:block;">Nama Supir / Kendaraan Luar:</label>
+                        <div style="display:flex; gap:6px;">
+                            <input type="text" id="input-nama-supir-luar" placeholder="Cth: Doyok, Uje, Pick-up Sewa..." style="flex:1; padding:8px 10px; font-size:12px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+                            <button type="button" onclick="konfirmasiArmadaLuarDariModal()" style="background:#0f766e; color:white; border:none; padding:8px 14px; border-radius:6px; font-weight:700; font-size:12px; cursor:pointer;">
+                                Pilih
+                            </button>
+                        </div>
+                    </div>
                     <button class="btn-submit" onclick="prosesOngkirAmbil()"
                         style="margin:0; background:#64748b; padding:11px; font-size: 14px; display:flex; align-items:center; justify-content:center; gap:8px;">
                         <span class="material-symbols-outlined">storefront</span> Diambil Mandiri di Gudang
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL PILIHAN RIT OVERLOAD (TOLERANSI S/D 200 KG) -->
+        <div id="modal-pilihan-rit-overload" class="hidden"
+            style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:10000; display:none; justify-content:center; align-items:center; padding:15px; box-sizing:border-box;">
+            <div style="background:#ffffff; border-radius:14px; max-width:400px; width:100%; padding:20px; box-sizing:border-box; box-shadow:0 10px 25px rgba(0,0,0,0.25);">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                    <span class="material-symbols-outlined" style="color:#d97706; font-size:24px;">warning</span>
+                    <div>
+                        <h3 style="margin:0; font-size:15px; font-weight:800; color:#1e293b;">Pilihan Rit Pengantaran</h3>
+                        <div id="pilihan-rit-subtitle" style="font-size:11px; color:#64748b; margin-top:2px;">Muatan melebihi 1.500 Kg</div>
+                    </div>
+                </div>
+
+                <div style="font-size:11.5px; color:#475569; margin-bottom:14px; line-height:1.4;">
+                    Kapasitas standar pick-up 1.500 Kg. Pilih cara pengantaran armada:
+                </div>
+
+                <!-- OPSI 1: 1 RIT -->
+                <button type="button" onclick="konfirmasiRitOverload(1)"
+                    style="width:100%; padding:12px 14px; border:1.5px solid #2563eb; border-radius:10px; background:#eff6ff; text-align:left; cursor:pointer; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-size:13px; font-weight:800; color:#1d4ed8; display:flex; align-items:center; gap:6px;">
+                            <span class="material-symbols-outlined" style="font-size:18px;">local_shipping</span> 1 Rit
+                        </div>
+                        <div style="font-size:11px; color:#475569; margin-top:3px;">Antar total tonase sekali jalan / 1 Rit</div>
+                        <div style="font-size:10px; color:#15803d; font-weight:700; margin-top:2px;">• Ongkir: 1 Rit</div>
+                    </div>
+                    <span class="material-symbols-outlined" style="font-size:20px; color:#2563eb;">arrow_forward</span>
+                </button>
+
+                <!-- OPSI 2: 2 RIT -->
+                <button type="button" onclick="konfirmasiRitOverload(2)"
+                    style="width:100%; padding:12px 14px; border:1.5px solid #ea580c; border-radius:10px; background:#fff7ed; text-align:left; cursor:pointer; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-size:13px; font-weight:800; color:#c2410c; display:flex; align-items:center; gap:6px;">
+                            <span class="material-symbols-outlined" style="font-size:18px;">sync_alt</span> 2 Rit
+                        </div>
+                        <div style="font-size:11px; color:#475569; margin-top:3px;">Antar kiriman 2 kali jalan / 2 Rit</div>
+                        <div style="font-size:10px; color:#ea580c; font-weight:700; margin-top:2px;">• Ongkir: 2 Rit</div>
+                    </div>
+                    <span class="material-symbols-outlined" style="font-size:20px; color:#ea580c;">arrow_forward</span>
+                </button>
+
+                <button type="button" onclick="tutupModalPilihanRitOverload()"
+                    style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; background:#f8fafc; color:#64748b; font-weight:700; font-size:11px; cursor:pointer;">
+                    Batal
+                </button>
+            </div>
+        </div>
+
+        <!-- MODAL MULTI-ARMADA (AUTO-FILL + CUSTOM INPUT PER ARMADA) -->
+        <div id="modal-multi-armada" class="hidden"
+            style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:10001; display:none; justify-content:center; align-items:center; padding:15px; box-sizing:border-box;">
+            <div style="background:#ffffff; border-radius:14px; max-width:440px; width:100%; padding:20px; box-sizing:border-box; box-shadow:0 10px 25px rgba(0,0,0,0.25); max-height:92vh; overflow-y:auto;">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px; border-bottom:1px solid #f1f5f9; padding-bottom:10px;">
+                    <div style="background:#f5f3ff; width:42px; height:42px; border-radius:10px; display:flex; align-items:center; justify-content:center; border:1px solid #ddd6fe;">
+                        <span class="material-symbols-outlined" style="color:#7c3aed; font-size:24px;">hub</span>
+                    </div>
+                    <div>
+                        <h3 style="margin:0; font-size:16px; font-weight:800; color:#1e293b;">Alokasi Multi-Armada</h3>
+                        <div id="multi-armada-subtitle" style="font-size:11px; color:#64748b; margin-top:2px;">Bagi muatan ke beberapa armada</div>
+                    </div>
+                </div>
+
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-size:10px; font-weight:700; color:#64748b;">TOTAL PESANAN</div>
+                        <div id="multi-armada-total-order-label" style="font-size:16px; font-weight:800; color:#1e293b;">0 Kg</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:10px; font-weight:700; color:#64748b;">ESTIMASI ONGKIR KONSUMEN</div>
+                        <div id="multi-armada-total-ongkir-label" style="font-size:14px; font-weight:800; color:#16a34a;">Rp 0 (0 Rit)</div>
+                    </div>
+                </div>
+
+                <!-- LANGKAH 1: JATAH TRUK UTAMA -->
+                <div style="font-size:11px; font-weight:800; color:#0f766e; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
+                    <span class="material-symbols-outlined" style="font-size:15px;">local_shipping</span> 1. Jatah Truk Utama (Pak Agus)
+                </div>
+                <div style="border:1.5px solid #0f766e; border-radius:10px; padding:10px 12px; margin-bottom:12px; background:#f0fdfa;" id="box-armada-8749">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:800; color:#0f766e; cursor:pointer;">
+                            <input type="checkbox" id="chk-armada-8749" onchange="onMultiArmadaToggle('8749')" checked style="width:16px; height:16px; accent-color:#0f766e;">
+                            D 8749 UA (Truk)
+                        </label>
+                        <span style="font-size:10px; font-weight:700; background:#ccfbf1; color:#0f766e; padding:2px 6px; border-radius:6px;">Fleksibel (~7.500 - 8.500 Kg)</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input type="number" id="input-kg-8749" min="0" step="50" placeholder="0" oninput="onMultiArmadaInputChange()"
+                            style="flex:1; padding:8px 10px; font-size:14px; font-weight:800; border:1px solid #cbd5e1; border-radius:6px; outline:none; text-align:right;">
+                        <span style="font-size:12px; font-weight:700; color:#475569;">Kg</span>
+                        <div id="badge-rit-8749" style="font-size:11px; font-weight:700; color:#0f766e; background:#ffffff; padding:6px 8px; border-radius:6px; min-width:85px; text-align:right; border:1px solid #ccfbf1;">0 Rit (Rp 0)</div>
+                    </div>
+                </div>
+
+                <!-- LANGKAH 2: GELOMBANG 1 PICK-UP -->
+                <div style="font-size:11px; font-weight:800; color:#c2410c; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
+                    <span class="material-symbols-outlined" style="font-size:15px;">rv_hookup</span> 2. Gelombang 1 Pick-up (Maks. 1.500 Kg / Rit)
+                </div>
+
+                <!-- 2. GRANMAX D 8142 UK -->
+                <div style="border:1.5px solid #ea580c; border-radius:10px; padding:10px 12px; margin-bottom:8px; background:#fff7ed;" id="box-armada-8142">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:800; color:#ea580c; cursor:pointer;">
+                            <input type="checkbox" id="chk-armada-8142" onchange="onMultiArmadaToggle('8142')" checked style="width:16px; height:16px; accent-color:#ea580c;">
+                            D 8142 UK (GranMax - Pak Adi)
+                        </label>
+                        <span style="font-size:10px; font-weight:700; background:#ffedd5; color:#c2410c; padding:2px 6px; border-radius:6px;">Rit 1 (Max 1.500 Kg)</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input type="number" id="input-kg-8142" min="0" step="50" placeholder="0" oninput="onMultiArmadaInputChange()"
+                            style="flex:1; padding:8px 10px; font-size:14px; font-weight:800; border:1px solid #cbd5e1; border-radius:6px; outline:none; text-align:right;">
+                        <span style="font-size:12px; font-weight:700; color:#475569;">Kg</span>
+                        <div id="badge-rit-8142" style="font-size:11px; font-weight:700; color:#c2410c; background:#ffffff; padding:6px 8px; border-radius:6px; min-width:85px; text-align:right; border:1px solid #ffedd5;">0 Rit (Rp 0)</div>
+                    </div>
+                </div>
+
+                <!-- 3. CARRY D 8707 UE -->
+                <div style="border:1.5px solid #2563eb; border-radius:10px; padding:10px 12px; margin-bottom:12px; background:#eff6ff;" id="box-armada-8707">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:800; color:#2563eb; cursor:pointer;">
+                            <input type="checkbox" id="chk-armada-8707" onchange="onMultiArmadaToggle('8707')" checked style="width:16px; height:16px; accent-color:#2563eb;">
+                            D 8707 UE (Carry - Pak Hilman)
+                        </label>
+                        <span style="font-size:10px; font-weight:700; background:#dbeafe; color:#1d4ed8; padding:2px 6px; border-radius:6px;">Rit 1 (Max 1.500 Kg)</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input type="number" id="input-kg-8707" min="0" step="50" placeholder="0" oninput="onMultiArmadaInputChange()"
+                            style="flex:1; padding:8px 10px; font-size:14px; font-weight:800; border:1px solid #cbd5e1; border-radius:6px; outline:none; text-align:right;">
+                        <span style="font-size:12px; font-weight:700; color:#475569;">Kg</span>
+                        <div id="badge-rit-8707" style="font-size:11px; font-weight:700; color:#1d4ed8; background:#ffffff; padding:6px 8px; border-radius:6px; min-width:85px; text-align:right; border:1px solid #dbeafe;">0 Rit (Rp 0)</div>
+                    </div>
+                </div>
+
+                <!-- LANGKAH 3: OPSI PENANGANAN SISA MUATAN -->
+                <div id="container-langkah-3-sisa" style="display:none; margin-bottom:14px; background:#fffbeb; border:1.5px solid #fde68a; border-radius:10px; padding:12px;">
+                    <!-- Diisi dinamis -->
+                </div>
+
+                <!-- LIVE VALIDATION STATUS -->
+                <div id="multi-armada-validation-box" style="padding:10px 12px; border-radius:8px; margin-bottom:14px; font-size:12px; font-weight:700; display:flex; align-items:center; gap:6px;">
+                    <!-- Diisi dinamis -->
+                </div>
+
+                <!-- TOMBOL AKSI -->
+                <div style="display:flex; gap:8px;">
+                    <button type="button" onclick="tutupModalMultiArmada()"
+                        style="flex:1; padding:10px; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer;">
+                        Batal
+                    </button>
+                    <button type="button" id="btn-konfirmasi-multi-armada" onclick="konfirmasiMultiArmada()"
+                        style="flex:2; padding:10px; background:#7c3aed; color:white; border:none; border-radius:8px; font-weight:800; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+                        <span class="material-symbols-outlined" style="font-size:18px;">check_circle</span> Konfirmasi Multi-Armada
+                    </button>
+                </div>
+                <div style="margin-top:12px; text-align:center;">
+                    <button type="button" onclick="prosesAmbilMandiriDariMulti()"
+                        style="background:none; border:none; color:#64748b; font-size:11.5px; font-weight:700; text-decoration:underline; cursor:pointer;">
+                        Diambil Mandiri oleh Konsumen di Gudang (Tanpa Ongkir)
                     </button>
                 </div>
             </div>
@@ -8833,12 +9034,14 @@
                             if (!targetArmada && pl.catatan) {
                                 if (pl.catatan.includes('8707') || pl.catatan.includes('8070')) targetArmada = 'D 8707 UE';
                                 else if (pl.catatan.includes('8142')) targetArmada = 'D 8142 UK';
+                                else if (pl.catatan.includes('8749') || pl.catatan.toLowerCase().includes('truk')) targetArmada = 'D 8749 UA';
                                 else if (pl.catatan.toLowerCase().includes('ambil')) targetArmada = 'Ambil Mandiri';
                             }
 
                             let createdTripId = pl.createdTripId || null;
-                            // Catat ke trip_pengiriman HANYA jika menggunakan armada pengantaran fisik CBL (D 8707 UE / D 8142 UK)
-                            if (!createdTripId && targetArmada && targetArmada !== 'Ambil Mandiri') {
+                            let isArmadaLuar = (targetArmada || '').toLowerCase().includes('sewa') || (targetArmada || '').toLowerCase().includes('luar') || (targetArmada || '').toLowerCase().includes('ekspedisi');
+                            // Catat ke trip_pengiriman HANYA jika menggunakan armada pengantaran fisik CBL (bukan Ambil Mandiri dan bukan Sewa Luar)
+                            if (!createdTripId && targetArmada && targetArmada !== 'Ambil Mandiri' && !isArmadaLuar) {
                                 try {
                                     let totalKgMuatan = 0;
                                     let manifestItems = [];
@@ -8869,54 +9072,148 @@
 
                                     let isTruk = targetArmada.includes('8749') || targetArmada.toLowerCase().includes('truk');
                                     let maxCap = isTruk ? 7500 : 1500;
-                                    let totalChunks = Math.max(1, Math.ceil(totalKgMuatan / maxCap));
+                                    let totalChunks = 1;
+                                    let qtyOngkir = 1;
 
-                                    for (let i = 0; i < totalChunks; i++) {
-                                        let chunkKg = (i === totalChunks - 1) ? (totalKgMuatan - (i * maxCap)) : maxCap;
-                                        let ritNum = nextRit + i;
-                                        let tripPayload = {
-                                            tanggal: tglTrip,
-                                            cabang: cabangStr,
-                                            armada: targetArmada,
-                                            urutan_rit: ritNum,
-                                            total_kg: chunkKg,
-                                            jarak_tempuh_km: 0,
-                                            status_trip: 'SELESAI',
-                                            catatan: pl.catatan ? `${pl.catatan} (Rit ${ritNum})` : `${targetArmada} (Rit ${ritNum}) - ${pl.relasi}`,
-                                            manifest_items: manifestItems
-                                        };
+                                    let hasMultiPlan = Array.isArray(pl.multiArmadaPlan) && pl.multiArmadaPlan.length > 0;
+                                    if (hasMultiPlan) {
+                                        let planIndex = 0;
+                                        for (let plan of pl.multiArmadaPlan) {
+                                            if (!plan.kg || plan.kg <= 0) continue;
+                                            let planArmada = plan.armada;
+                                            let isPlanTruk = planArmada.includes('8749') || planArmada.toLowerCase().includes('truk');
 
-                                        // Hubungkan supir default jika armada pick-up / truk CBL
-                                        if (targetArmada.includes('8707') || targetArmada.includes('8070')) tripPayload.sopir_user_id = 6; // Pak Hilman
-                                        else if (targetArmada.includes('8142')) tripPayload.sopir_user_id = 7; // Pak Adi
-                                        else if (targetArmada.includes('8749')) {
-                                            let agusUser = (window.tripState?.cachedUsers || []).find(u => (u.nama || '').toLowerCase().includes('agus') && (u.role || '').toLowerCase() === 'sopir');
-                                            if (agusUser) tripPayload.sopir_user_id = agusUser.id;
-                                        }
+                                            let planRitNum = 1;
+                                            try {
+                                                let resC = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman?tanggal=eq.${tglTrip}&armada=eq.${encodeURIComponent(planArmada)}&select=id`, {
+                                                    headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+                                                });
+                                                if (resC.ok) {
+                                                    let tList = await resC.json();
+                                                    planRitNum = (Array.isArray(tList) ? tList.length : 0) + 1;
+                                                }
+                                            } catch (eC) { }
 
-                                        let resTrip = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman`, {
-                                            method: 'POST',
-                                            headers: {
-                                                'apikey': SUPA_ANON_KEY,
-                                                'Authorization': `Bearer ${SUPA_ANON_KEY}`,
-                                                'Content-Type': 'application/json',
-                                                'Prefer': 'return=representation', // 🔥 Minta balik row yang dibuat agar dapat ID-nya
-                                                'x-pin-karyawan': currentLoggedPin
-                                            },
-                                            body: JSON.stringify(tripPayload)
-                                        });
+                                            let porsiPlan = totalKgMuatan > 0 ? (plan.kg / totalKgMuatan) : 1;
+                                            let planManifest = manifestItems.map(m => ({
+                                                ...m,
+                                                qty: Math.round(m.qty * porsiPlan)
+                                            }));
 
-                                        if (resTrip.ok) {
-                                            let createdData = await resTrip.json();
-                                            if (Array.isArray(createdData) && createdData[0]?.id) {
-                                                let chunkTripId = createdData[0].id;
-                                                if (i === 0) {
+                                            let tripPayload = {
+                                                tanggal: tglTrip,
+                                                cabang: cabangStr,
+                                                armada: planArmada,
+                                                urutan_rit: planRitNum,
+                                                total_kg: plan.kg,
+                                                jarak_tempuh_km: 0,
+                                                status_trip: 'SELESAI',
+                                                catatan: `(Multi-Armada ${new Intl.NumberFormat('id-ID').format(plan.kg)} Kg) [${plan.label || planArmada}] Antar ke ${pl.relasi}`,
+                                                manifest_items: planManifest.length > 0 ? planManifest : manifestItems
+                                            };
+
+                                            if (planArmada.includes('8707') || planArmada.includes('8070')) tripPayload.sopir_user_id = 6;
+                                            else if (planArmada.includes('8142')) tripPayload.sopir_user_id = 7;
+                                            else if (planArmada.includes('8749')) {
+                                                let agusUser = (window.tripState?.cachedUsers || []).find(u => (u.nama || '').toLowerCase().includes('agus') && (u.role || '').toLowerCase() === 'sopir');
+                                                if (agusUser) tripPayload.sopir_user_id = agusUser.id;
+                                            }
+
+                                            let resTrip = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman`, {
+                                                method: 'POST',
+                                                headers: {
+                                                    'apikey': SUPA_ANON_KEY,
+                                                    'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                                                    'Content-Type': 'application/json',
+                                                    'Prefer': 'return=representation',
+                                                    'x-pin-karyawan': currentLoggedPin
+                                                },
+                                                body: JSON.stringify(tripPayload)
+                                            });
+
+                                            if (resTrip.ok) {
+                                                let createdData = await resTrip.json();
+                                                let chunkTripId = createdData?.[0]?.id;
+                                                if (planIndex === 0 && chunkTripId) {
                                                     createdTripId = chunkTripId;
                                                     pl.createdTripId = createdTripId;
                                                     try { localStorage.setItem('antrian_pakan', JSON.stringify(antrian)); } catch (eSave) { }
                                                 }
-                                                if (isTruk && typeof window.syncSolarTrukToCashflow === 'function') {
-                                                    window.syncSolarTrukToCashflow(chunkTripId, targetArmada, tglTrip, 1, pl.relasi);
+                                                if (isPlanTruk && chunkTripId && typeof window.syncSolarTrukToCashflow === 'function') {
+                                                    await window.syncSolarTrukToCashflow(chunkTripId, planArmada, tglTrip, 1, pl.relasi);
+                                                }
+                                            }
+                                            planIndex++;
+                                        }
+                                        qtyOngkir = pl.forceRitCount || pl.multiArmadaPlan.reduce((sum, p) => sum + (p.rit || 1), 0);
+                                    } else {
+                                        if (isTruk) {
+                                            totalChunks = 1;
+                                            qtyOngkir = 1;
+                                        } else if (pl.forceRitCount === 1) {
+                                            totalChunks = 1;
+                                            qtyOngkir = 1;
+                                        } else if (pl.forceRitCount === 2) {
+                                            totalChunks = 2;
+                                            qtyOngkir = 2;
+                                        } else if (totalKgMuatan > 1700) {
+                                            totalChunks = Math.max(1, Math.ceil(totalKgMuatan / maxCap));
+                                            qtyOngkir = totalChunks;
+                                        } else {
+                                            totalChunks = 1;
+                                            qtyOngkir = 1;
+                                        }
+
+                                        for (let i = 0; i < totalChunks; i++) {
+                                            let chunkKg = isTruk ? totalKgMuatan : (totalChunks === 1 ? totalKgMuatan : ((i === totalChunks - 1) ? (totalKgMuatan - (i * maxCap)) : maxCap));
+                                            let ritNum = nextRit + i;
+                                            let catatanTrip = totalChunks > 1
+                                                ? (pl.catatan ? `${pl.catatan} (Rit ${ritNum})` : `${targetArmada} (Rit ${ritNum}) - ${pl.relasi}`)
+                                                : (pl.catatan ? pl.catatan : `${targetArmada} (Rit ${ritNum}) - ${pl.relasi}`);
+                                            let tripPayload = {
+                                                tanggal: tglTrip,
+                                                cabang: cabangStr,
+                                                armada: targetArmada,
+                                                urutan_rit: ritNum,
+                                                total_kg: chunkKg,
+                                                jarak_tempuh_km: 0,
+                                                status_trip: 'SELESAI',
+                                                catatan: catatanTrip,
+                                                manifest_items: manifestItems
+                                            };
+
+                                            // Hubungkan supir default jika armada pick-up / truk CBL
+                                            if (targetArmada.includes('8707') || targetArmada.includes('8070')) tripPayload.sopir_user_id = 6; // Pak Hilman
+                                            else if (targetArmada.includes('8142')) tripPayload.sopir_user_id = 7; // Pak Adi
+                                            else if (targetArmada.includes('8749')) {
+                                                let agusUser = (window.tripState?.cachedUsers || []).find(u => (u.nama || '').toLowerCase().includes('agus') && (u.role || '').toLowerCase() === 'sopir');
+                                                if (agusUser) tripPayload.sopir_user_id = agusUser.id;
+                                            }
+
+                                            let resTrip = await fetch(`${SUPA_URL}/rest/v1/trip_pengiriman`, {
+                                                method: 'POST',
+                                                headers: {
+                                                    'apikey': SUPA_ANON_KEY,
+                                                    'Authorization': `Bearer ${SUPA_ANON_KEY}`,
+                                                    'Content-Type': 'application/json',
+                                                    'Prefer': 'return=representation', // 🔥 Minta balik row yang dibuat agar dapat ID-nya
+                                                    'x-pin-karyawan': currentLoggedPin
+                                                },
+                                                body: JSON.stringify(tripPayload)
+                                            });
+
+                                            if (resTrip.ok) {
+                                                let createdData = await resTrip.json();
+                                                if (Array.isArray(createdData) && createdData[0]?.id) {
+                                                    let chunkTripId = createdData[0].id;
+                                                    if (i === 0) {
+                                                        createdTripId = chunkTripId;
+                                                        pl.createdTripId = createdTripId;
+                                                        try { localStorage.setItem('antrian_pakan', JSON.stringify(antrian)); } catch (eSave) { }
+                                                    }
+                                                    if (isTruk && typeof window.syncSolarTrukToCashflow === 'function') {
+                                                        await window.syncSolarTrukToCashflow(chunkTripId, targetArmada, tglTrip, 1, pl.relasi);
+                                                    }
                                                 }
                                             }
                                         }
@@ -8972,6 +9269,8 @@
                             // ===============================================
                             let ongkirVal = parseFloat(String(pl.ongkir || "0").replace(/[^0-9]/g, ''));
                             if (ongkirVal > 0 && pl.status === "Keluar") {
+                                let ritQty = pl.forceRitCount || qtyOngkir || 1;
+                                let hargaSatuanOngkir = (ritQty > 1) ? Math.round(ongkirVal / ritQty) : ongkirVal;
                                 supabaseRows.push({
                                     tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
                                     waktu_input: new Date().toISOString(),
@@ -8982,9 +9281,9 @@
                                     alamat: pl.alamat || '-',
                                     ekor: 0,
                                     pakan: 'Ongkir Pengiriman',
-                                    qty: 1,
+                                    qty: ritQty,
                                     satuan: 'Rit',
-                                    harga_satuan: ongkirVal,
+                                    harga_satuan: hargaSatuanOngkir,
                                     catatan: 'Biaya Pengiriman',
                                     blok: null,
                                     hash_str: (pl.hashStr || '') + '_ONGKIR',
@@ -8994,6 +9293,25 @@
                                     armada: targetArmada || null,
                                     trip_id: createdTripId || null
                                 });
+
+                                // Jika diantar Armada Luar / Supir Sewa, uang ongkir otomatis dicatat keluar untuk bayar supir
+                                let armCheck = (targetArmada || '').toLowerCase();
+                                if (armCheck.includes('sewa') || armCheck.includes('luar') || armCheck.includes('ekspedisi') || armCheck.includes('doyok') || armCheck.includes('uje')) {
+                                    let matchNama = targetArmada.match(/\((.*?)\)/);
+                                    let namaSupirLuar = matchNama ? matchNama[1] : targetArmada;
+                                    cashflowRows.push({
+                                        tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
+                                        jenis: "Keluar",
+                                        metode: "Cash",
+                                        kategori: "OPR Ekspedisi Pakan",
+                                        relasi: `Supir Luar (${namaSupirLuar})`,
+                                        nominal: ongkirVal,
+                                        diskon: 0,
+                                        keterangan: `Bayar Ongkir Pengantaran ${pl.relasi} via Supir Luar (${namaSupirLuar})` + (createdTripId ? ` [TRIP:${createdTripId}]` : ''),
+                                        bukti_url: "-",
+                                        petugas: pl.petugas || 'Admin'
+                                    });
+                                }
                             }
 
                             // ===============================================
@@ -10062,18 +10380,21 @@
                                     if (catatanLengkap.includes("gudang") || namaRelasi.includes("mutasi")) cKat = "Mutasi";
                                     else cKat = "Masuk";
                                 } else {
-                                    if (namaRelasi.includes("rd") || namaRelasi.includes("rl") || namaRelasi.includes("darbun") || namaRelasi.includes("laktasi")) {
+                                    let relMatchObj = (Array.isArray(globalRelasi) ? globalRelasi : []).find(r => (r.nama || '').toLowerCase() === namaRelasi);
+                                    let isRelKonsumen = relMatchObj && relMatchObj.kategori && (
+                                        relMatchObj.kategori.toLowerCase() === 'konsumen' || 
+                                        relMatchObj.kategori.toLowerCase() === 'peternak' || 
+                                        relMatchObj.kategori.toLowerCase() === 'mitra'
+                                    );
+                                    let kelompokSapiList = ['bx', 'domba', 'rd', 'rl', 'darbun', 'laktasi', 'kapalang', 'dewasa', 'jantan', 'pedet', 'kerbau', 'bunting', 'kambing'];
+
+                                    if (!isRelKonsumen && (namaRelasi === "rd" || namaRelasi === "rl" || namaRelasi === "darbun" || namaRelasi === "laktasi" || namaRelasi.includes("giling"))) {
                                         cKat = "Giling";
                                     }
-                                    else if (cabangLower.includes('kandang') || namaRelasi.includes("kandang") ||
-                                        namaRelasi.includes('kapalang') || namaRelasi.includes('dewasa') ||
-                                        namaRelasi.includes('jantan') || namaRelasi.includes('pedet') ||
-                                        namaRelasi.includes('kerbau') || namaRelasi.includes('bunting') ||
-                                        namaRelasi.includes('bx') || namaRelasi.includes('domba') ||
-                                        namaRelasi.includes('cibulakan')) {
+                                    else if (!isRelKonsumen && (cabangLower.includes('kandang') || namaRelasi === "kandang" || namaRelasi === "kandang pm" || namaRelasi === "cibulakan" || kelompokSapiList.includes(namaRelasi))) {
                                         cKat = "Pemakaian";
                                     }
-                                    else if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("pembibitan")) {
+                                    else if (!isRelKonsumen && (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi"))) {
                                         cKat = "Mutasi";
                                     }
                                     else {
@@ -10344,22 +10665,28 @@
                                 let cabangLower = String(row.cabang).toLowerCase();
                                 let cKat = "Penjualan";
 
-                                let kelompokSapi = ['bx', 'domba', 'rd', 'rl', 'darbun', 'laktasi', 'kapalang', 'dewasa', 'jantan', 'pedet', 'kerbau', 'bunting'];
+                                let relMatchObj = (Array.isArray(globalRelasi) ? globalRelasi : []).find(r => (r.nama || '').toLowerCase() === namaRelasi);
+                                let isRelKonsumen = relMatchObj && relMatchObj.kategori && (
+                                    relMatchObj.kategori.toLowerCase() === 'konsumen' || 
+                                    relMatchObj.kategori.toLowerCase() === 'peternak' || 
+                                    relMatchObj.kategori.toLowerCase() === 'mitra'
+                                );
+                                let kelompokSapi = ['bx', 'domba', 'rd', 'rl', 'darbun', 'laktasi', 'kapalang', 'dewasa', 'jantan', 'pedet', 'kerbau', 'bunting', 'kambing'];
 
                                 if (String(row.status).toLowerCase().includes("masuk")) {
                                     if (catatanLengkap.includes("gudang") || namaRelasi.includes("mutasi")) cKat = "Mutasi";
                                     else cKat = "Masuk";
                                 } else {
-                                    if (namaRelasi === "rd" || namaRelasi === "rl" || namaRelasi === "darbun" || namaRelasi === "laktasi") {
+                                    if (!isRelKonsumen && (namaRelasi === "rd" || namaRelasi === "rl" || namaRelasi === "darbun" || namaRelasi === "laktasi" || namaRelasi.includes("giling"))) {
                                         cKat = "Giling";
                                     }
-                                    else if (cabangLower.includes('kandang') || namaRelasi.includes("kandang") ||
-                                        namaRelasi.includes("rph") || namaRelasi.includes("spn") ||
-                                        namaRelasi.includes("cibulakan") || namaRelasi.includes("pembibitan") ||
+                                    else if (!isRelKonsumen && (cabangLower.includes('kandang') || namaRelasi === "kandang" || namaRelasi === "kandang pm" ||
+                                        namaRelasi === "rph" || namaRelasi === "spn" ||
+                                        namaRelasi === "cibulakan" || namaRelasi.includes("pembibitan") ||
                                         namaRelasi.includes("mutasi") ||
-                                        kelompokSapi.includes(namaRelasi)) {
+                                        kelompokSapi.includes(namaRelasi))) {
                                         cKat = "Pemakaian"; // Hewan dan Internal digabung masuk ke Pemakaian / Mutasi
-                                        if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi")) cKat = "Mutasi";
+                                        if (namaRelasi === "rph" || namaRelasi === "spn" || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi")) cKat = "Mutasi";
                                     }
                                     else {
                                         cKat = "Penjualan";
@@ -11374,9 +11701,15 @@
                             });
 
                             rekapData.forEach(d => {
-                                let rLower = String(d.relasi).toLowerCase();
-                                let kelompokSapi = ['bx', 'domba', 'rd', 'rl', 'darbun', 'laktasi', 'kapalang', 'dewasa', 'jantan', 'pedet', 'kerbau', 'bunting'];
-                                if (rLower.includes('kandang') || rLower.includes('spn') || rLower.includes('rph') || rLower.includes('cibulakan') || rLower.includes('pembibitan') || kelompokSapi.includes(rLower)) return;
+                                let rLower = String(d.relasi || '').toLowerCase().trim();
+                                let relMatchObj = (Array.isArray(globalRelasi) ? globalRelasi : []).find(r => (r.nama || '').toLowerCase() === rLower);
+                                let isRelKonsumen = relMatchObj && relMatchObj.kategori && (
+                                    relMatchObj.kategori.toLowerCase() === 'konsumen' || 
+                                    relMatchObj.kategori.toLowerCase() === 'peternak' || 
+                                    relMatchObj.kategori.toLowerCase() === 'mitra'
+                                );
+                                let kelompokSapi = ['bx', 'domba', 'rd', 'rl', 'darbun', 'laktasi', 'kapalang', 'dewasa', 'jantan', 'pedet', 'kerbau', 'bunting', 'kambing'];
+                                if (!isRelKonsumen && (rLower === 'kandang' || rLower === 'kandang pm' || rLower === 'kandang spn' || rLower === 'spn' || rLower === 'rph' || rLower === 'cibulakan' || rLower.includes('pembibitan') || kelompokSapi.includes(rLower))) return;
 
                                 let namaRelasi = d.relasi;
                                 let sisaPiutangDB = parseFloat(d.sisa_piutang);
@@ -13945,7 +14278,9 @@
                 window.tempSelectedArmada = null;
                 window.tempIsAmbilMandiri = false;
 
-                function prosesOngkirArmada(armada) {
+                window.tempForceRitCount = null;
+
+                function prosesOngkirArmada(armada, forceRitCount = null) {
                     window.tempSelectedArmada = armada;
                     window.tempIsAmbilMandiri = false;
 
@@ -13960,6 +14295,31 @@
                             }
                         });
                     }
+
+                    let isTruk = armada.includes('8749') || armada.toLowerCase().includes('truk');
+
+                    // ⚡ POPUP TOLERANSI OVERLOAD PICK-UP (1.501 - 1.700 Kg):
+                    // Jika muatan lebih dari 1.500 Kg tapi masih dalam batas toleransi overload (<= 1.700 Kg),
+                    // munculkan pop-up pilihan 1 Rit atau 2 Rit!
+                    if (!isTruk && grandTotalKg > 1500 && grandTotalKg <= 1700 && forceRitCount === null) {
+                        let modalEl = document.getElementById('modal-ongkir');
+                        if (modalEl) modalEl.classList.add('hidden');
+                        if (typeof bukaModalPilihanRitOverload === 'function') {
+                            bukaModalPilihanRitOverload(armada, grandTotalKg, 'form_input');
+                            return;
+                        }
+                    }
+
+                    // 🚨 SATPAM MUATAN BESAR (> 7.500 Kg):
+                    // Jika muatan melebihi 7.500 Kg dan bukan mutasi, langsung alihkan ke Multi-Armada!
+                    if (grandTotalKg > 7500 && !forceRitCount) {
+                        let modalEl = document.getElementById('modal-ongkir');
+                        if (modalEl) modalEl.classList.add('hidden');
+                        bukaModalMultiArmada();
+                        return;
+                    }
+
+                    window.tempForceRitCount = forceRitCount;
 
                     // Cek alamat pengiriman untuk menentukan tarif dasar per rit
                     let inputAlamat = document.getElementById('ekor') ? document.getElementById('ekor').value.trim() : '';
@@ -13982,9 +14342,21 @@
                         tarifPerRit = 25000;
                     }
 
-                    // Rumus Otomatis Ongkir (Kelipatan 1.500 Kg = 1 rit)
-                    let multiples = Math.ceil(grandTotalKg / 1500);
-                    if (multiples < 1) multiples = 1; // Minimal hitungan 1 rit
+                    // Rumus Ongkir:
+                    // Jika forceRitCount ditentukan (1 atau 2 rit atau lebih), ikuti pilihan tersebut!
+                    let multiples = 1;
+                    if (forceRitCount === 1) {
+                        multiples = 1;
+                    } else if (forceRitCount === 2) {
+                        multiples = 2;
+                    } else if (forceRitCount && forceRitCount > 0) {
+                        multiples = forceRitCount;
+                    } else if (grandTotalKg > 1700) {
+                        multiples = Math.max(1, Math.ceil(grandTotalKg / 1500));
+                    } else {
+                        multiples = 1;
+                    }
+
                     let calculatedOngkir = multiples * tarifPerRit;
 
                     // JIKA KATEGORI MUTASI: ONGKIR OTOMATIS Rp 0 (TIDAK MEMBEBANKAN ONGKIR)
@@ -14046,6 +14418,448 @@
                 window.prosesOngkirAmbil = prosesOngkirAmbil;
                 window.bukaModalMuatAmbilMandiri = bukaModalMuatAmbilMandiri;
 
+                function toggleInputArmadaLuar() {
+                    let box = document.getElementById('container-input-armada-luar');
+                    if (!box) return;
+                    if (box.style.display === 'none' || box.style.display === '') {
+                        box.style.display = 'block';
+                        let inp = document.getElementById('input-nama-supir-luar');
+                        if (inp) { inp.focus(); }
+                    } else {
+                        box.style.display = 'none';
+                    }
+                }
+                window.toggleInputArmadaLuar = toggleInputArmadaLuar;
+
+                function konfirmasiArmadaLuarDariModal() {
+                    let inp = document.getElementById('input-nama-supir-luar');
+                    let nama = inp ? inp.value.trim() : '';
+                    if (!nama) {
+                        alert("Masukkan nama supir atau jenis armada luar!");
+                        return;
+                    }
+                    prosesOngkirArmada(`Sewa Luar (${nama})`);
+                }
+                window.konfirmasiArmadaLuarDariModal = konfirmasiArmadaLuarDariModal;
+
+                // =======================================================
+                // FITUR MODAL MULTI-ARMADA (AUTO-FILL + EDIT TONASE KUSTOM)
+                // =======================================================
+                window.tempMultiArmadaPlan = null;
+
+                function bukaModalMultiArmada() {
+                    let modalOngkir = document.getElementById('modal-ongkir');
+                    if (modalOngkir) modalOngkir.classList.add('hidden');
+
+                    let modal = document.getElementById('modal-multi-armada');
+                    if (!modal) return;
+
+                    let grandTotalKg = 0;
+                    if (typeof currentItems !== 'undefined') {
+                        currentItems.forEach(function (item, index) {
+                            let el = document.getElementById('qty-' + index);
+                            if (el) {
+                                let qty = parseFloat(el.getAttribute('data-total')) || 0;
+                                grandTotalKg += qty;
+                            }
+                        });
+                    }
+
+                    window._multiArmadaGrandTotal = grandTotalKg;
+                    let nf = new Intl.NumberFormat('id-ID');
+
+                    let lblTotal = document.getElementById('multi-armada-total-order-label');
+                    if (lblTotal) lblTotal.innerText = `${nf.format(grandTotalKg)} Kg`;
+
+                    // Hitung tarif per rit berdasarkan alamat
+                    let inputAlamat = document.getElementById('ekor') ? document.getElementById('ekor').value.trim() : '';
+                    let lokasiTerpilih = typeof getLokasiAktif === 'function' ? getLokasiAktif() : '';
+                    let isKandang = (lokasiTerpilih === '/kandang' || lokasiTerpilih === '/spn_kandang');
+                    let inputRelasi = isKandang
+                        ? (document.getElementById('relasi_kandang') ? document.getElementById('relasi_kandang').value.trim() : '')
+                        : (document.getElementById('relasi') ? document.getElementById('relasi').value.trim() : '');
+
+                    let relDataObj = (Array.isArray(globalRelasi) ? globalRelasi : []).find(r => (r.nama || '').toLowerCase() === inputRelasi.toLowerCase());
+                    let masterAlamat = relDataObj && relDataObj.alamat ? relDataObj.alamat : '';
+                    let gabunganAlamat = `${inputAlamat} ${masterAlamat}`.toLowerCase();
+
+                    let tarifPerRit = 50000;
+                    if (gabunganAlamat.includes('cisarua')) tarifPerRit = 100000;
+                    else if (gabunganAlamat.includes('cisaroni')) tarifPerRit = 25000;
+                    window._multiArmadaTarifRit = tarifPerRit;
+
+                    let totalRitEst = grandTotalKg <= 1700 ? 1 : Math.max(1, Math.ceil(grandTotalKg / 1500));
+                    let totalOngkirEst = totalRitEst * tarifPerRit;
+                    let lblOngkir = document.getElementById('multi-armada-total-ongkir-label');
+                    if (lblOngkir) lblOngkir.innerText = `Rp ${nf.format(totalOngkirEst)} (${totalRitEst} Rit)`;
+
+                    window._multiArmadaSisaOption = null;
+                    window._multiArmadaSisaKg = 0;
+
+                    // Reset Checkbox & Auto-fill jatah armada (Piramida Truk -> Pick-up Gelombang 1)
+                    let chk8749 = document.getElementById('chk-armada-8749');
+                    let chk8142 = document.getElementById('chk-armada-8142');
+                    let chk8707 = document.getElementById('chk-armada-8707');
+                    let in8749 = document.getElementById('input-kg-8749');
+                    let in8142 = document.getElementById('input-kg-8142');
+                    let in8707 = document.getElementById('input-kg-8707');
+
+                    if (grandTotalKg > 3000) {
+                        if (chk8749) chk8749.checked = true;
+                        let jatahTruk = Math.min(8000, grandTotalKg);
+                        let sisa1 = grandTotalKg - jatahTruk;
+
+                        let jatahAdi = sisa1 > 0 ? Math.min(1500, sisa1) : 0;
+                        let sisa2 = sisa1 - jatahAdi;
+
+                        let jatahHilman = sisa2 > 0 ? Math.min(1500, sisa2) : 0;
+
+                        if (in8749) in8749.value = jatahTruk;
+                        if (in8142) in8142.value = jatahAdi;
+                        if (in8707) in8707.value = jatahHilman;
+
+                        if (chk8142) chk8142.checked = jatahAdi > 0;
+                        if (chk8707) chk8707.checked = jatahHilman > 0;
+                    } else {
+                        if (chk8749) chk8749.checked = false;
+                        if (in8749) in8749.value = 0;
+
+                        let jatahAdi = Math.min(1500, grandTotalKg);
+                        let jatahHilman = grandTotalKg - jatahAdi;
+
+                        if (chk8142) chk8142.checked = true;
+                        if (in8142) in8142.value = jatahAdi;
+
+                        if (chk8707) chk8707.checked = jatahHilman > 0;
+                        if (in8707) in8707.value = jatahHilman;
+                    }
+
+                    modal.classList.remove('hidden');
+                    modal.style.display = 'flex';
+                    onMultiArmadaInputChange();
+                }
+
+                function tutupModalMultiArmada() {
+                    let modal = document.getElementById('modal-multi-armada');
+                    if (modal) {
+                        modal.classList.add('hidden');
+                        modal.style.display = 'none';
+                    }
+                    let modalOngkir = document.getElementById('modal-ongkir');
+                    if (modalOngkir) modalOngkir.classList.remove('hidden');
+                }
+
+                function onMultiArmadaToggle(armadaKey) {
+                    let chk = document.getElementById(`chk-armada-${armadaKey}`);
+                    let inp = document.getElementById(`input-kg-${armadaKey}`);
+                    let isChecked = chk ? chk.checked : false;
+                    let grandTotalKg = window._multiArmadaGrandTotal || 0;
+
+                    if (inp) {
+                        inp.disabled = !isChecked;
+                        if (!isChecked) {
+                            inp.value = 0;
+                        } else {
+                            // Smart Re-fill: isi kapasitas standar jika nilainya 0
+                            let currentVal = parseFloat(inp.value) || 0;
+                            if (currentVal <= 0) {
+                                let kg8749 = (armadaKey !== '8749' && document.getElementById('chk-armada-8749')?.checked) ? (parseFloat(document.getElementById('input-kg-8749')?.value) || 0) : 0;
+                                let kg8142 = (armadaKey !== '8142' && document.getElementById('chk-armada-8142')?.checked) ? (parseFloat(document.getElementById('input-kg-8142')?.value) || 0) : 0;
+                                let kg8707 = (armadaKey !== '8707' && document.getElementById('chk-armada-8707')?.checked) ? (parseFloat(document.getElementById('input-kg-8707')?.value) || 0) : 0;
+                                let unallocated = Math.max(0, grandTotalKg - (kg8749 + kg8142 + kg8707));
+
+                                if (armadaKey === '8749') {
+                                    inp.value = Math.min(8000, unallocated > 0 ? unallocated : 8000);
+                                } else {
+                                    inp.value = Math.min(1500, unallocated > 0 ? unallocated : 1500);
+                                }
+                            }
+                        }
+                    }
+                    window._multiArmadaSisaOption = null;
+                    onMultiArmadaInputChange();
+                }
+
+                function selectMultiArmadaSisaOption(optKey) {
+                    let sisaKg = window._multiArmadaSisaKg || 0;
+                    if (optKey === 'truk_extra') {
+                        let in8749 = document.getElementById('input-kg-8749');
+                        let chk8749 = document.getElementById('chk-armada-8749');
+                        if (chk8749) chk8749.checked = true;
+                        if (in8749) {
+                            let cur = parseFloat(in8749.value) || 0;
+                            in8749.value = cur + sisaKg;
+                        }
+                        window._multiArmadaSisaOption = null;
+                        onMultiArmadaInputChange();
+                        return;
+                    }
+
+                    window._multiArmadaSisaOption = optKey;
+                    onMultiArmadaInputChange();
+                }
+                window.selectMultiArmadaSisaOption = selectMultiArmadaSisaOption;
+
+                function onMultiArmadaInputChange() {
+                    let nf = new Intl.NumberFormat('id-ID');
+                    let grandTotalKg = window._multiArmadaGrandTotal || 0;
+                    let tarifPerRit = window._multiArmadaTarifRit || 50000;
+
+                    let chk8749 = document.getElementById('chk-armada-8749')?.checked;
+                    let chk8142 = document.getElementById('chk-armada-8142')?.checked;
+                    let chk8707 = document.getElementById('chk-armada-8707')?.checked;
+
+                    let kg8749 = chk8749 ? (parseFloat(document.getElementById('input-kg-8749')?.value) || 0) : 0;
+                    let kg8142 = chk8142 ? (parseFloat(document.getElementById('input-kg-8142')?.value) || 0) : 0;
+                    let kg8707 = chk8707 ? (parseFloat(document.getElementById('input-kg-8707')?.value) || 0) : 0;
+
+                    let totalTerbagi = kg8749 + kg8142 + kg8707;
+                    let sisa = grandTotalKg - totalTerbagi;
+
+                    // Update rit & label badge per armada
+                    let rit8749 = kg8749 > 0 ? (kg8749 <= 1700 ? 1 : Math.max(1, Math.round(kg8749 / 1500))) : 0;
+                    let rit8142 = kg8142 > 0 ? (kg8142 <= 1700 ? 1 : Math.max(1, Math.round(kg8142 / 1500))) : 0;
+                    let rit8707 = kg8707 > 0 ? (kg8707 <= 1700 ? 1 : Math.max(1, Math.round(kg8707 / 1500))) : 0;
+
+                    let b8749 = document.getElementById('badge-rit-8749');
+                    let b8142 = document.getElementById('badge-rit-8142');
+                    let b8707 = document.getElementById('badge-rit-8707');
+
+                    if (b8749) b8749.innerText = `${rit8749} Rit (Rp ${nf.format(rit8749 * tarifPerRit)})`;
+                    if (b8142) b8142.innerText = `${rit8142} Rit (Rp ${nf.format(rit8142 * tarifPerRit)})`;
+                    if (b8707) b8707.innerText = `${rit8707} Rit (Rp ${nf.format(rit8707 * tarifPerRit)})`;
+
+                    // Render Step 3 Container jika ada sisa muatan
+                    let boxLangkah3 = document.getElementById('container-langkah-3-sisa');
+                    if (boxLangkah3) {
+                        if (sisa <= 0) {
+                            boxLangkah3.style.display = 'none';
+                            boxLangkah3.innerHTML = '';
+                            window._multiArmadaSisaKg = 0;
+                        } else {
+                            window._multiArmadaSisaKg = sisa;
+                            boxLangkah3.style.display = 'block';
+
+                            let curOpt = window._multiArmadaSisaOption;
+                            let optHtml = `<div style="font-size:11px; font-weight:800; color:#92400e; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; display:flex; align-items:center; gap:5px;">
+                                <span class="material-symbols-outlined" style="font-size:16px; color:#d97706;">help</span>
+                                3. Sisa ${nf.format(sisa)} Kg Mau Diantar Oleh Siapa?
+                            </div>`;
+
+                            if (sisa <= 1500) {
+                                let isAdi = curOpt === 'adi_rit2';
+                                let isHilman = curOpt === 'hilman_rit2';
+
+                                optHtml += `
+                                <div style="display:flex; flex-direction:column; gap:8px;">
+                                    <button type="button" onclick="selectMultiArmadaSisaOption('adi_rit2')" style="width:100%; text-align:left; padding:10px 12px; border-radius:10px; cursor:pointer; transition:all 0.15s ease; border:2px solid ${isAdi ? '#ea580c' : '#e2e8f0'}; background:${isAdi ? '#fff7ed' : '#ffffff'}; box-shadow:${isAdi ? '0 2px 8px rgba(234,88,12,0.18)' : 'none'};">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+                                            <div style="font-size:12.5px; font-weight:800; color:${isAdi ? '#c2410c' : '#1e293b'};">
+                                                🚐 GranMax (Pak Adi) Narik Rit 2
+                                            </div>
+                                            ${isAdi ? '<span style="font-size:10px; font-weight:800; background:#ea580c; color:#fff; padding:2px 7px; border-radius:12px;">✓ TERPILIH</span>' : '<span style="font-size:10px; font-weight:700; color:#94a3b8; border:1px solid #cbd5e1; padding:2px 7px; border-radius:12px;">PILIH</span>'}
+                                        </div>
+                                        <div style="font-size:10.5px; color:#64748b;">
+                                            Bawa sisa ${nf.format(sisa)} Kg • <b>+1 Rit (Rp ${nf.format(tarifPerRit)})</b>
+                                        </div>
+                                    </button>
+
+                                    <button type="button" onclick="selectMultiArmadaSisaOption('hilman_rit2')" style="width:100%; text-align:left; padding:10px 12px; border-radius:10px; cursor:pointer; transition:all 0.15s ease; border:2px solid ${isHilman ? '#2563eb' : '#e2e8f0'}; background:${isHilman ? '#eff6ff' : '#ffffff'}; box-shadow:${isHilman ? '0 2px 8px rgba(37,99,235,0.18)' : 'none'};">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+                                            <div style="font-size:12.5px; font-weight:800; color:${isHilman ? '#1d4ed8' : '#1e293b'};">
+                                                🛻 Carry (Pak Hilman) Narik Rit 2
+                                            </div>
+                                            ${isHilman ? '<span style="font-size:10px; font-weight:800; background:#2563eb; color:#fff; padding:2px 7px; border-radius:12px;">✓ TERPILIH</span>' : '<span style="font-size:10px; font-weight:700; color:#94a3b8; border:1px solid #cbd5e1; padding:2px 7px; border-radius:12px;">PILIH</span>'}
+                                        </div>
+                                        <div style="font-size:10.5px; color:#64748b;">
+                                            Bawa sisa ${nf.format(sisa)} Kg • <b>+1 Rit (Rp ${nf.format(tarifPerRit)})</b>
+                                        </div>
+                                    </button>
+
+                                    <button type="button" onclick="selectMultiArmadaSisaOption('truk_extra')" style="width:100%; text-align:left; padding:10px 12px; border-radius:10px; cursor:pointer; transition:all 0.15s ease; border:2px solid #0f766e; background:#f0fdfa;">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+                                            <div style="font-size:12.5px; font-weight:800; color:#0f766e;">
+                                                🚚 Truk Pak Agus Bawa Sekalian
+                                            </div>
+                                            <span style="font-size:10px; font-weight:800; background:#0f766e; color:#fff; padding:2px 7px; border-radius:12px;">TAMBAH KE TRUK</span>
+                                        </div>
+                                        <div style="font-size:10.5px; color:#64748b;">
+                                            Jatah Truk ditambah jadi ${nf.format(kg8749 + sisa)} Kg • <b>Tetap 1 Rit Truk</b>
+                                        </div>
+                                    </button>
+                                </div>`;
+                            } else {
+                                let isBoth = curOpt === 'both_rit2';
+
+                                optHtml += `
+                                <div style="display:flex; flex-direction:column; gap:8px;">
+                                    <button type="button" onclick="selectMultiArmadaSisaOption('both_rit2')" style="width:100%; text-align:left; padding:10px 12px; border-radius:10px; cursor:pointer; transition:all 0.15s ease; border:2px solid ${isBoth ? '#7c3aed' : '#e2e8f0'}; background:${isBoth ? '#f5f3ff' : '#ffffff'}; box-shadow:${isBoth ? '0 2px 8px rgba(124,58,237,0.18)' : 'none'};">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+                                            <div style="font-size:12.5px; font-weight:800; color:${isBoth ? '#6b21a8' : '#1e293b'};">
+                                                🚐 GranMax & 🛻 Carry Sama-sama Narik Rit 2
+                                            </div>
+                                            ${isBoth ? '<span style="font-size:10px; font-weight:800; background:#7c3aed; color:#fff; padding:2px 7px; border-radius:12px;">✓ TERPILIH</span>' : '<span style="font-size:10px; font-weight:700; color:#94a3b8; border:1px solid #cbd5e1; padding:2px 7px; border-radius:12px;">PILIH</span>'}
+                                        </div>
+                                        <div style="font-size:10.5px; color:#64748b;">
+                                            GranMax Rit 2 (1.500 Kg) + Carry Rit 2 (${nf.format(sisa - 1500)} Kg) • <b>+2 Rit (Rp ${nf.format(tarifPerRit * 2)})</b>
+                                        </div>
+                                    </button>
+
+                                    <button type="button" onclick="selectMultiArmadaSisaOption('truk_extra')" style="width:100%; text-align:left; padding:10px 12px; border-radius:10px; cursor:pointer; transition:all 0.15s ease; border:2px solid #0f766e; background:#f0fdfa;">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+                                            <div style="font-size:12.5px; font-weight:800; color:#0f766e;">
+                                                🚚 Truk Pak Agus Bawa Sekalian
+                                            </div>
+                                            <span style="font-size:10px; font-weight:800; background:#0f766e; color:#fff; padding:2px 7px; border-radius:12px;">TAMBAH KE TRUK</span>
+                                        </div>
+                                        <div style="font-size:10.5px; color:#64748b;">
+                                            Jatah Truk ditambah jadi ${nf.format(kg8749 + sisa)} Kg • <b>Tetap 1 Rit Truk</b>
+                                        </div>
+                                    </button>
+                                </div>`;
+                            }
+
+                            boxLangkah3.innerHTML = optHtml;
+                        }
+                    }
+
+                    // Hitung total rit dan estimasi ongkir
+                    let extraRit = 0;
+                    if (sisa > 0 && window._multiArmadaSisaOption) {
+                        if (window._multiArmadaSisaOption === 'adi_rit2' || window._multiArmadaSisaOption === 'hilman_rit2') extraRit = 1;
+                        else if (window._multiArmadaSisaOption === 'both_rit2') extraRit = 2;
+                    }
+
+                    let totalRitAktif = rit8749 + rit8142 + rit8707 + extraRit;
+                    let totalOngkirAktif = totalRitAktif * tarifPerRit;
+                    let lblOngkir = document.getElementById('multi-armada-total-ongkir-label');
+                    if (lblOngkir) lblOngkir.innerText = `Rp ${nf.format(totalOngkirAktif)} (${totalRitAktif} Rit)`;
+
+                    // Update validation status box
+                    let vBox = document.getElementById('multi-armada-validation-box');
+                    let btn = document.getElementById('btn-konfirmasi-multi-armada');
+
+                    if (vBox) {
+                        if (Math.abs(sisa) < 0.1) {
+                            vBox.style.background = '#f0fdf4';
+                            vBox.style.color = '#15803d';
+                            vBox.style.border = '1.5px solid #bbf7d0';
+                            vBox.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">check_circle</span> <span><b>Pas!</b> Semua ${nf.format(grandTotalKg)} Kg terbagi habis tanpa sisa.</span>`;
+                            if (btn) btn.disabled = false;
+                        } else if (sisa > 0) {
+                            if (window._multiArmadaSisaOption) {
+                                let optLabel = window._multiArmadaSisaOption === 'adi_rit2' ? 'GranMax Rit 2' :
+                                               window._multiArmadaSisaOption === 'hilman_rit2' ? 'Carry Rit 2' :
+                                               window._multiArmadaSisaOption === 'both_rit2' ? 'GranMax & Carry Rit 2' :
+                                               'Alokasi Sisa';
+                                vBox.style.background = '#f0fdf4';
+                                vBox.style.color = '#15803d';
+                                vBox.style.border = '1.5px solid #bbf7d0';
+                                vBox.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">check_circle</span> <span><b>Siap Kirim!</b> Sisa ${nf.format(sisa)} Kg dialokasikan via: <b>${optLabel}</b>.</span>`;
+                                if (btn) btn.disabled = false;
+                            } else {
+                                vBox.style.background = '#fffbeb';
+                                vBox.style.color = '#b45309';
+                                vBox.style.border = '1.5px solid #fde68a';
+                                vBox.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">info</span> <span>Ada sisa <b>${nf.format(sisa)} Kg</b> belum terbagi. Pilih salah satu solusi di Langkah 3!</span>`;
+                                if (btn) btn.disabled = true;
+                            }
+                        } else {
+                            vBox.style.background = '#fef2f2';
+                            vBox.style.color = '#b91c1c';
+                            vBox.style.border = '1.5px solid #fecaca';
+                            vBox.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">error</span> <span>Alokasi berlebih <b>${nf.format(Math.abs(sisa))} Kg</b> dari total pesanan!</span>`;
+                            if (btn) btn.disabled = true;
+                        }
+                    }
+                }
+
+                function konfirmasiMultiArmada() {
+                    let nf = new Intl.NumberFormat('id-ID');
+                    let grandTotalKg = window._multiArmadaGrandTotal || 0;
+                    let tarifPerRit = window._multiArmadaTarifRit || 50000;
+
+                    let chk8749 = document.getElementById('chk-armada-8749')?.checked;
+                    let chk8142 = document.getElementById('chk-armada-8142')?.checked;
+                    let chk8707 = document.getElementById('chk-armada-8707')?.checked;
+
+                    let kg8749 = chk8749 ? (parseFloat(document.getElementById('input-kg-8749')?.value) || 0) : 0;
+                    let kg8142 = chk8142 ? (parseFloat(document.getElementById('input-kg-8142')?.value) || 0) : 0;
+                    let kg8707 = chk8707 ? (parseFloat(document.getElementById('input-kg-8707')?.value) || 0) : 0;
+
+                    let plan = [];
+                    if (kg8749 > 0) {
+                        let r = kg8749 <= 1700 ? 1 : Math.max(1, Math.round(kg8749 / 1500));
+                        plan.push({ armada: 'D 8749 UA', kg: kg8749, rit: r, nominal: r * tarifPerRit, label: 'Truk (Pak Agus)' });
+                    }
+                    if (kg8142 > 0) {
+                        plan.push({ armada: 'D 8142 UK', kg: kg8142, rit: 1, nominal: 1 * tarifPerRit, label: 'GranMax (Pak Adi - Rit 1)' });
+                    }
+                    if (kg8707 > 0) {
+                        plan.push({ armada: 'D 8707 UE', kg: kg8707, rit: 1, nominal: 1 * tarifPerRit, label: 'Carry (Pak Hilman - Rit 1)' });
+                    }
+
+                    // Tambahkan alokasi sisa jika dipilih
+                    let sisaOpt = window._multiArmadaSisaOption;
+                    let sisaKg = window._multiArmadaSisaKg || 0;
+
+                    if (sisaKg > 0 && sisaOpt) {
+                        if (sisaOpt === 'adi_rit2') {
+                            plan.push({ armada: 'D 8142 UK', kg: sisaKg, rit: 1, nominal: 1 * tarifPerRit, label: 'GranMax (Pak Adi - Rit 2)' });
+                        } else if (sisaOpt === 'hilman_rit2') {
+                            plan.push({ armada: 'D 8707 UE', kg: sisaKg, rit: 1, nominal: 1 * tarifPerRit, label: 'Carry (Pak Hilman - Rit 2)' });
+                        } else if (sisaOpt === 'both_rit2') {
+                            let p1 = Math.min(1500, sisaKg);
+                            let p2 = sisaKg - p1;
+                            plan.push({ armada: 'D 8142 UK', kg: p1, rit: 1, nominal: 1 * tarifPerRit, label: 'GranMax (Pak Adi - Rit 2)' });
+                            if (p2 > 0) {
+                                plan.push({ armada: 'D 8707 UE', kg: p2, rit: 1, nominal: 1 * tarifPerRit, label: 'Carry (Pak Hilman - Rit 2)' });
+                            }
+                        }
+                    }
+
+                    if (plan.length === 0) {
+                        alert("Pilih minimal satu armada dan masukkan muatannya!");
+                        return;
+                    }
+
+                    window.tempMultiArmadaPlan = plan;
+                    let sortedPlan = [...plan].sort((a, b) => b.kg - a.kg);
+                    let mainFleet = sortedPlan[0].armada;
+                    window.tempSelectedArmada = mainFleet;
+                    window.tempIsAmbilMandiri = false;
+
+                    let totalRitSemua = plan.reduce((sum, p) => sum + p.rit, 0);
+                    let totalOngkirSemua = totalRitSemua * tarifPerRit;
+                    window.tempForceRitCount = totalRitSemua;
+
+                    let inputOngkirEl = document.getElementById('ongkir');
+                    if (inputOngkirEl) {
+                        inputOngkirEl.value = totalOngkirSemua;
+                        if (typeof formatOngkir === 'function') formatOngkir(inputOngkirEl);
+                    }
+
+                    let modal = document.getElementById('modal-multi-armada');
+                    if (modal) {
+                        modal.classList.add('hidden');
+                        modal.style.display = 'none';
+                    }
+
+                    kirimData(window.tempKirimMode, true);
+                }
+
+                window.bukaModalMultiArmada = bukaModalMultiArmada;
+                window.tutupModalMultiArmada = tutupModalMultiArmada;
+                window.onMultiArmadaToggle = onMultiArmadaToggle;
+                window.onMultiArmadaInputChange = onMultiArmadaInputChange;
+                window.konfirmasiMultiArmada = konfirmasiMultiArmada;
+
+                function prosesAmbilMandiriDariMulti() {
+                    tutupModalMultiArmada();
+                    prosesOngkirAmbil();
+                }
+                window.prosesAmbilMandiriDariMulti = prosesAmbilMandiriDariMulti;
+
                 function kirimData(mode = 'langsung', skipOngkirModal = false) {
                     tutupKeyboard();
                     let inputVal = document.getElementById('ekor').value.trim();
@@ -14058,30 +14872,71 @@
 
                     // --- FILTER PENGECUALIAN POP-UP ONGKIR / DIKIRIM / DIAMBIL ---
                     let inputOngkirEl = document.getElementById('ongkir');
+                    let ongkirNominal = parseFloat((inputOngkirEl?.value || '').replace(/[^0-9]/g, '')) || 0;
                     let relDataObj = globalRelasi.find(r => (r.nama || "").toLowerCase() === rLower);
                     let isKategoriMutasi = relDataObj && relDataObj.kategori && relDataObj.kategori.toLowerCase() === 'mutasi';
+                    let isKategoriKonsumen = relDataObj && relDataObj.kategori && (
+                        relDataObj.kategori.toLowerCase() === 'konsumen' || 
+                        relDataObj.kategori.toLowerCase() === 'peternak' || 
+                        relDataObj.kategori.toLowerCase() === 'mitra'
+                    );
 
                     // 1. Relasi Gilingan (RL / RD / Darbun / Laktasi / Giling) -> Tidak ada ongkir & tanpa pop-up
-                    let isGilinganRelasi = /\b(rl|rd)\b/i.test(valRelasi) || rLower.includes('darbun') || rLower.includes('laktasi') || rLower.includes('giling');
+                    let isGilinganRelasi = !isKategoriKonsumen && (
+                        /\b(rl|rd)\b/i.test(valRelasi) || 
+                        rLower === 'darbun' || 
+                        rLower === 'laktasi' || 
+                        rLower.includes('giling')
+                    );
 
                     // 2. Laporan Pemakaian Kandang (Fasilitas Kandang atau Kelompok Sapi)
-                    let kelompokSapi = ['kapalang', 'dewasa', 'jantan', 'pedet', 'kerbau', 'bunting', 'bx', 'domba'];
-                    let isKelompokSapi = kelompokSapi.some(k => rLower === k || rLower.includes(k));
-                    let isPemakaianKandang = isKandang || isKelompokSapi || rLower.includes('kandang');
+                    let kelompokSapi = ['kapalang', 'dewasa', 'jantan', 'pedet', 'kerbau', 'bunting', 'bx', 'domba', 'kambing'];
+                    let isKelompokSapi = !isKategoriKonsumen && kelompokSapi.includes(rLower);
+                    let isPemakaianKandang = !isKategoriKonsumen && ongkirNominal === 0 && (
+                        isKandang || 
+                        isKelompokSapi || 
+                        rLower === 'kandang' || 
+                        rLower === 'kandang pm' || 
+                        rLower === 'kandang spn'
+                    );
 
                     // 3. Mutasi Cabang / Fasilitas Internal (RPH, SPN, Kandang, Pembibitan, Cibulakan, dll.)
-                    let isMutasiInternal = isKategoriMutasi ||
-                        rLower.includes('rph') ||
-                        rLower.includes('spn') ||
-                        rLower.includes('pembibitan') ||
-                        rLower.includes('cibulakan') ||
-                        rLower.includes('mutasi');
+                    let isMutasiInternal = !isKategoriKonsumen && (
+                        isKategoriMutasi ||
+                        rLower === 'rph' ||
+                        rLower === 'spn' ||
+                        rLower === 'pembibitan' ||
+                        rLower === 'cibulakan' ||
+                        rLower.includes('mutasi')
+                    );
 
                     // Pop-up Dikirim / Diambil dikecualikan hanya untuk gilingan dan pemakaian pakan sapi sendiri
                     let skipPopupKirimAmbil = isGilinganRelasi || isPemakaianKandang;
 
-                    if (!skipOngkirModal && statusPilihan === 'Keluar' && inputOngkirEl.value.trim() === "" && !skipPopupKirimAmbil) {
+                    let armadaSudahDitentukan = Boolean(window.tempSelectedArmada || (Array.isArray(window.tempMultiArmadaPlan) && window.tempMultiArmadaPlan.length > 0) || window.tempIsAmbilMandiri);
+
+                    if (!skipOngkirModal && statusPilihan === 'Keluar' && !armadaSudahDitentukan && !skipPopupKirimAmbil) {
                         window.tempKirimMode = mode;
+
+                        // 🚨 SATPAM MUATAN BESAR (> 7.500 Kg):
+                        // Hitung total tonase (Kg) dari form yang diinput
+                        let totalMuatanForm = 0;
+                        if (typeof currentItems !== 'undefined') {
+                            currentItems.forEach(function (item, index) {
+                                let el = document.getElementById('qty-' + index);
+                                if (el) {
+                                    totalMuatanForm += (parseFloat(el.getAttribute('data-total')) || 0);
+                                }
+                            });
+                        }
+
+                        // Jika muatan melebihi batas 7.500 Kg dan bukan mutasi internal,
+                        // LANGSUNG buka pop-up Multi-Armada tanpa transit ke modal pilihan armada biasa!
+                        if (totalMuatanForm > 7500 && !isMutasiInternal) {
+                            bukaModalMultiArmada();
+                            return;
+                        }
+
                         let subtext = document.getElementById('modal-ongkir-subtext');
                         if (subtext) {
                             subtext.innerText = isMutasiInternal 
@@ -14114,6 +14969,8 @@
                         tanggal: finalTglFix,
                         status: statusPilihan,
                         relasi: valRelasi,
+                        forceRitCount: window.tempForceRitCount || null,
+                        multiArmadaPlan: window.tempMultiArmadaPlan || null,
                         ekor: isAngka ? parseFloat(inputVal) : 0,
                         alamat: !isAngka ? inputVal : "",
                         ongkir: document.getElementById('ongkir').value,
@@ -14126,6 +14983,8 @@
                         uangBongkar: document.getElementById('uangBongkar') ? document.getElementById('uangBongkar').checked : false,
                         po_id: window.currentLinkedPOId
                     };
+                    window.tempForceRitCount = null;
+                    window.tempMultiArmadaPlan = null;
 
                     if (window.tempSelectedArmada) {
                         if (window.tempSelectedArmada === 'Ambil Mandiri' || window.tempIsAmbilMandiri) {
@@ -14143,6 +15002,17 @@
                         payload.armada = 'Ambil Mandiri';
                         payload.catatan = `[AMBIL SENDIRI DI GUDANG] ` + (payload.catatan || '');
                         window.tempAmbilMandiriData = null; // reset
+                    }
+
+                    if (payload.multiArmadaPlan && payload.multiArmadaPlan.length > 0) {
+                        let planSummary = payload.multiArmadaPlan.map(p => `${p.label || p.armada} ${Number(p.kg).toLocaleString('id-ID')} Kg`).join(', ');
+                        payload.catatan = `[MULTI-ARMADA: ${planSummary}] ` + (payload.catatan || '');
+                    }
+
+                    if (window.tempPendingSisaKg && window.tempPendingSisaKg > 0) {
+                        let sisaFmt = Number(window.tempPendingSisaKg).toLocaleString('id-ID');
+                        payload.catatan = `[SISA ${sisaFmt} Kg BELUM DIANTAR] ` + (payload.catatan || '');
+                        window.tempPendingSisaKg = null; // reset
                     }
 
                     if (!payload.relasi) { alert("Relasi kosong!"); return; }
@@ -14221,6 +15091,16 @@
                         }
 
                         rincianHTML += `<hr style="border:0; border-top:1px dashed #ccc; margin:10px 0;"><div style="display:flex; justify-content:space-between; font-size:15px; color:#8AA624;"><span><b>TOTAL:</b></span> <b>${Number(grandTotal).toLocaleString('id-ID')} Kg</b></div>`;
+
+                        if (cekOngkir > 0) {
+                            let ritInfo = payload.forceRitCount ? ` (${payload.forceRitCount} Rit)` : '';
+                            rincianHTML += `<div style="display:flex; justify-content:space-between; margin-top:6px; font-size:12px; color:#15803d; font-weight:700;"><span>Ongkir Pengiriman${ritInfo}:</span> <b>Rp ${Number(cekOngkir).toLocaleString('id-ID')}</b></div>`;
+                        }
+
+                        if (payload.multiArmadaPlan && payload.multiArmadaPlan.length > 0) {
+                            let planListHtml = payload.multiArmadaPlan.map(p => `• <b>${p.label || p.armada}</b>: ${Number(p.kg).toLocaleString('id-ID')} Kg (${p.rit} Rit)`).join('<br>');
+                            rincianHTML += `<div style="margin-top:10px; padding:10px; background:#f5f3ff; color:#6b21a8; border:1px solid #ddd6fe; border-radius:8px; font-size:11px;"><b>Alokasi Multi-Armada:</b><div style="margin-top:4px;">${planListHtml}</div></div>`;
+                        }
 
                         if (payload.catatan) rincianHTML += `<div style="margin-top:12px; padding:10px; background:#fff3e0; color:#e65100; border-radius:8px; font-size:11px;"><b>Catatan:</b> ${payload.catatan}</div>`;
 
@@ -14476,6 +15356,11 @@
 
                 function tutupModalConfirm() {
                     document.getElementById('modal-confirm').classList.add('hidden');
+                    window.tempSelectedArmada = null;
+                    window.tempMultiArmadaPlan = null;
+                    window.tempIsAmbilMandiri = false;
+                    window.tempForceRitCount = null;
+                    window.tempPendingSisaKg = null;
                 }
 
                 function renderKeranjang() {
@@ -17243,18 +18128,25 @@
                 }
 
                 function getKategoriReview(row) {
-                    let namaRelasi = String(row.relasi).toLowerCase();
+                    let namaRelasi = String(row.relasi || "").toLowerCase().trim();
                     let catatanLengkap = String(row.catatan || "").toLowerCase();
                     let cabangLower = String(row.cabang || "").toLowerCase();
-                    let kelompokSapi = ['bx', 'domba', 'rd', 'rl', 'darbun', 'laktasi', 'kapalang', 'dewasa', 'jantan', 'pedet', 'kerbau', 'bunting'];
+                    let kelompokSapi = ['bx', 'domba', 'rd', 'rl', 'darbun', 'laktasi', 'kapalang', 'dewasa', 'jantan', 'pedet', 'kerbau', 'bunting', 'kambing'];
+
+                    let relMatchObj = (Array.isArray(globalRelasi) ? globalRelasi : []).find(r => (r.nama || '').toLowerCase() === namaRelasi);
+                    let isRelKonsumen = relMatchObj && relMatchObj.kategori && (
+                        relMatchObj.kategori.toLowerCase() === 'konsumen' || 
+                        relMatchObj.kategori.toLowerCase() === 'peternak' || 
+                        relMatchObj.kategori.toLowerCase() === 'mitra'
+                    );
 
                     if (String(row.status).toLowerCase().includes("masuk")) {
                         if (catatanLengkap.includes("gudang") || namaRelasi.includes("mutasi")) return "Mutasi Masuk";
                         return "Barang Masuk";
                     } else {
-                        if (namaRelasi === "rd" || namaRelasi === "rl" || namaRelasi === "darbun" || namaRelasi === "laktasi") return "Gilingan Pakan";
-                        if (cabangLower.includes('kandang') || namaRelasi.includes("kandang") || namaRelasi.includes("cibulakan") || kelompokSapi.includes(namaRelasi)) return "Pemakaian Kandang";
-                        if (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi")) return "Mutasi Keluar";
+                        if (!isRelKonsumen && (namaRelasi === "rd" || namaRelasi === "rl" || namaRelasi === "darbun" || namaRelasi === "laktasi" || namaRelasi.includes("giling"))) return "Gilingan Pakan";
+                        if (!isRelKonsumen && (cabangLower.includes('kandang') || namaRelasi === "kandang" || namaRelasi === "kandang pm" || namaRelasi === "cibulakan" || kelompokSapi.includes(namaRelasi))) return "Pemakaian Kandang";
+                        if (!isRelKonsumen && (namaRelasi.includes("rph") || namaRelasi.includes("spn") || namaRelasi.includes("pembibitan") || namaRelasi.includes("mutasi"))) return "Mutasi Keluar";
                         return "Penjualan Pakan";
                     }
                 }
