@@ -9040,6 +9040,7 @@
 
                             let createdTripId = pl.createdTripId || null;
                             let isArmadaLuar = (targetArmada || '').toLowerCase().includes('sewa') || (targetArmada || '').toLowerCase().includes('luar') || (targetArmada || '').toLowerCase().includes('ekspedisi');
+                            let qtyOngkir = pl.forceRitCount || 1;
                             // Catat ke trip_pengiriman HANYA jika menggunakan armada pengantaran fisik CBL (bukan Ambil Mandiri dan bukan Sewa Luar)
                             if (!createdTripId && targetArmada && targetArmada !== 'Ambil Mandiri' && !isArmadaLuar) {
                                 try {
@@ -9073,7 +9074,7 @@
                                     let isTruk = targetArmada.includes('8749') || targetArmada.toLowerCase().includes('truk');
                                     let maxCap = isTruk ? 7500 : 1500;
                                     let totalChunks = 1;
-                                    let qtyOngkir = 1;
+                                    qtyOngkir = 1;
 
                                     let hasMultiPlan = Array.isArray(pl.multiArmadaPlan) && pl.multiArmadaPlan.length > 0;
                                     if (hasMultiPlan) {
@@ -19024,22 +19025,50 @@
                     let rowsToInsert = [];
 
                     payloads.forEach(pl => {
+                        let cabClean = pl.cabang || (pl.lokasi ? pl.lokasi.replace('/', '').toUpperCase() : null) || record.cabang || 'PM';
                         let itemsList = pl.items || {};
                         for (let pakanName in itemsList) {
+                            let detail = pl.detail_items ? pl.detail_items[pakanName] : null;
+                            let harga = detail ? (detail.harga || 0) : 0;
+                            let sat = detail ? (detail.satuan || 'Kg') : 'Kg';
                             rowsToInsert.push({
                                 tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
                                 waktu_input: new Date().toISOString(),
                                 petugas: pl.petugas || record.petugas,
-                                cabang: pl.lokasi || record.cabang || 'PM',
+                                cabang: cabClean,
                                 status: pl.status || 'Keluar',
                                 relasi: pl.relasi || '-',
                                 alamat: pl.alamat || '-',
                                 ekor: pl.ekor || 0,
                                 pakan: pakanName,
                                 qty: itemsList[pakanName],
-                                satuan: 'Kg',
+                                satuan: sat,
+                                harga_satuan: harga,
                                 catatan: pl.catatan || '',
-                                armada: pl.armada || '-'
+                                armada: pl.armada || null,
+                                trip_id: pl.createdTripId || null
+                            });
+                        }
+
+                        let ongkirVal = parseFloat(String(pl.ongkir || "0").replace(/[^0-9]/g, ''));
+                        if (ongkirVal > 0 && pl.status === "Keluar") {
+                            let ritQty = pl.forceRitCount || 1;
+                            rowsToInsert.push({
+                                tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
+                                waktu_input: new Date().toISOString(),
+                                petugas: pl.petugas || record.petugas,
+                                cabang: cabClean,
+                                status: pl.status || 'Keluar',
+                                relasi: pl.relasi || '-',
+                                alamat: pl.alamat || '-',
+                                ekor: 0,
+                                pakan: 'Ongkir Pengiriman',
+                                qty: ritQty,
+                                satuan: 'Rit',
+                                harga_satuan: (ritQty > 1) ? Math.round(ongkirVal / ritQty) : ongkirVal,
+                                catatan: 'Biaya Pengiriman',
+                                armada: pl.armada || null,
+                                trip_id: pl.createdTripId || null
                             });
                         }
                     });
