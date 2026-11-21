@@ -2425,11 +2425,23 @@
                             Gambar SJ</b> </button>
                     <div id="sj_preview_container"
                         style="margin-top: 15px; display: none; text-align: center; position: relative;">
+                        <div id="sj_scan_badge" style="display:inline-flex; align-items:center; gap:6px; background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700; margin-bottom:8px;">
+                            <span class="material-symbols-outlined" style="font-size:14px; color:#16a34a;">auto_awesome</span>
+                            <span id="sj_scan_status_text">Auto-Scan Aktif (Dokumen Rapi)</span>
+                            <button type="button" id="btn-toggle-scan-sj" onclick="toggleScanSJ()" style="background:#16a34a; color:#fff; border:none; padding:2px 8px; border-radius:12px; font-size:10px; font-weight:700; cursor:pointer; margin-left:4px;">Lihat Asli</button>
+                        </div>
                         <img id="sj_preview"
-                            style="max-width: 100%; max-height: 250px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-                        <div onclick="hapusSJ()"
-                            style="margin-top: 8px; color: white; background: #FEA405; padding: 6px 12px; border-radius: 5px; display: inline-flex; align-items:center; gap:5px; font-size: 11px; cursor: pointer; font-weight: bold;">
-                            <span class="material-symbols-outlined" style="font-size:14px;">delete</span> Hapus Gambar
+                            style="max-width: 100%; max-height: 250px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display:block; margin:0 auto;">
+                        <div style="display:flex; justify-content:center; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap;">
+                            <button type="button" onclick="putarScanSJ(90)" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; padding:5px 9px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
+                                <span class="material-symbols-outlined" style="font-size:15px;">rotate_right</span> Putar 90°
+                            </button>
+                            <button type="button" onclick="bukaModalCropSJ()" style="background:#f8fafc; color:#334155; border:1px solid #cbd5e1; padding:5px 9px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
+                                <span class="material-symbols-outlined" style="font-size:15px;">crop</span> Atur Crop
+                            </button>
+                            <div onclick="hapusSJ()" style="color: white; background: #FEA405; padding: 5px 9px; border-radius: 6px; display: inline-flex; align-items:center; gap:3px; font-size: 11px; cursor: pointer; font-weight: bold;">
+                                <span class="material-symbols-outlined" style="font-size:14px;">delete</span> Hapus
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2650,11 +2662,23 @@
                             Gambar dari WA</b> </button>
                     <div id="cf_preview_container"
                         style="margin-top: 15px; display: none; text-align: center; position: relative;">
+                        <div id="cf_scan_badge" style="display:inline-flex; align-items:center; gap:6px; background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700; margin-bottom:8px;">
+                            <span class="material-symbols-outlined" style="font-size:14px; color:#16a34a;">auto_awesome</span>
+                            <span id="cf_scan_status_text">Auto-Scan Aktif (Dokumen Rapi)</span>
+                            <button type="button" id="btn-toggle-scan-cf" onclick="toggleScanCF()" style="background:#16a34a; color:#fff; border:none; padding:2px 8px; border-radius:12px; font-size:10px; font-weight:700; cursor:pointer; margin-left:4px;">Lihat Asli</button>
+                        </div>
                         <img id="cf_preview"
-                            style="max-width: 100%; max-height: 250px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-                        <div onclick="hapusBukti()"
-                            style="margin-top: 8px; color: white; background: #FEA405; padding: 6px 12px; border-radius: 5px; display: inline-flex; align-items:center; gap:5px; font-size: 11px; cursor: pointer; font-weight: bold;">
-                            <span class="material-symbols-outlined" style="font-size:14px;">delete</span> Hapus Gambar
+                            style="max-width: 100%; max-height: 250px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display:block; margin:0 auto;">
+                        <div style="display:flex; justify-content:center; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap;">
+                            <button type="button" onclick="putarScanCF(90)" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; padding:5px 9px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
+                                <span class="material-symbols-outlined" style="font-size:15px;">rotate_right</span> Putar 90°
+                            </button>
+                            <button type="button" onclick="bukaModalCropCF()" style="background:#f8fafc; color:#334155; border:1px solid #cbd5e1; padding:5px 9px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
+                                <span class="material-symbols-outlined" style="font-size:15px;">crop</span> Atur Crop
+                            </button>
+                            <div onclick="hapusBukti()" style="color: white; background: #FEA405; padding: 5px 9px; border-radius: 6px; display: inline-flex; align-items:center; gap:3px; font-size: 11px; cursor: pointer; font-weight: bold;">
+                                <span class="material-symbols-outlined" style="font-size:14px;">delete</span> Hapus
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -8007,6 +8031,7 @@
             <script src="trip_logic.js"></script>
             <script src="bapera_logic.js"></script>
             <script src="pakan_analytic_logic.js"></script>
+            <script src="doc_scanner_logic.js"></script>
             <script>
                 const APP_VERSION = "v6.1";
                 let isAuditUrl = window.location.search.includes('audit_');
@@ -8944,6 +8969,52 @@
                     }
                 }
 
+                // ==========================================================
+                // HELPER SINGKAT NAMA PAKAN (UNTUK NAMA FILE SURAT JALAN)
+                // ==========================================================
+                function singkatNamaPakan(nama) {
+                    if (!nama) return 'PKN';
+                    let clean = String(nama).trim();
+                    let map = {
+                        'mako a-20': 'A20',
+                        'mako a 20': 'A20',
+                        'mako a20': 'A20',
+                        'a-20': 'A20',
+                        'a 20': 'A20',
+                        'a20': 'A20',
+                        'mako sp-15': 'SP15',
+                        'mako sp 15': 'SP15',
+                        'mako sp15': 'SP15',
+                        'sp-15': 'SP15',
+                        'sp 15': 'SP15',
+                        'sp15': 'SP15',
+                        'silase jagung manis': 'SJM',
+                        'silase jagung': 'SJ',
+                        'rapen kedelai': 'RK',
+                        'pongkol singkong': 'PS',
+                        'konsentrat sapi': 'KS',
+                        'konsentrat': 'KS',
+                        'bungkil sawit': 'BIS',
+                        'ampas bir': 'AB',
+                        'polard': 'PLD',
+                        'pollard': 'PLD',
+                        'bio smart': 'BS',
+                        'tebon jagung': 'TJ',
+                        'jerami': 'JRM'
+                    };
+                    let low = clean.toLowerCase();
+                    if (map[low]) return map[low];
+                    for (let k in map) {
+                        if (low.includes(k)) return map[k];
+                    }
+                    let words = clean.split(/[\s\-_]+/);
+                    if (words.length > 1) {
+                        return words.map(w => w[0].toUpperCase()).join('').slice(0, 4);
+                    }
+                    return clean.slice(0, 4).toUpperCase();
+                }
+                window.singkatNamaPakan = singkatNamaPakan;
+
                 let uploadAbortController = null;
                 let backoffDelayPWA = 1000;
                 let backoffAttemptsPWA = 0;
@@ -9004,13 +9075,22 @@
                                 // Fallback darurat jika data antrean lama belum punya namaFilePasti
                                 if (!namaFile) {
                                     let dSJ = pl.tanggal ? new Date(pl.tanggal) : new Date();
-                                    let tglSJ = ("0" + dSJ.getDate()).slice(-2) + "_" + ("0" + (dSJ.getMonth() + 1)).slice(-2) + "_" + dSJ.getFullYear();
+                                    let dd = ("0" + dSJ.getDate()).slice(-2);
+                                    let mm = ("0" + (dSJ.getMonth() + 1)).slice(-2);
+                                    let yy = dSJ.getFullYear().toString().slice(-2);
+                                    let tglSJ = `${dd}${mm}${yy}`;
+                                    let now = new Date();
+                                    let jamMenit = ("0" + now.getHours()).slice(-2) + ("0" + now.getMinutes()).slice(-2);
+                                    let uniqueCode = (Date.now() % 1000).toString().padStart(3, '0');
                                     let arrPakan = [];
-                                    for (let namaPkn in pl.items) { arrPakan.push(`${namaPkn}_${pl.items[namaPkn]}`); }
+                                    for (let namaPkn in pl.items) { 
+                                        let sNama = (typeof singkatNamaPakan === 'function') ? singkatNamaPakan(namaPkn) : namaPkn.slice(0, 4);
+                                        arrPakan.push(`${sNama}_${pl.items[namaPkn]}`); 
+                                    }
                                     let strPakan = arrPakan.join('_');
                                     let prefixDoc = isGilingan ? 'GILING' : 'SJ';
                                     targetFolder = isGilingan ? 'bukti_giling' : 'surat_jalan';
-                                    let rawNamaSJ = `${prefixDoc}_${cabangStr}_${tglSJ}_${strPakan}_${Date.now()}`;
+                                    let rawNamaSJ = `${prefixDoc}_${cabangStr}_${tglSJ}_${strPakan}_${jamMenit}_${uniqueCode}`;
                                     namaFile = rawNamaSJ.replace(/[^a-zA-Z0-9]/g, '_') + '.jpg';
                                 }
 
@@ -13950,9 +14030,90 @@
                 }
 
                 async function pasteImageFromClipboard(type) { try { const items = await navigator.clipboard.read(); let found = false; for (let item of items) { for (let t of item.types) { if (t.startsWith('image/')) { let blob = await item.getType(t); if (type === 'SJ') prosesFileGambarSJ(blob); else prosesFileGambarCF(blob); found = true; break; } } if (found) break; } if (!found) alert("⚠️ Copy gambar terlebih dahulu!"); } catch (e) { alert("⚠️ Browser menolak paste otomatis atau tidak ada gambar. Gunakan tombol 'Pilih File' di atas."); } }
+                window._scanCacheSJ = null;
+                function toggleScanSJ() {
+                    if (!window._scanCacheSJ) return;
+                    let btn = document.getElementById('btn-toggle-scan-sj');
+                    let text = document.getElementById('sj_scan_status_text');
+                    let img = document.getElementById('sj_preview');
+                    if (window._scanCacheSJ.currentMode === 'scan') {
+                        window._scanCacheSJ.currentMode = 'original';
+                        if (img) img.src = window._scanCacheSJ.originalDataUrl;
+                        fileBase64_SJ = window._scanCacheSJ.base64Original;
+                        if (text) text.innerText = 'Foto Asli Kamera';
+                        if (btn) btn.innerText = 'Pakai Scan';
+                    } else {
+                        window._scanCacheSJ.currentMode = 'scan';
+                        if (img) img.src = window._scanCacheSJ.scannedDataUrl;
+                        fileBase64_SJ = window._scanCacheSJ.base64Scanned;
+                        if (text) text.innerText = '✨ Auto-Scan Aktif (Dokumen Rapi)';
+                        if (btn) btn.innerText = 'Lihat Asli';
+                    }
+                }
+                window.toggleScanSJ = toggleScanSJ;
+
                 function previewSJ(input) { let file = input.files[0]; if (file) { prosesFileGambarSJ(file); } else { hapusSJ(); } }
-                function prosesFileGambarSJ(file) { let reader = new FileReader(); reader.onload = function (e) { document.getElementById('sj_preview_container').style.display = 'block'; document.getElementById('sj_preview').src = e.target.result; let img = new Image(); img.onload = function () { let canvas = document.createElement('canvas'); const MAX_WIDTH = 1000; let w = img.width; let h = img.height; if (w > MAX_WIDTH) { h *= MAX_WIDTH / w; w = MAX_WIDTH; } canvas.width = w; canvas.height = h; let ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, w, h); let dataUrl = canvas.toDataURL('image/jpeg', 0.70); fileBase64_SJ = dataUrl.split(',')[1]; fileMime_SJ = 'image/jpeg'; document.getElementById('paste-zone-sj').innerHTML = "<b>✅ Gambar SJ disalin!</b>"; }; img.src = e.target.result; }; reader.readAsDataURL(file); }
-                function hapusSJ() { document.getElementById('sj_preview_container').style.display = 'none'; document.getElementById('input_sj').value = ""; document.getElementById('paste-zone-sj').innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">content_paste</span> <b>Paste Lampiran</b>`; fileBase64_SJ = ""; fileMime_SJ = ""; }
+                function prosesFileGambarSJ(file) {
+                    let reader = new FileReader();
+                    reader.onload = function (e) {
+                        let container = document.getElementById('sj_preview_container');
+                        if (container) container.style.display = 'block';
+                        let preview = document.getElementById('sj_preview');
+                        if (preview) preview.src = e.target.result;
+                        let text = document.getElementById('sj_scan_status_text');
+                        let btn = document.getElementById('btn-toggle-scan-sj');
+                        if (text) text.innerText = '⏳ Auto-Scan sedang merapikan dokumen...';
+                        if (btn) btn.style.display = 'none';
+
+                        let img = new Image();
+                        img.onload = async function () {
+                            let res = null;
+                            if (typeof CBLDocScanner !== 'undefined') {
+                                try { res = await CBLDocScanner.processImage(img); } catch (eScan) { console.warn("CBLDocScanner err:", eScan); }
+                            }
+
+                            if (res && res.scannedDataUrl) {
+                                window._scanCacheSJ = {
+                                    scannedDataUrl: res.scannedDataUrl,
+                                    originalDataUrl: res.originalDataUrl,
+                                    base64Scanned: res.base64Scanned,
+                                    base64Original: res.base64Original,
+                                    corners: res.corners,
+                                    currentMode: 'scan'
+                                };
+                                if (preview) preview.src = res.scannedDataUrl;
+                                fileBase64_SJ = res.base64Scanned;
+                                fileMime_SJ = 'image/jpeg';
+                                if (text) text.innerText = res.didCrop ? '✨ Auto-Scan: Tepi Dirapikan & Kontras' : '✨ Auto-Scan: Kontras & Background Bersih';
+                                if (btn) { btn.style.display = 'inline-block'; btn.innerText = 'Lihat Asli'; }
+                            } else {
+                                let canvas = document.createElement('canvas');
+                                const MAX_WIDTH = 1000;
+                                let w = img.width;
+                                let h = img.height;
+                                if (w > MAX_WIDTH) { h *= MAX_WIDTH / w; w = MAX_WIDTH; }
+                                canvas.width = w; canvas.height = h;
+                                let ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0, w, h);
+                                let dataUrl = canvas.toDataURL('image/jpeg', 0.70);
+                                fileBase64_SJ = dataUrl.split(',')[1];
+                                fileMime_SJ = 'image/jpeg';
+                                if (text) text.innerText = 'Foto Kamera Tersimpan';
+                            }
+                            document.getElementById('paste-zone-sj').innerHTML = "<b>✅ Gambar SJ siap & discan!</b>";
+                        };
+                        img.src = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+                function hapusSJ() {
+                    window._scanCacheSJ = null;
+                    document.getElementById('sj_preview_container').style.display = 'none';
+                    document.getElementById('input_sj').value = "";
+                    document.getElementById('paste-zone-sj').innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">content_paste</span> <b>Paste Lampiran</b>`;
+                    fileBase64_SJ = "";
+                    fileMime_SJ = "";
+                }
                 function updateKategoriCashflow() {
                     let jenisRadio = document.querySelector('input[name="cf_jenis"]:checked');
                     let jenis = jenisRadio ? jenisRadio.value : 'Masuk';
@@ -14117,28 +14278,83 @@
                     }
                 }
 
+                window._scanCacheCF = null;
+                function toggleScanCF() {
+                    if (!window._scanCacheCF) return;
+                    let btn = document.getElementById('btn-toggle-scan-cf');
+                    let text = document.getElementById('cf_scan_status_text');
+                    let img = document.getElementById('cf_preview');
+                    if (window._scanCacheCF.currentMode === 'scan') {
+                        window._scanCacheCF.currentMode = 'original';
+                        if (img) img.src = window._scanCacheCF.originalDataUrl;
+                        fileBase64_Global = window._scanCacheCF.base64Original;
+                        if (text) text.innerText = 'Foto Asli Kamera';
+                        if (btn) btn.innerText = 'Pakai Scan';
+                    } else {
+                        window._scanCacheCF.currentMode = 'scan';
+                        if (img) img.src = window._scanCacheCF.scannedDataUrl;
+                        fileBase64_Global = window._scanCacheCF.base64Scanned;
+                        if (text) text.innerText = '✨ Auto-Scan Aktif (Dokumen Rapi)';
+                        if (btn) btn.innerText = 'Lihat Asli';
+                    }
+                }
+                window.toggleScanCF = toggleScanCF;
+
                 function prosesFileGambarCF(file) {
                     let reader = new FileReader();
                     reader.onload = function (e) {
-                        document.getElementById('cf_preview_container').style.display = 'block';
-                        document.getElementById('cf_preview').src = e.target.result;
-                        let img = new Image();
-                        img.onload = function () {
-                            let canvas = document.createElement('canvas');
-                            const MAX_WIDTH = 1000;
-                            let width = img.width;
-                            let height = img.height;
-                            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-                            canvas.width = width; canvas.height = height;
-                            let ctx = canvas.getContext('2d');
-                            ctx.drawImage(img, 0, 0, width, height);
-                            let dataUrl = canvas.toDataURL('image/jpeg', 0.70);
-                            fileBase64_Global = dataUrl.split(',')[1];
-                            fileMime_Global = 'image/jpeg';
-                            document.getElementById('paste-zone').innerHTML = "<b>✅ Gambar disalin!</b>";
+                        let container = document.getElementById('cf_preview_container');
+                        if (container) container.style.display = 'block';
+                        let preview = document.getElementById('cf_preview');
+                        if (preview) preview.src = e.target.result;
+                        let text = document.getElementById('cf_scan_status_text');
+                        let btn = document.getElementById('btn-toggle-scan-cf');
+                        if (text) text.innerText = '⏳ Auto-Scan sedang merapikan struk...';
+                        if (btn) btn.style.display = 'none';
 
-                            // 🔥 TRIGGER AI PEMBACA NOMINAL DI SINI 🔥
-                            ekstrakNominalDariStruk(dataUrl);
+                        let img = new Image();
+                        img.onload = async function () {
+                            let res = null;
+                            if (typeof CBLDocScanner !== 'undefined') {
+                                try { res = await CBLDocScanner.processImage(img); } catch (eScan) { console.warn("CBLDocScanner err:", eScan); }
+                            }
+
+                            let finalDataUrl = null;
+                            if (res && res.scannedDataUrl) {
+                                window._scanCacheCF = {
+                                    scannedDataUrl: res.scannedDataUrl,
+                                    originalDataUrl: res.originalDataUrl,
+                                    base64Scanned: res.base64Scanned,
+                                    base64Original: res.base64Original,
+                                    corners: res.corners,
+                                    currentMode: 'scan'
+                                };
+                                if (preview) preview.src = res.scannedDataUrl;
+                                fileBase64_Global = res.base64Scanned;
+                                fileMime_Global = 'image/jpeg';
+                                finalDataUrl = res.scannedDataUrl;
+                                if (text) text.innerText = res.didCrop ? '✨ Auto-Scan: Tepi Dirapikan & Kontras' : '✨ Auto-Scan: Kontras & Background Bersih';
+                                if (btn) { btn.style.display = 'inline-block'; btn.innerText = 'Lihat Asli'; }
+                            } else {
+                                let canvas = document.createElement('canvas');
+                                const MAX_WIDTH = 1000;
+                                let width = img.width;
+                                let height = img.height;
+                                if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                                canvas.width = width; canvas.height = height;
+                                let ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0, width, height);
+                                finalDataUrl = canvas.toDataURL('image/jpeg', 0.70);
+                                fileBase64_Global = finalDataUrl.split(',')[1];
+                                fileMime_Global = 'image/jpeg';
+                                if (text) text.innerText = 'Foto Kamera Tersimpan';
+                            }
+                            document.getElementById('paste-zone').innerHTML = "<b>✅ Struk siap & discan!</b>";
+
+                            // 🔥 TRIGGER AI PEMBACA NOMINAL DENGAN GAMBAR SCAN HASIL OPTIMASI 🔥
+                            if (finalDataUrl && typeof ekstrakNominalDariStruk === 'function') {
+                                ekstrakNominalDariStruk(finalDataUrl);
+                            }
                         };
                         img.src = e.target.result;
                     };
@@ -14146,12 +14362,105 @@
                 }
 
                 function hapusBukti() {
+                    window._scanCacheCF = null;
                     document.getElementById('cf_preview_container').style.display = 'none';
                     document.getElementById('cf_bukti').value = "";
                     document.getElementById('paste-zone').innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">content_paste</span> <b>Paste Gambar dari WA</b>`;
                     fileBase64_Global = "";
                     fileMime_Global = "";
                 }
+
+                // ==========================================================
+                // HELPER ROTASI & CROP MANUAL (SURAT JALAN & CASHFLOW)
+                // ==========================================================
+                async function putarScanSJ(degrees = 90) {
+                    if (!window._scanCacheSJ || typeof CBLDocScanner === 'undefined') return;
+                    let currUrl = (window._scanCacheSJ.currentMode === 'original') 
+                        ? window._scanCacheSJ.originalDataUrl 
+                        : window._scanCacheSJ.scannedDataUrl;
+                    let rotated = await CBLDocScanner.rotateImage(currUrl, degrees);
+                    let img = document.getElementById('sj_preview');
+                    if (img) img.src = rotated.dataUrl;
+
+                    let rotScanned = await CBLDocScanner.rotateImage(window._scanCacheSJ.scannedDataUrl, degrees);
+                    let rotOriginal = await CBLDocScanner.rotateImage(window._scanCacheSJ.originalDataUrl, degrees);
+                    window._scanCacheSJ.scannedDataUrl = rotScanned.dataUrl;
+                    window._scanCacheSJ.base64Scanned = rotScanned.base64;
+                    window._scanCacheSJ.originalDataUrl = rotOriginal.dataUrl;
+                    window._scanCacheSJ.base64Original = rotOriginal.base64;
+                    window._scanCacheSJ.corners = null;
+
+                    fileBase64_SJ = (window._scanCacheSJ.currentMode === 'original') 
+                        ? window._scanCacheSJ.base64Original 
+                        : window._scanCacheSJ.base64Scanned;
+                }
+                window.putarScanSJ = putarScanSJ;
+
+                function bukaModalCropSJ() {
+                    if (typeof CBLDocScanner === 'undefined') return;
+                    CBLDocScanner.bukaModalCropManual('SJ', function(res) {
+                        if (res && res.scannedDataUrl) {
+                            window._scanCacheSJ.scannedDataUrl = res.scannedDataUrl;
+                            window._scanCacheSJ.base64Scanned = res.base64Scanned;
+                            window._scanCacheSJ.corners = res.corners;
+                            window._scanCacheSJ.currentMode = 'scan';
+                            let img = document.getElementById('sj_preview');
+                            if (img) img.src = res.scannedDataUrl;
+                            fileBase64_SJ = res.base64Scanned;
+                            let text = document.getElementById('sj_scan_status_text');
+                            if (text) text.innerText = '✂️ Sudut Disesuaikan Manual';
+                        }
+                    });
+                }
+                window.bukaModalCropSJ = bukaModalCropSJ;
+
+                async function putarScanCF(degrees = 90) {
+                    if (!window._scanCacheCF || typeof CBLDocScanner === 'undefined') return;
+                    let currUrl = (window._scanCacheCF.currentMode === 'original') 
+                        ? window._scanCacheCF.originalDataUrl 
+                        : window._scanCacheCF.scannedDataUrl;
+                    let rotated = await CBLDocScanner.rotateImage(currUrl, degrees);
+                    let img = document.getElementById('cf_preview');
+                    if (img) img.src = rotated.dataUrl;
+
+                    let rotScanned = await CBLDocScanner.rotateImage(window._scanCacheCF.scannedDataUrl, degrees);
+                    let rotOriginal = await CBLDocScanner.rotateImage(window._scanCacheCF.originalDataUrl, degrees);
+                    window._scanCacheCF.scannedDataUrl = rotScanned.dataUrl;
+                    window._scanCacheCF.base64Scanned = rotScanned.base64;
+                    window._scanCacheCF.originalDataUrl = rotOriginal.dataUrl;
+                    window._scanCacheCF.base64Original = rotOriginal.base64;
+                    window._scanCacheCF.corners = null;
+
+                    fileBase64_Global = (window._scanCacheCF.currentMode === 'original') 
+                        ? window._scanCacheCF.base64Original 
+                        : window._scanCacheCF.base64Scanned;
+
+                    if (typeof ekstrakNominalDariStruk === 'function') {
+                        ekstrakNominalDariStruk(rotated.dataUrl);
+                    }
+                }
+                window.putarScanCF = putarScanCF;
+
+                function bukaModalCropCF() {
+                    if (typeof CBLDocScanner === 'undefined') return;
+                    CBLDocScanner.bukaModalCropManual('CF', function(res) {
+                        if (res && res.scannedDataUrl) {
+                            window._scanCacheCF.scannedDataUrl = res.scannedDataUrl;
+                            window._scanCacheCF.base64Scanned = res.base64Scanned;
+                            window._scanCacheCF.corners = res.corners;
+                            window._scanCacheCF.currentMode = 'scan';
+                            let img = document.getElementById('cf_preview');
+                            if (img) img.src = res.scannedDataUrl;
+                            fileBase64_Global = res.base64Scanned;
+                            let text = document.getElementById('cf_scan_status_text');
+                            if (text) text.innerText = '✂️ Sudut Disesuaikan Manual';
+                            if (typeof ekstrakNominalDariStruk === 'function') {
+                                ekstrakNominalDariStruk(res.scannedDataUrl);
+                            }
+                        }
+                    });
+                }
+                window.bukaModalCropCF = bukaModalCropCF;
 
                 async function kirimCashflow() {
                     tutupKeyboard();
@@ -15048,14 +15357,24 @@
                         let isGilingan = (statusPilihan === 'Keluar' && lokasiTerpilih === '/spn');
                         let prefixDoc = isGilingan ? 'GILING' : 'SJ';
                         let targetFolder = isGilingan ? 'bukti_giling' : 'surat_jalan';
-                        let tglSJ = ("0" + dObj.getDate()).slice(-2) + "_" + ("0" + (dObj.getMonth() + 1)).slice(-2) + "_" + dObj.getFullYear();
+                        let dd = ("0" + dObj.getDate()).slice(-2);
+                        let mm = ("0" + (dObj.getMonth() + 1)).slice(-2);
+                        let yy = dObj.getFullYear().toString().slice(-2);
+                        let tglSJ = `${dd}${mm}${yy}`;
+
+                        let now = new Date();
+                        let jamMenit = ("0" + now.getHours()).slice(-2) + ("0" + now.getMinutes()).slice(-2);
+                        let uniqueCode = (Date.now() % 1000).toString().padStart(3, '0');
 
                         let arrPakan = [];
-                        for (let key in payload.items) { arrPakan.push(`${key}_${payload.items[key]}`); }
+                        for (let key in payload.items) { 
+                            let sNama = (typeof singkatNamaPakan === 'function') ? singkatNamaPakan(key) : key.slice(0, 4);
+                            arrPakan.push(`${sNama}_${payload.items[key]}`); 
+                        }
                         let strPakan = arrPakan.join('_');
 
                         // Ganti SEMUA karakter aneh dan SPASI menjadi underscore agar link WA tidak putus
-                        let rawNamaSJ = `${prefixDoc}_${cabangStr}_${tglSJ}_${strPakan}_${Date.now()}`;
+                        let rawNamaSJ = `${prefixDoc}_${cabangStr}_${tglSJ}_${strPakan}_${jamMenit}_${uniqueCode}`;
                         let namaFilePasti = rawNamaSJ.replace(/[^a-zA-Z0-9]/g, '_') + '.jpg';
 
                         predictedUrlSJ = `${SUPA_URL}/storage/v1/object/public/berkas_cbl/${targetFolder}/${namaFilePasti}`;
