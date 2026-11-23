@@ -9346,6 +9346,120 @@
                             }
 
                             // ===============================================
+                            // 2.5 AUTO MUTASI GILINGAN SPN (RL / RD)
+                            // ===============================================
+                            let relasiUpper = String(pl.relasi || "").toUpperCase().trim();
+                            let isKoreksi = String(pl.hashStr || "").startsWith("KOREKSI_") || String(pl.catatan || "").toLowerCase().includes("koreksi mandiri");
+                            let isGilinganSpn = (cabangStr === 'SPN' || pl.lokasi === '/spn') &&
+                                                pl.status === 'Keluar' &&
+                                                !isKoreksi &&
+                                                !String(pl.hashStr || "").includes('_GILING_') &&
+                                                (relasiUpper.includes('RL') || relasiUpper.includes('RD') || relasiUpper.includes('LAKTASI') || relasiUpper.includes('DARBUN'));
+
+                            if (isGilinganSpn && totalKgBongkar > 0) {
+                                let isRL = relasiUpper.includes('RL') || relasiUpper.includes('LAKTASI');
+                                let pakanJadi = isRL ? 'Ransum Laktasi' : 'Ransum Darbun';
+                                let relasiSapi = isRL ? 'Laktasi' : 'Bunting';
+                                let baseHash = pl.hashStr || ('GILING_' + Date.now());
+
+                                // Tahap 2: Hasil giling masuk Gudang SPN
+                                supabaseRows.push({
+                                    tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
+                                    waktu_input: new Date().toISOString(),
+                                    petugas: pl.petugas || 'Admin',
+                                    cabang: 'SPN',
+                                    status: 'Masuk',
+                                    relasi: 'SPN',
+                                    alamat: pl.alamat || '-',
+                                    ekor: pl.ekor || 0,
+                                    pakan: pakanJadi,
+                                    qty: totalKgBongkar,
+                                    satuan: 'Kg',
+                                    harga_satuan: 0,
+                                    catatan: '[Auto Mutasi] [Hasil Giling] Masuk Gudang SPN',
+                                    blok: pl.blok_penyimpanan || null,
+                                    hash_str: baseHash + '_GILING_IN',
+                                    device_id: pl.device_id || null,
+                                    po_id: pl.po_id || null,
+                                    target_batch_id: null,
+                                    armada: targetArmada || null,
+                                    trip_id: createdTripId || null
+                                });
+
+                                // Tahap 3: Mutasi kirim ke Kandang SPN
+                                supabaseRows.push({
+                                    tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
+                                    waktu_input: new Date().toISOString(),
+                                    petugas: pl.petugas || 'Admin',
+                                    cabang: 'SPN',
+                                    status: 'Keluar',
+                                    relasi: 'Kandang',
+                                    alamat: pl.alamat || '-',
+                                    ekor: pl.ekor || 0,
+                                    pakan: pakanJadi,
+                                    qty: totalKgBongkar,
+                                    satuan: 'Kg',
+                                    harga_satuan: 0,
+                                    catatan: '[Auto Mutasi] Mutasi kirim ke Kandang SPN',
+                                    blok: pl.blok_penyimpanan || null,
+                                    hash_str: baseHash + '_GILING_TRF_OUT',
+                                    device_id: pl.device_id || null,
+                                    po_id: pl.po_id || null,
+                                    target_batch_id: null,
+                                    armada: targetArmada || null,
+                                    trip_id: createdTripId || null
+                                });
+
+                                // Tahap 4: Diterima masuk di Kandang SPN
+                                supabaseRows.push({
+                                    tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
+                                    waktu_input: new Date().toISOString(),
+                                    petugas: pl.petugas || 'Admin',
+                                    cabang: 'Kandang SPN',
+                                    status: 'Masuk',
+                                    relasi: 'Kandang',
+                                    alamat: pl.alamat || '-',
+                                    ekor: pl.ekor || 0,
+                                    pakan: pakanJadi,
+                                    qty: totalKgBongkar,
+                                    satuan: 'Kg',
+                                    harga_satuan: 0,
+                                    catatan: '[Auto Mutasi] Diterima di Kandang SPN',
+                                    blok: null,
+                                    hash_str: baseHash + '_GILING_TRF_IN',
+                                    device_id: pl.device_id || null,
+                                    po_id: pl.po_id || null,
+                                    target_batch_id: null,
+                                    armada: targetArmada || null,
+                                    trip_id: createdTripId || null
+                                });
+
+                                // Tahap 5: Pemakaian konsumsi pakan sapi di Kandang SPN
+                                supabaseRows.push({
+                                    tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
+                                    waktu_input: new Date().toISOString(),
+                                    petugas: pl.petugas || 'Admin',
+                                    cabang: 'Kandang SPN',
+                                    status: 'Keluar',
+                                    relasi: relasiSapi,
+                                    alamat: pl.alamat || '-',
+                                    ekor: pl.ekor || 0,
+                                    pakan: pakanJadi,
+                                    qty: totalKgBongkar,
+                                    satuan: 'Kg',
+                                    harga_satuan: 0,
+                                    catatan: 'Pemakaian konsumsi pakan sapi ' + relasiSapi,
+                                    blok: null,
+                                    hash_str: baseHash + '_GILING_SAPI_OUT',
+                                    device_id: pl.device_id || null,
+                                    po_id: pl.po_id || null,
+                                    target_batch_id: null,
+                                    armada: targetArmada || null,
+                                    trip_id: createdTripId || null
+                                });
+                            }
+
+                            // ===============================================
                             // 3. JIKA ADA ONGKIR (KHUSUS KELUAR & NOMINAL > 0)
                             // ===============================================
                             let ongkirVal = parseFloat(String(pl.ongkir || "0").replace(/[^0-9]/g, ''));
