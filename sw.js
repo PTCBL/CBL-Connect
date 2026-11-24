@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pakan-cbl-v74';
+const CACHE_NAME = 'pakan-cbl-v75';
 const urlsToCache = [
   './',
   './index.html',
@@ -8,7 +8,8 @@ const urlsToCache = [
   './jurnal_logic.js',
   './po_logic.js',
   './trip_logic.js',
-  './doc_scanner_logic.js'
+  './doc_scanner_logic.js',
+  './dompet_rembes_logic.js'
 ];
 
 // Install & paksa versi baru langsung aktif

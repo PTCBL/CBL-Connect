@@ -2270,7 +2270,7 @@
                     <label for="mode_pakan"><span class="material-symbols-outlined"
                             style="font-size:14px; vertical-align:middle;">warehouse</span> Gudang Pakan</label>
                     <input type="radio" id="mode_cf" name="mode_input" value="cf" onchange="toggleModeInput()">
-                    <label for="mode_cf"><span class="material-symbols-outlined"
+                    <label for="mode_cf" id="label_mode_cf"><span class="material-symbols-outlined"
                             style="font-size:14px; vertical-align:middle;">account_balance_wallet</span>
                         Cashflow</label>
                 </div>
@@ -2560,9 +2560,22 @@
             </div>
 
             <div id="form-cashflow" class="hidden">
-                <div class="sub-header"
-                    style="background:#FFFFF0; padding:8px; border-radius:8px; border:1px solid #DBE4C9;">Pencatatan
-                    Arus Kas & Bukti</div>
+                <!-- SUB-TOGGLE: INPUT CASHFLOW vs DOMPET REIMBURSE -->
+                <div id="cf-sub-toggle-wrap" style="margin-bottom: 15px; width: 100%; grid-column: 1 / -1;">
+                    <div style="display: flex; gap: 6px; background: #f1f5f9; padding: 4px; border-radius: 10px; border: 1px solid #cbd5e1;">
+                        <button type="button" id="btn-sub-cf-input" onclick="switchSubCashflow('input')"
+                            style="flex: 1; padding: 8px 6px; border-radius: 8px; border: none; font-size: 12px; font-weight: 800; cursor: pointer; background: #1a5c40; color: white; display: flex; align-items: center; justify-content: center; gap: 4px; transition: all 0.2s;">
+                            <span class="material-symbols-outlined" style="font-size: 16px;">edit_note</span> Input Cashflow
+                        </button>
+                        <button type="button" id="btn-sub-cf-dompet" onclick="switchSubCashflow('dompet')"
+                            style="flex: 1; padding: 8px 6px; border-radius: 8px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; background: transparent; color: #64748b; display: flex; align-items: center; justify-content: center; gap: 4px; transition: all 0.2s;">
+                            <span class="material-symbols-outlined" style="font-size: 16px;">account_balance_wallet</span> Dompet Reimburse
+                        </button>
+                    </div>
+                </div>
+
+                <!-- SUB-VIEW 1: FORM CASHFLOW STANDARD -->
+                <div id="sub-view-cf-input" style="width: 100%; grid-column: 1 / -1;">
                 <div class="form-group">
                     <label>Jenis Transaksi</label>
                     <div class="radio-group" onchange="updateKategoriCashflow()">
@@ -2688,6 +2701,10 @@
                 </button>
                 <div id="cf_status"
                     style="text-align:center; font-size:13px; margin-top:15px; font-weight:bold; color: #8AA624;"></div>
+                </div> <!-- END sub-view-cf-input -->
+
+                <!-- SUB-VIEW 2: DOMPET REIMBURSE -->
+                <div id="view-dompet-rembes" class="hidden" style="width: 100%; grid-column: 1 / -1;"></div>
             </div>
         </div>
 
@@ -8032,8 +8049,9 @@
             <script src="bapera_logic.js"></script>
             <script src="pakan_analytic_logic.js"></script>
             <script src="doc_scanner_logic.js"></script>
+            <script src="dompet_rembes_logic.js"></script>
             <script>
-                const APP_VERSION = "v6.1";
+                const APP_VERSION = "v6.2";
                 let isAuditUrl = window.location.search.includes('audit_');
                 let savedAppVer = localStorage.getItem('cbl_app_version');
 
@@ -9412,6 +9430,18 @@
                                     bukti_url: urlSJ, // SJ jadi bukti bayar kuli juga
                                     petugas: pl.petugas || 'Admin'
                                 });
+
+                                // Auto-sync ke Dompet Rembes (Kas Kecil)
+                                if (typeof syncBongkarMuatKeDompet === 'function') {
+                                    syncBongkarMuatKeDompet({
+                                        tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
+                                        nominal: biayaBongkar,
+                                        keterangan: `[BM] Upah bongkar pakan masuk (${totalKgBongkar} Kg)`,
+                                        relasi: "Kuli Gudang " + cabangStr,
+                                        cabangStr: cabangStr,
+                                        petugas: pl.petugas || 'Wildan'
+                                    });
+                                }
                             }
                         }
 
@@ -9878,6 +9908,26 @@
                     }
 
                     // 3. Jalankan fungsi bawaan sistem setelah menu siap
+                    // Proteksi Akses Menu Cashflow & Dompet Reimburse (Khusus Admin Pusat / Wildan)
+                    let labelModeCf = document.getElementById('label_mode_cf');
+                    let inputModeCf = document.getElementById('mode_cf');
+                    let fcEl = document.getElementById('form-cashflow');
+                    let fpEl = document.getElementById('form-pakan');
+
+                    if (role === 'admin') {
+                        if (labelModeCf) labelModeCf.style.display = '';
+                        if (inputModeCf) inputModeCf.disabled = false;
+                        if (fcEl) fcEl.style.removeProperty('display');
+                        if (fpEl) fpEl.style.removeProperty('width');
+                    } else {
+                        if (labelModeCf) labelModeCf.style.display = 'none';
+                        if (inputModeCf) inputModeCf.disabled = true;
+                        if (fcEl) fcEl.style.setProperty('display', 'none', 'important');
+                        if (fpEl) fpEl.style.setProperty('width', '100%', 'important');
+                        let radPakan = document.getElementById('mode_pakan');
+                        if (radPakan) radPakan.checked = true;
+                    }
+
                     updateStatusKoneksi();
                     gantiLokasi();
                     if (typeof updateKategoriCashflow === 'function') updateKategoriCashflow();
@@ -10031,9 +10081,23 @@
                 });
 
                 function toggleModeInput() {
-                    let mode = document.querySelector('input[name="mode_input"]:checked').value;
-                    if (mode === 'pakan') { document.getElementById('form-pakan').classList.remove('hidden'); document.getElementById('form-cashflow').classList.add('hidden'); }
-                    else { document.getElementById('form-pakan').classList.add('hidden'); document.getElementById('form-cashflow').classList.remove('hidden'); }
+                    let modeRadio = document.querySelector('input[name="mode_input"]:checked');
+                    let mode = modeRadio ? modeRadio.value : 'pakan';
+
+                    if (mode === 'cf' && currentRole !== 'admin') {
+                        alert("Akses Ditolak: Menu Cashflow & Dompet Reimburse hanya dapat diakses oleh Admin Pusat (Wildan).");
+                        let radPakan = document.getElementById('mode_pakan');
+                        if (radPakan) radPakan.checked = true;
+                        mode = 'pakan';
+                    }
+
+                    if (mode === 'pakan') {
+                        document.getElementById('form-pakan').classList.remove('hidden');
+                        document.getElementById('form-cashflow').classList.add('hidden');
+                    } else {
+                        document.getElementById('form-pakan').classList.add('hidden');
+                        document.getElementById('form-cashflow').classList.remove('hidden');
+                    }
                 }
 
                 function switchTabAnalytics(tab) {
