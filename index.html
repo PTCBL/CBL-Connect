@@ -3141,19 +3141,41 @@
                         <div class="rekap-title"><span class="material-symbols-outlined"
                                 style="font-size:18px;">warehouse</span> Perbandingan Gudang (Kg)</div>
                         <div style="height: 200px; position: relative;"><canvas id="chartGudang"></canvas></div>
+                        <div id="gudang-mini-summary"
+                            style="margin-top:10px; padding-top:8px; border-top:1px dashed #e2e8f0; display:flex; flex-wrap:wrap; gap:6px; font-size:10px; color:#475569;">
+                        </div>
                     </div>
 
                     <div class="rekap-card" id="card-top-konsumen">
                         <div
                             style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px; border-bottom:1px solid #DBE4C9; padding-bottom:10px;">
-                            <div class="rekap-title"
-                                style="margin:0; border:none; padding:0; display:flex; align-items:center; gap:6px;">
-                                <span class="material-symbols-outlined"
-                                    style="font-size:20px; color:#8AA624;">military_tech</span>
-                                <span id="title-top-konsumen">Top Konsumen & Proporsi Pakan</span>
+                            <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
+                                <div class="rekap-title"
+                                    style="margin:0; border:none; padding:0; display:flex; align-items:center; gap:6px;">
+                                    <span class="material-symbols-outlined"
+                                        style="font-size:20px; color:#8AA624;">military_tech</span>
+                                    <span id="title-top-konsumen">Top Konsumen & Proporsi Pakan</span>
+                                </div>
+
+                                <!-- Toggle Mode: Per Konsumen vs Per Alamat/Regional -->
+                                <div
+                                    style="display:inline-flex; background:#f1f5f9; border-radius:8px; padding:2px; border:1px solid #cbd5e1;">
+                                    <button type="button" class="btn-top-mode" id="btn-top-mode-konsumen"
+                                        onclick="setTopKonsumenMode('konsumen', this)"
+                                        style="padding:4px 9px; font-size:11px; font-weight:700; border:none; background:#1a5c40; color:#fff; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                                        <span class="material-symbols-outlined" style="font-size:13px;">person</span>
+                                        Per Konsumen
+                                    </button>
+                                    <button type="button" class="btn-top-mode" id="btn-top-mode-alamat"
+                                        onclick="setTopKonsumenMode('alamat', this)"
+                                        style="padding:4px 9px; font-size:11px; font-weight:600; border:none; background:transparent; color:#64748b; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                                        <span class="material-symbols-outlined" style="font-size:13px;">location_on</span>
+                                        Per Alamat
+                                    </button>
+                                </div>
                             </div>
 
-                            <!-- Toolbar Kontrol: Pilihan Limit, Sort, & Cari -->
+                            <!-- Toolbar Kontrol: Pilihan Limit, Filter Wilayah, Sort, Cari, & Cetak -->
                             <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
                                 <!-- Filter Limit (Top 5, 10, 20, Semua) -->
                                 <div
@@ -3175,6 +3197,36 @@
                                         style="padding:4px 9px; font-size:11px; font-weight:600; border:none; background:transparent; color:#64748b; border-radius:6px; cursor:pointer;">Semua</button>
                                 </div>
 
+                                <!-- Filter Wilayah / Alamat -->
+                                <select id="select-top-alamat" onchange="setTopKonsumenAlamatFilter(this.value)"
+                                    style="padding:4px 8px; font-size:11px; font-weight:600; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#334155; cursor:pointer; max-width:155px;">
+                                    <option value="ALL">Semua Alamat</option>
+                                </select>
+
+                                <!-- Multi-Filter Jenis Pakan -->
+                                <div id="top-pakan-dropdown-wrap" style="position:relative; display:inline-block;">
+                                    <button type="button" id="btn-top-pakan-filter"
+                                        onclick="toggleTopPakanPopover(event)"
+                                        style="padding:4px 9px; font-size:11px; font-weight:600; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#334155; cursor:pointer; display:inline-flex; align-items:center; gap:4px; max-width:170px;">
+                                        <span class="material-symbols-outlined" style="font-size:13px; color:#8AA624;">filter_alt</span>
+                                        <span id="label-top-pakan-filter" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Semua Pakan</span>
+                                        <span class="material-symbols-outlined" style="font-size:14px; color:#64748b;">expand_more</span>
+                                    </button>
+                                    <div id="popover-top-pakan" class="hidden" onclick="event.stopPropagation()"
+                                        style="position:absolute; top:calc(100% + 4px); right:0; width:250px; background:#ffffff; border:1px solid #cbd5e1; border-radius:10px; box-shadow:0 10px 25px rgba(15,23,42,0.14); z-index:40; overflow:hidden;">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; background:#f8fafc; border-bottom:1px solid #e2e8f0; font-size:11px;">
+                                            <span id="top-pakan-count-info" style="font-weight:700; color:#334155;">Pilih Jenis Pakan</span>
+                                            <button type="button" onclick="clearTopPakanFilter()"
+                                                style="border:none; background:transparent; color:#dc2626; font-size:10.5px; font-weight:700; cursor:pointer; padding:2px 4px;">
+                                                Reset (Semua)
+                                            </button>
+                                        </div>
+                                        <div id="list-top-pakan-checks" style="max-height:230px; overflow-y:auto; padding:6px 8px; display:flex; flex-direction:column; gap:3px;">
+                                            <div style="font-size:11px; color:#94a3b8; padding:6px;">Memuat daftar pakan...</div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- Sort By -->
                                 <select id="select-top-sort" onchange="setTopKonsumenSort(this.value)"
                                     style="padding:4px 8px; font-size:11px; font-weight:600; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#334155; cursor:pointer;">
@@ -3184,12 +3236,20 @@
 
                                 <!-- Search Input -->
                                 <div style="position:relative; display:inline-flex; align-items:center;">
-                                    <input type="text" id="input-top-search" placeholder="Cari relasi..."
+                                    <input type="text" id="input-top-search" placeholder="Cari relasi / alamat..."
                                         oninput="setTopKonsumenSearch(this.value)"
-                                        style="padding:4px 8px 4px 24px; font-size:11px; border:1px solid #cbd5e1; border-radius:8px; width:100px; background:#fff;">
+                                        style="padding:4px 8px 4px 24px; font-size:11px; border:1px solid #cbd5e1; border-radius:8px; width:130px; background:#fff;">
                                     <span class="material-symbols-outlined"
                                         style="position:absolute; left:6px; font-size:14px; color:#94a3b8; pointer-events:none;">search</span>
                                 </div>
+
+                                <!-- Tombol Cetak Laporan -->
+                                <button type="button" id="btn-cetak-top-konsumen" onclick="cetakLaporanTopKonsumen()"
+                                    style="padding:5px 10px; font-size:11px; font-weight:700; border:1px solid #1d4ed8; background:#eff6ff; color:#1d4ed8; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:4px;"
+                                    title="Cetak Laporan Top Konsumen / Regional ke PDF">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">print</span>
+                                    Cetak
+                                </button>
                             </div>
                         </div>
 
@@ -3203,7 +3263,7 @@
                                         <th
                                             style="padding:8px 8px; text-align:center; width:38px; color:#475569; font-size:11px;">
                                             #</th>
-                                        <th style="padding:8px 8px; text-align:left; color:#475569; font-size:11px;">
+                                        <th id="th-top-entity" style="padding:8px 8px; text-align:left; color:#475569; font-size:11px;">
                                             Nama Relasi</th>
                                         <th class="desktop-col-kg"
                                             style="padding:8px 8px; text-align:right; width:110px; color:#475569; font-size:11px;">
@@ -3221,9 +3281,14 @@
                             </table>
                         </div>
 
+                        <!-- Ringkasan Total yang Ditampilkan -->
+                        <div id="top-konsumen-summary"
+                            style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-top:10px; padding:7px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; font-size:11px; color:#334155;">
+                        </div>
+
                         <!-- Mini Legend warna pakan di bawah tabel -->
                         <div id="top-konsumen-legend"
-                            style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; padding-top:8px; border-top:1px dashed #e2e8f0; font-size:10px; color:#64748b;">
+                            style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; padding-top:8px; border-top:1px dashed #e2e8f0; font-size:10px; color:#64748b;">
                         </div>
                     </div>
 
@@ -11039,7 +11104,8 @@
                                     q: parseFloat(row.qty) || 0, // qty
                                     o: (parseFloat(row.qty) || 0) * (parseFloat(row.harga_satuan) || 0), // omzet
                                     h: String(row.status).toLowerCase().includes('keluar') ? (parseFloat(row.total_hpp) || 0) : 0, // hpp
-                                    r: row.relasi || '-' // relasi
+                                    r: row.relasi || '-', // relasi
+                                    al: (row.alamat || '').trim() // alamat singkat
                                 };
                             });
 
@@ -11141,7 +11207,10 @@
 
                                 if (isKeluar && isPenjualan) {
                                     let r = row.r || "Tanpa Nama";
-                                    if (!konsumenMap[r]) konsumenMap[r] = { o: 0, q: 0, ongkir: 0, items: {} };
+                                    if (!konsumenMap[r]) konsumenMap[r] = { o: 0, q: 0, ongkir: 0, al: '', items: {} };
+                                    if (!konsumenMap[r].al && row.al && String(row.al).trim() && String(row.al).trim() !== '-') {
+                                        konsumenMap[r].al = String(row.al).trim();
+                                    }
 
                                     if (isOngkir) {
                                         tOngkir += row.o;
@@ -11260,6 +11329,7 @@
 
                             return {
                                 n: k,
+                                alamat: typeof resolveKonsumenAlamat === 'function' ? resolveKonsumenAlamat(k, km.al) : (km.al || 'Alamat Belum Diisi'),
                                 v: km.o,
                                 q: km.q,
                                 ongkir: km.ongkir || 0,
@@ -11373,6 +11443,14 @@
                         }
                     });
 
+                    const formatGudangPct = (val, sum) => {
+                        if (!sum || !val) return "0%";
+                        let rawPct = (val * 100) / sum;
+                        if (rawPct > 0 && rawPct < 1) return Math.max(rawPct, 0.01).toFixed(2) + "%";
+                        if (rawPct > 99 && rawPct < 100) return Math.min(rawPct, 99.99).toFixed(2) + "%";
+                        return rawPct.toFixed(1) + "%";
+                    };
+
                     if (chGudang) chGudang.destroy();
                     chGudang = new Chart(document.getElementById('chartGudang').getContext('2d'), {
                         type: 'bar',
@@ -11436,6 +11514,7 @@
                             indexAxis: 'y', // Horizontal Bar
                             responsive: true,
                             maintainAspectRatio: false,
+                            interaction: { mode: 'index', intersect: false },
                             layout: { padding: { right: 60 } },
                             scales: {
                                 x: {
@@ -11464,24 +11543,69 @@
                                     formatter: (val, ctx) => {
                                         let sum = 0;
                                         ctx.chart.data.datasets.forEach(dataset => { sum += dataset.data[ctx.dataIndex] || 0; });
-                                        let percentage = (val * 100 / sum).toFixed(1) + "%";
-                                        return [nf.format(val), percentage];
+                                        return [nf.format(val), formatGudangPct(val, sum)];
                                     }
                                 },
                                 tooltip: {
+                                    mode: 'index',
+                                    intersect: false,
+                                    filter: function (tooltipItem) {
+                                        return (Number(tooltipItem.raw) || 0) > 0;
+                                    },
                                     callbacks: {
                                         label: function (context) {
-                                            let val = context.raw;
+                                            let val = Number(context.raw) || 0;
                                             let sum = 0;
-                                            context.chart.data.datasets.forEach(dataset => { sum += dataset.data[context.dataIndex] || 0; });
-                                            let percentage = sum > 0 ? (val * 100 / sum).toFixed(1) + "%" : "0%";
-                                            return context.dataset.label + ': ' + nf.format(val) + ' Kg (' + percentage + ')';
+                                            context.chart.data.datasets.forEach(dataset => { sum += Number(dataset.data[context.dataIndex]) || 0; });
+                                            return context.dataset.label + ': ' + nf.format(val) + ' Kg (' + formatGudangPct(val, sum) + ')';
+                                        },
+                                        footer: function (tooltipItems) {
+                                            if (!tooltipItems || tooltipItems.length === 0) return '';
+                                            let idx = tooltipItems[0].dataIndex;
+                                            let sum = 0;
+                                            tooltipItems[0].chart.data.datasets.forEach(dataset => { sum += Number(dataset.data[idx]) || 0; });
+                                            return 'Total: ' + nf.format(sum) + ' Kg';
                                         }
                                     }
                                 }
                             }
                         }
                     });
+
+                    // Render ringkasan teks detail tiap aktivitas & gudang (agar volume mungil < 4% tetap terbaca jelas tanpa hover)
+                    const gudangSummaryEl = document.getElementById('gudang-mini-summary');
+                    if (gudangSummaryEl) {
+                        const gudangActs = [
+                            { key: 'masuk', label: 'MASUK' },
+                            { key: 'jual', label: 'JUAL' },
+                            { key: 'pakai', label: 'PAKAI' },
+                            { key: 'giling', label: 'GILING' },
+                            { key: 'mutasi', label: 'MUTASI' }
+                        ];
+                        const gudangColors = { PM: '#2196F3', RPH: '#8AA624', SPN: '#F44336' };
+                        let gHtml = '';
+                        gudangActs.forEach(act => {
+                            let pmV = Number(d.gudangData?.PM?.[act.key]) || 0;
+                            let rphV = Number(d.gudangData?.RPH?.[act.key]) || 0;
+                            let spnV = Number(d.gudangData?.SPN?.[act.key]) || 0;
+                            let sum = pmV + rphV + spnV;
+                            if (sum <= 0) return;
+                            let parts = [
+                                { name: 'PM', val: pmV },
+                                { name: 'RPH', val: rphV },
+                                { name: 'SPN', val: spnV }
+                            ].filter(x => x.val > 0).map(x =>
+                                `<span style="display:inline-flex; align-items:center; gap:3px;">` +
+                                `<span style="width:6px; height:6px; border-radius:50%; background:${gudangColors[x.name]};"></span>` +
+                                `<b>${x.name}:</b> ${nf.format(x.val)} Kg <span style="color:#64748b;">(${formatGudangPct(x.val, sum)})</span>` +
+                                `</span>`
+                            ).join('<span style="color:#cbd5e1;">•</span>');
+                            gHtml += `<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:4px 8px; display:inline-flex; flex-wrap:wrap; align-items:center; gap:5px;">` +
+                                `<span style="font-weight:800; color:#334155;">${act.label}:</span> ${parts}` +
+                                `</div>`;
+                        });
+                        gudangSummaryEl.innerHTML = gHtml || '<span style="color:#94a3b8;">Belum ada data pergerakan gudang.</span>';
+                    }
 
                     if (d.isFiltered) {
                         document.getElementById('cardDailyGlobal').classList.remove('hidden');
@@ -11580,8 +11704,124 @@
                 window.currentTopLimit = 5;
                 window.currentTopSort = 'omzet'; // 'omzet' | 'volume'
                 window.currentTopSearch = '';
+                window.currentTopViewMode = 'konsumen'; // 'konsumen' | 'alamat'
+                window.currentTopAlamatFilter = 'ALL';
+                window.currentTopPakanFilters = new Set();
                 window.expandedTopKonsumen = new Set();
                 window.currentDisplayedTopKonsumen = [];
+
+                if (!window._topPakanDocListenerBound) {
+                    window._topPakanDocListenerBound = true;
+                    document.addEventListener('click', function (e) {
+                        let wrap = document.getElementById('top-pakan-dropdown-wrap');
+                        let pop = document.getElementById('popover-top-pakan');
+                        if (pop && !pop.classList.contains('hidden') && wrap && !wrap.contains(e.target)) {
+                            pop.classList.add('hidden');
+                        }
+                    });
+                }
+
+                window.toggleTopPakanPopover = function (e) {
+                    if (e) e.stopPropagation();
+                    let pop = document.getElementById('popover-top-pakan');
+                    if (pop) pop.classList.toggle('hidden');
+                };
+
+                window.toggleTopPakanFilterOption = function (encodedName, isChecked) {
+                    let pName = decodeURIComponent(encodedName || '');
+                    if (!pName) return;
+                    if (isChecked) window.currentTopPakanFilters.add(pName);
+                    else window.currentTopPakanFilters.delete(pName);
+                    renderTopKonsumenView();
+                };
+
+                window.clearTopPakanFilter = function () {
+                    window.currentTopPakanFilters.clear();
+                    renderTopKonsumenView();
+                };
+
+                function escapeTopHtml(str) {
+                    return String(str == null ? '' : str)
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                }
+
+                function normalizeRegionalAlamat(raw) {
+                    let clean = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim();
+                    if (!clean || clean === '-' || clean.toLowerCase() === 'null' || clean.toLowerCase() === 'undefined') {
+                        return 'Alamat Belum Diisi';
+                    }
+                    return clean.split(' ').map(w => {
+                        if (!w) return '';
+                        if (w.length <= 3 && w === w.toUpperCase() && /^[A-Z0-9.\-]+$/.test(w)) return w;
+                        return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+                    }).join(' ');
+                }
+
+                function getRelasiAlamatLookup() {
+                    let lookup = {};
+                    let sources = [];
+                    try {
+                        let cached = JSON.parse(localStorage.getItem('data_relasi_cbl') || '[]');
+                        if (Array.isArray(cached)) sources.push(...cached);
+                    } catch (e) { }
+                    if (typeof globalRelasi !== 'undefined' && Array.isArray(globalRelasi)) {
+                        sources.push(...globalRelasi);
+                    }
+                    sources.forEach(item => {
+                        if (!item || !item.nama) return;
+                        let key = String(item.nama).trim().toLowerCase();
+                        let al = String(item.alamat || '').trim();
+                        if (key && al && al !== '-') lookup[key] = al;
+                    });
+                    return lookup;
+                }
+
+                function resolveKonsumenAlamat(namaRelasi, fallbackAlamat, lookupObj) {
+                    let lookup = lookupObj || getRelasiAlamatLookup();
+                    let key = String(namaRelasi || '').trim().toLowerCase();
+                    let chosen = (key && lookup[key]) ? lookup[key] : fallbackAlamat;
+                    return normalizeRegionalAlamat(chosen);
+                }
+
+                function formatTopPct(pct) {
+                    let val = Number(pct) || 0;
+                    if (val <= 0) return '0%';
+                    if (val < 1) return Math.max(val, 0.01).toFixed(2) + '%';
+                    if (val > 99 && val < 100) return Math.min(val, 99.99).toFixed(2) + '%';
+                    return val.toFixed(1) + '%';
+                }
+
+                window.setTopKonsumenMode = function (mode, btnEl) {
+                    window.currentTopViewMode = (mode === 'alamat') ? 'alamat' : 'konsumen';
+                    document.querySelectorAll('.btn-top-mode').forEach(b => {
+                        b.style.background = 'transparent';
+                        b.style.color = '#64748b';
+                        b.style.fontWeight = '600';
+                    });
+                    if (btnEl) {
+                        btnEl.style.background = '#1a5c40';
+                        btnEl.style.color = '#fff';
+                        btnEl.style.fontWeight = '700';
+                    }
+                    let searchEl = document.getElementById('input-top-search');
+                    if (searchEl) {
+                        searchEl.placeholder = window.currentTopViewMode === 'alamat' ? 'Cari alamat / konsumen...' : 'Cari relasi / alamat...';
+                    }
+                    let thEl = document.getElementById('th-top-entity');
+                    if (thEl) {
+                        thEl.textContent = window.currentTopViewMode === 'alamat' ? 'Wilayah / Alamat' : 'Nama Relasi';
+                    }
+                    renderTopKonsumenView();
+                };
+
+                window.setTopKonsumenAlamatFilter = function (alamatVal) {
+                    window.currentTopAlamatFilter = alamatVal || 'ALL';
+                    renderTopKonsumenView();
+                };
 
                 window.setTopKonsumenLimit = function (limit, btnEl) {
                     window.currentTopLimit = limit;
@@ -11611,97 +11851,434 @@
                 window.toggleExpandTopKonsumenIdx = function (idx) {
                     let k = window.currentDisplayedTopKonsumen ? window.currentDisplayedTopKonsumen[idx] : null;
                     if (!k) return;
-                    if (window.expandedTopKonsumen.has(k.n)) {
-                        window.expandedTopKonsumen.delete(k.n);
+                    let expandKey = (window.currentTopViewMode || 'konsumen') + '::' + k.n;
+                    if (window.expandedTopKonsumen.has(expandKey)) {
+                        window.expandedTopKonsumen.delete(expandKey);
                     } else {
-                        window.expandedTopKonsumen.add(k.n);
+                        window.expandedTopKonsumen.add(expandKey);
                     }
                     renderTopKonsumenView();
                 };
+
+                function populateTopAlamatDropdown(enrichedKonsumen) {
+                    let sel = document.getElementById('select-top-alamat');
+                    if (!sel) return;
+                    let counts = {};
+                    enrichedKonsumen.forEach(k => {
+                        let al = k.alamat || 'Alamat Belum Diisi';
+                        counts[al] = (counts[al] || 0) + 1;
+                    });
+                    let regions = Object.keys(counts).sort((a, b) => {
+                        if (a === 'Alamat Belum Diisi') return 1;
+                        if (b === 'Alamat Belum Diisi') return -1;
+                        return a.localeCompare(b, 'id-ID');
+                    });
+                    let optsHtml = `<option value="ALL">Semua Wilayah (${regions.length})</option>`;
+                    regions.forEach(r => {
+                        optsHtml += `<option value="${escapeTopHtml(r)}">${escapeTopHtml(r)} (${counts[r]})</option>`;
+                    });
+                    sel.innerHTML = optsHtml;
+                    if (window.currentTopAlamatFilter !== 'ALL' && !counts[window.currentTopAlamatFilter]) {
+                        window.currentTopAlamatFilter = 'ALL';
+                    }
+                    sel.value = window.currentTopAlamatFilter;
+                }
+
+                function populateTopPakanFilterUI(enrichedKonsumen) {
+                    let pakanTotals = {};
+                    enrichedKonsumen.forEach(k => {
+                        (k.items || []).forEach(it => {
+                            if (!it || !it.name) return;
+                            if (!pakanTotals[it.name]) pakanTotals[it.name] = { q: 0, o: 0 };
+                            pakanTotals[it.name].q += Number(it.q) || 0;
+                            pakanTotals[it.name].o += Number(it.o) || 0;
+                        });
+                    });
+
+                    let allPakans = Object.keys(pakanTotals).sort((a, b) => (pakanTotals[b].q - pakanTotals[a].q) || a.localeCompare(b, 'id-ID'));
+
+                    // Bersihkan pilihan pakan yang sudah tidak ada di periode aktif
+                    Array.from(window.currentTopPakanFilters).forEach(name => {
+                        if (!pakanTotals[name]) window.currentTopPakanFilters.delete(name);
+                    });
+
+                    let selArr = Array.from(window.currentTopPakanFilters);
+                    let btnEl = document.getElementById('btn-top-pakan-filter');
+                    let lblEl = document.getElementById('label-top-pakan-filter');
+                    let countInfoEl = document.getElementById('top-pakan-count-info');
+                    if (lblEl) {
+                        if (selArr.length === 0) lblEl.textContent = 'Semua Pakan';
+                        else if (selArr.length === 1) lblEl.textContent = selArr[0];
+                        else lblEl.textContent = `${selArr.length} Pakan Dipilih`;
+                    }
+                    if (btnEl) {
+                        if (selArr.length > 0) {
+                            btnEl.style.borderColor = '#8AA624';
+                            btnEl.style.background = '#f7fee7';
+                            btnEl.style.color = '#365314';
+                            btnEl.style.fontWeight = '700';
+                        } else {
+                            btnEl.style.borderColor = '#cbd5e1';
+                            btnEl.style.background = '#fff';
+                            btnEl.style.color = '#334155';
+                            btnEl.style.fontWeight = '600';
+                        }
+                    }
+                    if (countInfoEl) {
+                        countInfoEl.textContent = selArr.length > 0
+                            ? `${selArr.length} Jenis Pakan Aktif`
+                            : `Semua Jenis Pakan (${allPakans.length})`;
+                    }
+
+                    let listEl = document.getElementById('list-top-pakan-checks');
+                    if (!listEl) return;
+                    if (allPakans.length === 0) {
+                        listEl.innerHTML = `<div style="font-size:11px; color:#94a3b8; padding:6px;">Belum ada data jenis pakan.</div>`;
+                        return;
+                    }
+
+                    let nf = new Intl.NumberFormat('id-ID');
+                    listEl.innerHTML = allPakans.map((pName, idx) => {
+                        let checked = window.currentTopPakanFilters.has(pName);
+                        let color = getPakanColor(pName, idx);
+                        let encoded = encodeURIComponent(pName);
+                        return `
+                            <label style="display:flex; align-items:center; justify-content:space-between; gap:6px; padding:5px 7px; border-radius:6px; cursor:pointer; font-size:11px; background:${checked ? '#f7fee7' : 'transparent'}; border:1px solid ${checked ? '#bef264' : 'transparent'};">
+                                <span style="display:flex; align-items:center; gap:6px; min-width:0;">
+                                    <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleTopPakanFilterOption('${encoded}', this.checked)" style="cursor:pointer; accent-color:#65a30d;">
+                                    <span style="width:8px; height:8px; border-radius:50%; background:${color}; flex-shrink:0;"></span>
+                                    <span style="font-weight:${checked ? '700' : '500'}; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeTopHtml(pName)}</span>
+                                </span>
+                                <span style="font-size:10px; color:#64748b; flex-shrink:0;">${nf.format(pakanTotals[pName].q)} Kg</span>
+                            </label>
+                        `;
+                    }).join('');
+                }
+
+                function applyPakanFilterToEntity(entity, selectedSet, hasFilter, sortMode) {
+                    let totalAllKg = Number(entity.q) || 0;
+                    let totalAllOmzet = Number(entity.v) || 0;
+
+                    if (!hasFilter) {
+                        let normalizedItems = (entity.items || []).map(it => ({
+                            ...it,
+                            pctOfTotal: Number(it.pct) || 0,
+                            pctOfSelected: Number(it.pct) || 0
+                        }));
+                        return {
+                            ...entity,
+                            totalAllKg,
+                            totalAllOmzet,
+                            penetrationPct: 100,
+                            isPakanFiltered: false,
+                            items: normalizedItems
+                        };
+                    }
+
+                    let matchedRaw = (entity.items || []).filter(it => selectedSet.has(it.name));
+                    let selKg = 0, selOmzet = 0;
+                    matchedRaw.forEach(it => {
+                        selKg += Number(it.q) || 0;
+                        selOmzet += Number(it.o) || 0;
+                    });
+                    if (selKg <= 0 && selOmzet <= 0) return null;
+
+                    let matchedItems = matchedRaw.map(it => {
+                        let iq = Number(it.q) || 0;
+                        return {
+                            name: it.name,
+                            q: iq,
+                            o: Number(it.o) || 0,
+                            pct: totalAllKg > 0 ? (iq / totalAllKg * 100) : 0,
+                            pctOfTotal: totalAllKg > 0 ? (iq / totalAllKg * 100) : 0,
+                            pctOfSelected: selKg > 0 ? (iq / selKg * 100) : 0
+                        };
+                    }).sort((a, b) => b.q - a.q);
+
+                    let out = {
+                        ...entity,
+                        q: selKg,
+                        v: selOmzet,
+                        totalAllKg,
+                        totalAllOmzet,
+                        penetrationPct: totalAllKg > 0 ? (selKg / totalAllKg * 100) : 0,
+                        isPakanFiltered: true,
+                        items: matchedItems
+                    };
+
+                    if (Array.isArray(entity.consumers)) {
+                        let filteredConsumers = entity.consumers
+                            .map(c => applyPakanFilterToEntity(c, selectedSet, true, sortMode))
+                            .filter(Boolean)
+                            .sort((a, b) => sortMode === 'volume' ? (b.q - a.q) : (b.v - a.v));
+                        out.totalRegionConsumers = entity.consumerCount || entity.consumers.length;
+                        out.consumers = filteredConsumers;
+                        out.consumerCount = filteredConsumers.length;
+                    }
+
+                    return out;
+                }
+
+                function buildTopAlamatGroups(konsumenList, sortMode) {
+                    let regMap = {};
+                    konsumenList.forEach(k => {
+                        let al = k.alamat || 'Alamat Belum Diisi';
+                        if (!regMap[al]) {
+                            regMap[al] = {
+                                n: al,
+                                alamat: al,
+                                v: 0,
+                                q: 0,
+                                ongkir: 0,
+                                itemsMap: {},
+                                consumers: []
+                            };
+                        }
+                        let g = regMap[al];
+                        g.v += Number(k.v) || 0;
+                        g.q += Number(k.q) || 0;
+                        g.ongkir += Number(k.ongkir) || 0;
+                        g.consumers.push({
+                            n: k.n,
+                            q: Number(k.q) || 0,
+                            v: Number(k.v) || 0,
+                            ongkir: Number(k.ongkir) || 0,
+                            items: k.items || []
+                        });
+                        (k.items || []).forEach(it => {
+                            if (!g.itemsMap[it.name]) g.itemsMap[it.name] = { q: 0, o: 0 };
+                            g.itemsMap[it.name].q += Number(it.q) || 0;
+                            g.itemsMap[it.name].o += Number(it.o) || 0;
+                        });
+                    });
+
+                    return Object.values(regMap).map(g => {
+                        let itemsArr = Object.keys(g.itemsMap).map(pName => ({
+                            name: pName,
+                            q: g.itemsMap[pName].q,
+                            o: g.itemsMap[pName].o,
+                            pct: g.q > 0 ? (g.itemsMap[pName].q / g.q * 100) : 0
+                        })).sort((a, b) => b.q - a.q);
+
+                        let sortedConsumers = [...g.consumers].sort((a, b) => {
+                            return sortMode === 'volume' ? (b.q - a.q) : (b.v - a.v);
+                        });
+
+                        return {
+                            n: g.n,
+                            alamat: g.alamat,
+                            v: g.v,
+                            q: g.q,
+                            ongkir: g.ongkir,
+                            consumerCount: sortedConsumers.length,
+                            totalRegionConsumers: sortedConsumers.length,
+                            consumers: sortedConsumers,
+                            items: itemsArr
+                        };
+                    });
+                }
+
+                function getProcessedTopViewState() {
+                    let rawList = window.allTopKonsumenData || [];
+                    let lookup = getRelasiAlamatLookup();
+                    let enriched = rawList.map(k => ({
+                        ...k,
+                        alamat: resolveKonsumenAlamat(k.n, k.alamat, lookup)
+                    }));
+
+                    populateTopAlamatDropdown(enriched);
+                    populateTopPakanFilterUI(enriched);
+
+                    let mode = window.currentTopViewMode || 'konsumen';
+                    let sortMode = window.currentTopSort || 'omzet';
+                    let alamatFilter = window.currentTopAlamatFilter || 'ALL';
+                    let search = window.currentTopSearch || '';
+                    let pakanSet = window.currentTopPakanFilters || new Set();
+                    let hasPakanFilter = pakanSet.size > 0;
+                    let selectedPakans = Array.from(pakanSet);
+
+                    let byAlamat = (alamatFilter !== 'ALL')
+                        ? enriched.filter(k => k.alamat === alamatFilter)
+                        : enriched;
+
+                    let dataset;
+                    if (mode === 'alamat') {
+                        let fullRegions = buildTopAlamatGroups(byAlamat, sortMode)
+                            .map(g => applyPakanFilterToEntity(g, pakanSet, hasPakanFilter, sortMode))
+                            .filter(Boolean);
+                        dataset = search
+                            ? fullRegions.filter(g =>
+                                (g.n || '').toLowerCase().includes(search) ||
+                                (g.consumers || []).some(c => (c.n || '').toLowerCase().includes(search))
+                            )
+                            : fullRegions;
+                    } else {
+                        let pakanFilteredKonsumen = byAlamat
+                            .map(k => applyPakanFilterToEntity(k, pakanSet, hasPakanFilter, sortMode))
+                            .filter(Boolean);
+                        dataset = search
+                            ? pakanFilteredKonsumen.filter(k =>
+                                (k.n || '').toLowerCase().includes(search) ||
+                                (k.alamat || '').toLowerCase().includes(search)
+                            )
+                            : pakanFilteredKonsumen;
+                    }
+
+                    let fullSorted = [...dataset].sort((a, b) => {
+                        return sortMode === 'volume' ? ((b.q || 0) - (a.q || 0)) : ((b.v || 0) - (a.v || 0));
+                    });
+
+                    let totalFilteredKg = 0, totalFilteredOmzet = 0, totalFilteredOngkir = 0, totalFilteredAllKg = 0;
+                    fullSorted.forEach(item => {
+                        totalFilteredKg += Number(item.q) || 0;
+                        totalFilteredOmzet += Number(item.v) || 0;
+                        totalFilteredOngkir += Number(item.ongkir) || 0;
+                        totalFilteredAllKg += Number(item.totalAllKg) || 0;
+                    });
+
+                    let limit = window.currentTopLimit;
+                    let displayed = (limit === 'ALL') ? fullSorted : fullSorted.slice(0, parseInt(limit) || 5);
+
+                    let totalDisplayedKg = 0, totalDisplayedOmzet = 0, totalDisplayedOngkir = 0, totalDisplayedAllKg = 0;
+                    displayed.forEach(item => {
+                        totalDisplayedKg += Number(item.q) || 0;
+                        totalDisplayedOmzet += Number(item.v) || 0;
+                        totalDisplayedOngkir += Number(item.ongkir) || 0;
+                        totalDisplayedAllKg += Number(item.totalAllKg) || 0;
+                    });
+
+                    return {
+                        mode,
+                        sortMode,
+                        limit,
+                        alamatFilter,
+                        hasPakanFilter,
+                        selectedPakans,
+                        search,
+                        totalFound: fullSorted.length,
+                        fullSorted,
+                        displayed,
+                        totalFilteredKg,
+                        totalFilteredOmzet,
+                        totalFilteredOngkir,
+                        totalFilteredAllKg,
+                        totalDisplayedKg,
+                        totalDisplayedOmzet,
+                        totalDisplayedOngkir,
+                        totalDisplayedAllKg
+                    };
+                }
 
                 function renderTopKonsumenView() {
                     let tbody = document.querySelector('#table-top-konsumen tbody');
                     if (!tbody) return;
 
-                    let data = window.allTopKonsumenData || [];
                     let nf = new Intl.NumberFormat('id-ID');
+                    let state = getProcessedTopViewState();
+                    let { mode, sortMode, limit, alamatFilter, hasPakanFilter, selectedPakans, totalFound, displayed, totalFilteredKg, totalFilteredOmzet, totalDisplayedKg, totalDisplayedOmzet, totalDisplayedOngkir, totalDisplayedAllKg } = state;
 
-                    // 1. Filter pencarian relasi
-                    if (window.currentTopSearch) {
-                        data = data.filter(k => (k.n || '').toLowerCase().includes(window.currentTopSearch));
+                    window.currentDisplayedTopKonsumen = displayed;
+
+                    let thEl = document.getElementById('th-top-entity');
+                    if (thEl) {
+                        thEl.textContent = mode === 'alamat' ? 'Wilayah / Alamat' : 'Nama Relasi';
                     }
-
-                    // 2. Sorting (Omzet Pakan atau Volume Kg)
-                    data = [...data].sort((a, b) => {
-                        if (window.currentTopSort === 'volume') {
-                            return (b.q || 0) - (a.q || 0);
-                        } else {
-                            return (b.v || 0) - (a.v || 0); // Pure feed omzet
-                        }
-                    });
-
-                    // 3. Batasan Top (Limit)
-                    let totalFound = data.length;
-                    let limit = window.currentTopLimit;
-                    let displayedData = (limit === 'ALL') ? data : data.slice(0, parseInt(limit) || 5);
-                    window.currentDisplayedTopKonsumen = displayedData;
 
                     // 4. Update Header Card Title
                     let titleEl = document.getElementById('title-top-konsumen');
                     if (titleEl) {
-                        let labelLimit = (limit === 'ALL') ? `Semua Konsumen (${totalFound})` : `Top ${limit} Konsumen`;
-                        let labelSort = (window.currentTopSort === 'volume') ? 'Volume Pakan (Kg)' : 'Omzet Pakan (Rp)';
-                        titleEl.innerHTML = `${labelLimit} <span style="font-size:11px; font-weight:600; color:#888;">(Berdasarkan ${labelSort})</span>`;
+                        let entityLabel = mode === 'alamat' ? 'Wilayah / Alamat' : 'Konsumen';
+                        let labelLimit = (limit === 'ALL') ? `Semua ${entityLabel} (${totalFound})` : `Top ${limit} ${entityLabel}`;
+                        let labelSort = (sortMode === 'volume') ? 'Volume Pakan (Kg)' : 'Omzet Pakan (Rp)';
+                        let filterInfo = (alamatFilter !== 'ALL') ? ` • Wilayah: ${escapeTopHtml(alamatFilter)}` : '';
+                        let pakanInfo = hasPakanFilter
+                            ? ` • Pakan: ${selectedPakans.length === 1 ? escapeTopHtml(selectedPakans[0]) : selectedPakans.length + ' Dipilih'}`
+                            : '';
+                        titleEl.innerHTML = `${labelLimit} <span style="font-size:11px; font-weight:600; color:#888;">(Berdasarkan ${labelSort}${filterInfo}${pakanInfo})</span>`;
                     }
 
-                    if (displayedData.length === 0) {
-                        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#94a3b8;">Tidak ada data konsumen yang sesuai filter.</td></tr>`;
+                    let summaryEl = document.getElementById('top-konsumen-summary');
+                    if (displayed.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#94a3b8;">Tidak ada data ${mode === 'alamat' ? 'wilayah' : 'konsumen'} yang sesuai filter.</td></tr>`;
                         let legEl = document.getElementById('top-konsumen-legend');
                         if (legEl) legEl.innerHTML = '';
+                        if (summaryEl) summaryEl.innerHTML = `<span style="color:#94a3b8;">Menampilkan 0 data.</span>`;
                         return;
                     }
 
                     let pakanDiambilSet = new Map();
                     let html = "";
 
-                    displayedData.forEach((k, idx) => {
+                    displayed.forEach((k, idx) => {
                         let rank = idx + 1;
                         let badgeRankStyle = "color:#64748b; font-weight:700;";
                         if (rank === 1) badgeRankStyle = "background:#fef3c7; color:#b45309; border:1px solid #fde68a; font-weight:800; border-radius:6px; padding:2px 7px;";
                         else if (rank === 2) badgeRankStyle = "background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; font-weight:800; border-radius:6px; padding:2px 7px;";
                         else if (rank === 3) badgeRankStyle = "background:#ffedd5; color:#c2410c; border:1px solid #fed7aa; font-weight:800; border-radius:6px; padding:2px 7px;";
 
-                        // Segment progress bar & chip proporsi pakan
+                        let shareMetricPct = sortMode === 'volume'
+                            ? (totalFilteredKg > 0 ? (k.q / totalFilteredKg * 100) : 0)
+                            : (totalFilteredOmzet > 0 ? (k.v / totalFilteredOmzet * 100) : 0);
+
+                        // Segment progress bar & chip proporsi pakan (Opsi A saat filter pakan aktif: bar proporsi vs total semua pakan wilayah/konsumen)
                         let segmentsHtml = "";
                         let chipsHtml = "";
                         (k.items || []).forEach((it, i) => {
                             let color = getPakanColor(it.name, i);
                             pakanDiambilSet.set(it.name, color);
 
-                            let pct = it.pct || 0;
-                            if (pct > 0) {
-                                segmentsHtml += `<div style="width:${pct}%; background:${color}; height:100%;" title="${it.name}: ${nf.format(it.q)} Kg (${pct.toFixed(1)}%)"></div>`;
+                            let barPct = k.isPakanFiltered ? (it.pctOfTotal || 0) : (it.pct || 0);
+                            if (barPct > 0) {
+                                let titleTxt = k.isPakanFiltered
+                                    ? `${escapeTopHtml(it.name)}: ${nf.format(it.q)} Kg (${formatTopPct(barPct)} dari total ${nf.format(k.totalAllKg)} Kg)`
+                                    : `${escapeTopHtml(it.name)}: ${nf.format(it.q)} Kg (${formatTopPct(barPct)})`;
+                                segmentsHtml += `<div style="width:${barPct}%; background:${color}; height:100%;" title="${titleTxt}"></div>`;
                             }
                             if (i < 3) {
-                                chipsHtml += `<span style="display:inline-flex; align-items:center; gap:3px; font-size:10px; color:#475569; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; padding:1px 5px;"><span style="width:6px; height:6px; border-radius:50%; background:${color}; flex-shrink:0;"></span><b>${it.name}:</b> ${pct.toFixed(0)}%</span>`;
+                                let chipSuffix = k.isPakanFiltered ? `${formatTopPct(barPct)} <span style="color:#94a3b8; font-weight:500;">dr total</span>` : formatTopPct(barPct);
+                                chipsHtml += `<span style="display:inline-flex; align-items:center; gap:3px; font-size:10px; color:#475569; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; padding:1px 5px;"><span style="width:6px; height:6px; border-radius:50%; background:${color}; flex-shrink:0;"></span><b>${escapeTopHtml(it.name)}:</b> ${chipSuffix}</span>`;
                             }
                         });
 
                         if ((k.items || []).length > 3) {
                             chipsHtml += `<span style="font-size:9.5px; color:#94a3b8; align-self:center;">+${k.items.length - 3} lagi</span>`;
                         }
+                        if (k.isPakanFiltered) {
+                            chipsHtml += `<span style="display:inline-flex; align-items:center; gap:3px; font-size:9.5px; font-weight:700; color:#365314; background:#ecfccb; border:1px solid #bef264; border-radius:4px; padding:1px 5px;">Fokus: ${formatTopPct(k.penetrationPct)} (${nf.format(k.q)}/${nf.format(k.totalAllKg)} Kg)</span>`;
+                        }
 
-                        let isExpanded = window.expandedTopKonsumen.has(k.n);
+                        let expandKey = mode + '::' + k.n;
+                        let isExpanded = window.expandedTopKonsumen.has(expandKey);
                         let chevronIcon = isExpanded ? 'expand_less' : 'expand_more';
 
-                        // Baris Utama Konsumen
+                        let subMetaHtml = '';
+                        if (mode === 'alamat') {
+                            let cBadge = (k.isPakanFiltered && k.totalRegionConsumers && k.totalRegionConsumers !== k.consumerCount)
+                                ? `${k.consumerCount}/${k.totalRegionConsumers} Konsumen`
+                                : `${k.consumerCount} Konsumen`;
+                            subMetaHtml = `<div style="display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin-top:3px;">` +
+                                `<span style="font-size:10px; font-weight:700; color:#15803d; background:#dcfce7; border:1px solid #bbf7d0; border-radius:4px; padding:1px 6px;">${cBadge}</span>` +
+                                `<span style="font-size:10px; color:#64748b;">${k.isPakanFiltered ? 'Sebaran' : 'Porsi'}: <b>${formatTopPct(shareMetricPct)}</b></span>` +
+                                `</div>`;
+                        } else {
+                            let isUnsetAlamat = !k.alamat || k.alamat === 'Alamat Belum Diisi';
+                            subMetaHtml = `<div style="display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top:2px; font-size:10.5px; color:${isUnsetAlamat ? '#94a3b8' : '#475569'};">` +
+                                `<span class="material-symbols-outlined" style="font-size:12px; color:${isUnsetAlamat ? '#cbd5e1' : '#8AA624'};">location_on</span>` +
+                                `<span>${escapeTopHtml(k.alamat || 'Alamat Belum Diisi')}</span>` +
+                                `<span style="color:#cbd5e1;">•</span>` +
+                                `<span style="font-size:10px; color:#64748b;">${k.isPakanFiltered ? 'Sebaran' : 'Porsi'}: <b>${formatTopPct(shareMetricPct)}</b></span>` +
+                                `</div>`;
+                        }
+
+                        // Baris Utama Konsumen / Wilayah
                         html += `
                     <tr class="row-top-konsumen" onclick="toggleExpandTopKonsumenIdx(${idx})" style="cursor:pointer; border-bottom:1px solid #f1f5f9; transition:background 0.15s; ${isExpanded ? 'background:#f8fafc;' : ''}">
                         <td style="padding:10px 8px; vertical-align:middle; text-align:center;">
                             <span style="${badgeRankStyle}">#${rank}</span>
                         </td>
                         <td style="padding:10px 8px; vertical-align:middle;">
-                            <div style="font-weight:750; color:#0f172a; font-size:12.5px;">${k.n}</div>
+                            <div style="font-weight:750; color:#0f172a; font-size:12.5px;">${escapeTopHtml(k.n)}</div>
+                            ${subMetaHtml}
                             <!-- Teks bantu tampilan HP -->
                             <div class="mobile-only-sub" style="font-size:11px; color:#64748b; margin-top:2px;">
                                 ${nf.format(k.q)} Kg &nbsp;•&nbsp; <b style="color:#15803d;">Rp ${nf.format(k.v)}</b>
@@ -11714,7 +12291,7 @@
                             Rp ${nf.format(k.v)}
                         </td>
                         <td style="padding:10px 8px; vertical-align:middle; min-width:170px;">
-                            <div style="display:flex; width:100%; height:9px; border-radius:5px; overflow:hidden; background:#f1f5f9; box-shadow:inset 0 1px 2px rgba(0,0,0,0.06); margin-bottom:4px;">
+                            <div style="display:flex; width:100%; height:9px; border-radius:5px; overflow:hidden; background:#e2e8f0; box-shadow:inset 0 1px 2px rgba(0,0,0,0.06); margin-bottom:4px;">
                                 ${segmentsHtml || '<div style="width:100%; background:#e2e8f0;"></div>'}
                             </div>
                             <div style="display:flex; flex-wrap:wrap; gap:4px;">
@@ -11731,11 +12308,14 @@
                         if (isExpanded) {
                             let itemBoxes = (k.items || []).map(it => {
                                 let color = getPakanColor(it.name);
+                                let subPct = k.isPakanFiltered
+                                    ? `<span style="color:#64748b;">(${formatTopPct(it.pctOfTotal)} dr total${selectedPakans.length > 1 ? ` • ${formatTopPct(it.pctOfSelected)} dr pilihan` : ''})</span>`
+                                    : `<span style="color:#64748b;">(${formatTopPct(it.pct)})</span>`;
                                 return `
                             <div style="background:#ffffff; border:1px solid #e2e8f0; border-left:3px solid ${color}; border-radius:6px; padding:7px 10px;">
-                                <div style="font-size:11px; font-weight:700; color:#0f172a; margin-bottom:2px;">${it.name}</div>
+                                <div style="font-size:11px; font-weight:700; color:#0f172a; margin-bottom:2px;">${escapeTopHtml(it.name)}</div>
                                 <div style="font-size:11px; color:#334155;">
-                                    <b>${nf.format(it.q)} Kg</b> <span style="color:#64748b;">(${it.pct.toFixed(1)}%)</span>
+                                    <b>${nf.format(it.q)} Kg</b> ${subPct}
                                 </div>
                                 <div style="font-size:11px; font-weight:700; color:#15803d; margin-top:1px;">
                                     Rp ${nf.format(it.o)}
@@ -11744,21 +12324,72 @@
                         `;
                             }).join('');
 
+                            let regionalConsumersHtml = '';
+                            if (mode === 'alamat' && Array.isArray(k.consumers) && k.consumers.length > 0) {
+                                let cRows = k.consumers.map((c, cIdx) => {
+                                    let cPct = sortMode === 'volume'
+                                        ? (k.q > 0 ? (c.q / k.q * 100) : 0)
+                                        : (k.v > 0 ? (c.v / k.v * 100) : 0);
+                                    let cFocusNote = (c.isPakanFiltered && c.totalAllKg > 0)
+                                        ? ` <span style="font-size:9.5px; color:#64748b;">(${formatTopPct(c.penetrationPct)} dr ${nf.format(c.totalAllKg)} Kg)</span>`
+                                        : '';
+                                    return `
+                                    <tr style="border-bottom:1px solid #f1f5f9;">
+                                        <td style="padding:5px 6px; color:#64748b; text-align:center;">${cIdx + 1}</td>
+                                        <td style="padding:5px 6px; font-weight:600; color:#0f172a;">${escapeTopHtml(c.n)}${cFocusNote}</td>
+                                        <td style="padding:5px 6px; text-align:right; color:#334155;">${nf.format(c.q)} Kg</td>
+                                        <td style="padding:5px 6px; text-align:right; font-weight:700; color:#15803d;">Rp ${nf.format(c.v)}</td>
+                                        <td style="padding:5px 6px; text-align:right; color:#64748b;">${formatTopPct(cPct)}</td>
+                                    </tr>`;
+                                }).join('');
+
+                                regionalConsumersHtml = `
+                                    <div style="margin-top:12px; padding-top:10px; border-top:1px solid #e2e8f0;">
+                                        <div style="font-size:11px; font-weight:800; color:#1e293b; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
+                                            <span class="material-symbols-outlined" style="font-size:14px; color:#1a5c40;">group</span>
+                                            Daftar Konsumen ${k.isPakanFiltered ? 'Pakan Terpilih ' : ''}di Wilayah ${escapeTopHtml(k.n)} (${k.consumerCount})
+                                        </div>
+                                        <div style="overflow-x:auto;">
+                                            <table style="width:100%; border-collapse:collapse; font-size:11px; background:#f8fafc; border-radius:6px; overflow:hidden;">
+                                                <thead>
+                                                    <tr style="background:#eef2f6; color:#475569; border-bottom:1px solid #cbd5e1;">
+                                                        <th style="padding:5px 6px; text-align:center; width:30px;">#</th>
+                                                        <th style="padding:5px 6px; text-align:left;">Konsumen</th>
+                                                        <th style="padding:5px 6px; text-align:right;">Volume</th>
+                                                        <th style="padding:5px 6px; text-align:right;">Omzet Pakan</th>
+                                                        <th style="padding:5px 6px; text-align:right;">Porsi Wilayah</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>${cRows}</tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                `;
+                            }
+
+                            let totalVsNote = k.isPakanFiltered
+                                ? `<div style="font-size:10px; color:#365314; background:#f7fee7; border:1px solid #bef264; border-radius:6px; padding:5px 8px; margin-bottom:8px;">` +
+                                  `Fokus Pakan Terpilih: <b>${nf.format(k.q)} Kg</b> (<b>${formatTopPct(k.penetrationPct)}</b>) dari total seluruh pengambilan <b>${nf.format(k.totalAllKg)} Kg</b> (Rp ${nf.format(k.totalAllOmzet)}).` +
+                                  `</div>`
+                                : '';
+
                             html += `
                         <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0;">
                             <td colspan="6" style="padding:10px 14px;">
                                 <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid #f1f5f9; padding-bottom:6px;">
+                                    <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:6px; margin-bottom:8px; border-bottom:1px solid #f1f5f9; padding-bottom:6px;">
                                         <div style="font-size:11.5px; font-weight:800; color:#0f172a;">
-                                            Rincian Pakan: <span style="color:#0284c7;">${k.n}</span>
+                                            Rincian Pakan ${mode === 'alamat' ? 'Wilayah' : ''}: <span style="color:#0284c7;">${escapeTopHtml(k.n)}</span>
                                         </div>
                                         <div style="font-size:10.5px; color:#64748b;">
-                                            Total: <b>${nf.format(k.q)} Kg</b> • Omzet Pakan: <b style="color:#15803d;">Rp ${nf.format(k.v)}</b>
+                                            Total${k.isPakanFiltered ? ' Pilihan' : ''}: <b>${nf.format(k.q)} Kg</b> • Omzet: <b style="color:#15803d;">Rp ${nf.format(k.v)}</b>
                                         </div>
                                     </div>
+                                    ${totalVsNote}
                                     <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:8px;">
                                         ${itemBoxes || '<div style="color:#94a3b8; font-size:11px;">Tidak ada rincian item.</div>'}
                                     </div>
+                                    ${regionalConsumersHtml}
                                     ${k.ongkir > 0 ? `
                                         <div style="margin-top:8px; padding-top:6px; border-top:1px dashed #e2e8f0; font-size:10.5px; color:#64748b; display:flex; align-items:center; gap:4px;">
                                             <span class="material-symbols-outlined" style="font-size:14px; color:#0284c7;">local_shipping</span>
@@ -11774,16 +12405,269 @@
 
                     tbody.innerHTML = html;
 
+                    if (summaryEl) {
+                        let shownLabel = displayed.length < totalFound
+                            ? `Ditampilkan <b>${displayed.length}</b> dari <b>${totalFound}</b> ${mode === 'alamat' ? 'wilayah' : 'konsumen'}`
+                            : `Total <b>${totalFound}</b> ${mode === 'alamat' ? 'wilayah' : 'konsumen'}`;
+                        let shareKgPct = totalFilteredKg > 0 ? (totalDisplayedKg / totalFilteredKg * 100) : 0;
+                        let shareOmzetPct = totalFilteredOmzet > 0 ? (totalDisplayedOmzet / totalFilteredOmzet * 100) : 0;
+                        let pctNote = displayed.length < totalFound
+                            ? ` <span style="color:#64748b; font-size:10px;">(${formatTopPct(shareKgPct)} Vol • ${formatTopPct(shareOmzetPct)} Omzet dari total filter)</span>`
+                            : '';
+                        let focusSummaryNote = hasPakanFilter && totalDisplayedAllKg > 0
+                            ? `<span>Penetrasi: <b style="color:#365314;">${formatTopPct(totalDisplayedKg / totalDisplayedAllKg * 100)}</b> <span style="color:#64748b; font-weight:500;">(dr ${nf.format(totalDisplayedAllKg)} Kg)</span></span>`
+                            : '';
+                        summaryEl.innerHTML =
+                            `<div>${shownLabel}${pctNote}</div>` +
+                            `<div style="display:flex; flex-wrap:wrap; gap:10px; font-weight:700;">` +
+                            `<span>Volume${hasPakanFilter ? ' Pilihan' : ''}: <b style="color:#0f172a;">${nf.format(totalDisplayedKg)} Kg</b></span>` +
+                            `<span>Omzet${hasPakanFilter ? ' Pilihan' : ''}: <b style="color:#15803d;">Rp ${nf.format(totalDisplayedOmzet)}</b></span>` +
+                            focusSummaryNote +
+                            (totalDisplayedOngkir > 0 && !hasPakanFilter ? `<span>Ongkir: <b style="color:#0284c7;">Rp ${nf.format(totalDisplayedOngkir)}</b></span>` : '') +
+                            `</div>`;
+                    }
+
                     // Render Legend Warna Pakan
                     let legEl = document.getElementById('top-konsumen-legend');
                     if (legEl) {
                         let legHtml = '<span style="font-weight:700; color:#475569; margin-right:4px;">Keterangan Warna:</span>';
                         pakanDiambilSet.forEach((color, pName) => {
-                            legHtml += `<span style="display:inline-flex; align-items:center; gap:3px; margin-right:8px;"><span style="width:8px; height:8px; border-radius:50%; background:${color};"></span>${pName}</span>`;
+                            legHtml += `<span style="display:inline-flex; align-items:center; gap:3px; margin-right:8px;"><span style="width:8px; height:8px; border-radius:50%; background:${color};"></span>${escapeTopHtml(pName)}</span>`;
                         });
+                        if (hasPakanFilter) {
+                            legHtml += `<span style="display:inline-flex; align-items:center; gap:3px; margin-right:8px;"><span style="width:8px; height:8px; border-radius:50%; background:#e2e8f0;"></span>Pakan Lainnya (Pembanding Total)</span>`;
+                        }
                         legEl.innerHTML = legHtml;
                     }
                 }
+
+                window.cetakLaporanTopKonsumen = function () {
+                    if (!window.allTopKonsumenData || window.allTopKonsumenData.length === 0) {
+                        alert("Tarik data Analytics terlebih dahulu sebelum mencetak laporan!");
+                        return;
+                    }
+
+                    let state = getProcessedTopViewState();
+                    if (!state.displayed || state.displayed.length === 0) {
+                        alert("Tidak ada data yang ditampilkan untuk dicetak.");
+                        return;
+                    }
+
+                    let btn = document.getElementById('btn-cetak-top-konsumen');
+                    let oriHtml = btn ? btn.innerHTML : '';
+                    if (btn) {
+                        btn.disabled = true;
+                        btn.innerHTML = `<span class="material-symbols-outlined icon-spin" style="font-size:14px;">sync</span> PDF...`;
+                    }
+
+                    const restoreBtn = () => {
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.innerHTML = oriHtml;
+                        }
+                    };
+
+                    let nf = new Intl.NumberFormat('id-ID');
+                    let bulanEl = document.getElementById('gl_bulan');
+                    let tahunEl = document.getElementById('gl_tahun');
+                    let textBulan = bulanEl && bulanEl.selectedIndex >= 0 ? bulanEl.options[bulanEl.selectedIndex].text : 'Semua Bulan';
+                    let textTahun = tahunEl ? tahunEl.value : new Date().getFullYear();
+                    let tglCetak = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+
+                    let isAlamatMode = state.mode === 'alamat';
+                    let judulLaporan = isAlamatMode
+                        ? 'LAPORAN PENJUALAN & SEBARAN PAKAN PER WILAYAH'
+                        : 'LAPORAN TOP KONSUMEN & PROPORSI PENJUALAN PAKAN';
+                    let limitText = state.limit === 'ALL'
+                        ? `Semua (${state.totalFound})`
+                        : `Top ${Math.min(parseInt(state.limit) || 5, state.totalFound)} dari ${state.totalFound}`;
+                    let sortText = state.sortMode === 'volume' ? 'Volume (Kg)' : 'Omzet Pakan (Rp)';
+                    let filterWilayahText = state.alamatFilter !== 'ALL' ? state.alamatFilter : 'Semua Wilayah';
+                    let filterPakanText = state.hasPakanFilter ? state.selectedPakans.join(', ') : 'Semua Pakan';
+                    let searchNote = state.search ? ` | Pencarian: "${state.search}"` : '';
+
+                    let denomKg = state.totalFilteredKg > 0 ? state.totalFilteredKg : 1;
+                    let denomOmzet = state.totalFilteredOmzet > 0 ? state.totalFilteredOmzet : 1;
+
+                    let rowsHtml = state.displayed.map((k, idx) => {
+                        let rank = idx + 1;
+                        let sharePct = state.sortMode === 'volume'
+                            ? (k.q / denomKg * 100)
+                            : (k.v / denomOmzet * 100);
+
+                        let barSegs = '';
+                        let itemsSummary = (k.items || []).map((it, i) => {
+                            let color = getPakanColor(it.name, i);
+                            let barPct = k.isPakanFiltered ? (it.pctOfTotal || 0) : (it.pct || 0);
+                            if (barPct > 0) {
+                                barSegs += `<div style="width:${barPct}%; background:${color}; height:100%;"></div>`;
+                            }
+                            let pctLabel = k.isPakanFiltered
+                                ? `${formatTopPct(barPct)} dr total`
+                                : formatTopPct(barPct);
+                            return `<span style="display:inline-block; margin-right:6px; white-space:nowrap;"><span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:${color}; margin-right:3px; vertical-align:middle;"></span><b>${escapeTopHtml(it.name)}</b>: ${nf.format(it.q)} Kg (${pctLabel})</span>`;
+                        }).join('');
+
+                        let focusPrintNote = k.isPakanFiltered
+                            ? `<div style="font-size:7.8px; color:#365314; margin-top:2px;"><b>Fokus Terpilih:</b> ${formatTopPct(k.penetrationPct)} (${nf.format(k.q)} dari ${nf.format(k.totalAllKg)} Kg total ${isAlamatMode ? 'wilayah' : 'konsumen'})</div>`
+                            : '';
+
+                        let entitySub = isAlamatMode
+                            ? `<div style="font-size:8px; color:#475569; margin-top:2px;">${k.consumerCount} Konsumen: ${escapeTopHtml((k.consumers || []).slice(0, 5).map(c => c.n).join(', '))}${k.consumers && k.consumers.length > 5 ? `, +${k.consumers.length - 5} lainnya` : ''}</div>`
+                            : `<div style="font-size:8px; color:#64748b; margin-top:1px;">Wilayah: ${escapeTopHtml(k.alamat || 'Alamat Belum Diisi')}</div>`;
+
+                        return `
+                            <tr style="border-bottom:1px solid #cbd5e1; page-break-inside:avoid;">
+                                <td style="padding:6px 5px; text-align:center; font-weight:bold; color:#334155; vertical-align:top;">#${rank}</td>
+                                <td style="padding:6px 6px; vertical-align:top;">
+                                    <div style="font-weight:bold; font-size:9.5px; color:#0f172a;">${escapeTopHtml(k.n)}</div>
+                                    ${entitySub}
+                                </td>
+                                <td style="padding:6px 6px; text-align:right; font-weight:bold; color:#0f172a; vertical-align:top; white-space:nowrap;">${nf.format(k.q)} Kg</td>
+                                <td style="padding:6px 6px; text-align:right; font-weight:bold; color:#15803d; vertical-align:top; white-space:nowrap;">Rp ${nf.format(k.v)}</td>
+                                <td style="padding:6px 5px; text-align:right; color:#475569; vertical-align:top; white-space:nowrap;">${formatTopPct(sharePct)}</td>
+                                <td style="padding:6px 6px; vertical-align:top;">
+                                    <div style="display:flex; width:100%; height:6px; border-radius:3px; overflow:hidden; background:#e2e8f0; margin-bottom:3px;">
+                                        ${barSegs || '<div style="width:100%; background:#e2e8f0;"></div>'}
+                                    </div>
+                                    <div style="font-size:8px; line-height:1.35; color:#334155;">${itemsSummary || '-'}</div>
+                                    ${focusPrintNote}
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+
+                    let reportEl = document.createElement('div');
+                    reportEl.style.width = '100%';
+                    reportEl.style.maxWidth = '720px';
+                    reportEl.style.boxSizing = 'border-box';
+                    reportEl.style.padding = '14px 16px';
+                    reportEl.style.background = '#ffffff';
+                    reportEl.style.fontFamily = 'Arial, Helvetica, sans-serif';
+                    reportEl.style.color = '#0f172a';
+
+                    reportEl.innerHTML = `
+                        <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #1a5c40; padding-bottom:8px; margin-bottom:10px;">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <img src="https://raw.githubusercontent.com/wildansyif/pakan-cbl/2e732398572a6ac7d3512559c4344d40ab0902f9/Logo%20CBL.png" style="height:38px; width:auto;" alt="Logo CBL" />
+                                <div>
+                                    <div style="font-size:13px; font-weight:bold; color:#1a5c40; letter-spacing:0.3px;">PT. CITA BENGGALA LESTARI</div>
+                                    <div style="font-size:8.5px; color:#334155; font-weight:bold;">Divisi Logistik & Distribusi Pakan Ternak</div>
+                                    <div style="font-size:8px; color:#64748b;">Cikahuripan RT.04/RW.10, Kec. Lembang, Kab. Bandung Barat 40391</div>
+                                </div>
+                            </div>
+                            <div style="text-align:right; font-size:8px; color:#475569;">
+                                <div style="font-weight:bold; color:#0f172a; font-size:9px;">PERIODE: ${escapeTopHtml(textBulan)} ${escapeTopHtml(textTahun)}</div>
+                                <div>Dicetak: ${escapeTopHtml(tglCetak)}</div>
+                            </div>
+                        </div>
+
+                        <div style="text-align:center; margin-bottom:10px;">
+                            <div style="font-size:12px; font-weight:bold; color:#0f172a; letter-spacing:0.4px;">${judulLaporan}</div>
+                            <div style="font-size:8.5px; color:#475569; margin-top:2px;">
+                                Tampilan: <b>${escapeTopHtml(limitText)}</b> | Urutan: <b>${escapeTopHtml(sortText)}</b> | Wilayah: <b>${escapeTopHtml(filterWilayahText)}</b> | Pakan: <b>${escapeTopHtml(filterPakanText)}</b>${escapeTopHtml(searchNote)}
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:8px; margin-bottom:10px;">
+                            <div style="flex:1; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:6px 8px;">
+                                <div style="font-size:8px; color:#64748b;">TOTAL DITAMPILKAN</div>
+                                <div style="font-size:11px; font-weight:bold; color:#0f172a;">${state.displayed.length} ${isAlamatMode ? 'Wilayah' : 'Konsumen'}</div>
+                            </div>
+                            <div style="flex:1; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:6px 8px;">
+                                <div style="font-size:8px; color:#64748b;">TOTAL VOLUME PAKAN</div>
+                                <div style="font-size:11px; font-weight:bold; color:#0f172a;">${nf.format(state.totalDisplayedKg)} Kg</div>
+                            </div>
+                            <div style="flex:1; background:#f0fdf4; border:1px solid #86efac; border-radius:6px; padding:6px 8px;">
+                                <div style="font-size:8px; color:#166534;">TOTAL OMZET PAKAN</div>
+                                <div style="font-size:11px; font-weight:bold; color:#15803d;">Rp ${nf.format(state.totalDisplayedOmzet)}</div>
+                            </div>
+                            ${state.totalDisplayedOngkir > 0 ? `
+                            <div style="flex:1; background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:6px 8px;">
+                                <div style="font-size:8px; color:#1d4ed8;">ONGKIR TERPISAH</div>
+                                <div style="font-size:11px; font-weight:bold; color:#1e40af;">Rp ${nf.format(state.totalDisplayedOngkir)}</div>
+                            </div>` : ''}
+                        </div>
+
+                        <table style="width:100%; border-collapse:collapse; font-size:9px; border:1px solid #94a3b8;">
+                            <thead>
+                                <tr style="background:#1a5c40; color:#ffffff;">
+                                    <th style="padding:6px 5px; text-align:center; width:28px;">#</th>
+                                    <th style="padding:6px 6px; text-align:left; width:155px;">${isAlamatMode ? 'Wilayah / Alamat' : 'Nama Relasi & Wilayah'}</th>
+                                    <th style="padding:6px 6px; text-align:right; width:72px;">Total (Kg)</th>
+                                    <th style="padding:6px 6px; text-align:right; width:92px;">Omzet Pakan</th>
+                                    <th style="padding:6px 5px; text-align:right; width:44px;">Porsi</th>
+                                    <th style="padding:6px 6px; text-align:left;">Komposisi Pengambilan Pakan</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rowsHtml}
+                            </tbody>
+                            <tfoot>
+                                <tr style="background:#f1f5f9; font-weight:bold; border-top:1.5px solid #0f172a; font-size:9px;">
+                                    <td colspan="2" style="padding:6px 6px;">TOTAL (${state.displayed.length} ${isAlamatMode ? 'WILAYAH' : 'KONSUMEN'})</td>
+                                    <td style="padding:6px 6px; text-align:right;">${nf.format(state.totalDisplayedKg)} Kg</td>
+                                    <td style="padding:6px 6px; text-align:right; color:#15803d;">Rp ${nf.format(state.totalDisplayedOmzet)}</td>
+                                    <td style="padding:6px 5px; text-align:right;">${formatTopPct(state.sortMode === 'volume' ? (state.totalDisplayedKg / denomKg * 100) : (state.totalDisplayedOmzet / denomOmzet * 100))}</td>
+                                    <td style="padding:6px 6px; font-weight:normal; font-size:8px; color:#475569;">
+                                        ${state.displayed.length < state.totalFound ? `Selisih ${state.totalFound - state.displayed.length} ${isAlamatMode ? 'wilayah' : 'konsumen'} lain tidak tercetak sesuai pilihan Top.` : 'Menampilkan seluruh data sesuai filter aktif.'}
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+
+                        <div style="margin-top:22px; display:flex; justify-content:space-between; text-align:center; font-size:8.5px; color:#334155; page-break-inside:avoid;">
+                            <div style="width:35%;">
+                                <div>Disiapkan Oleh,</div>
+                                <div style="margin-top:36px; font-weight:bold; border-bottom:1px solid #0f172a; display:inline-block; min-width:120px;">( Admin / Logistik Pakan )</div>
+                            </div>
+                            <div style="width:35%;">
+                                <div>Mengetahui,</div>
+                                <div style="margin-top:36px; font-weight:bold; border-bottom:1px solid #0f172a; display:inline-block; min-width:120px;">( Manajer Operasional )</div>
+                            </div>
+                        </div>
+                    `;
+
+                    let safePeriod = `${textBulan}_${textTahun}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+                    let filePrefix = isAlamatMode ? 'Laporan_Regional_Alamat' : 'Laporan_Top_Konsumen';
+                    let filename = `${filePrefix}_${safePeriod}.pdf`;
+
+                    if (typeof html2pdf !== 'undefined') {
+                        document.body.appendChild(reportEl);
+                        let opt = {
+                            margin: [8, 8, 8, 8],
+                            filename: filename,
+                            image: { type: 'jpeg', quality: 0.98 },
+                            html2canvas: { scale: 2, useCORS: true, logging: false },
+                            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                        };
+                        html2pdf().set(opt).from(reportEl).save().then(() => {
+                            if (reportEl.parentNode) document.body.removeChild(reportEl);
+                            restoreBtn();
+                        }).catch(err => {
+                            console.error('Gagal cetak PDF Top Konsumen:', err);
+                            if (reportEl.parentNode) document.body.removeChild(reportEl);
+                            restoreBtn();
+                            alert('Gagal mengekspor PDF: ' + (err && err.message ? err.message : err));
+                        });
+                    } else {
+                        restoreBtn();
+                        let printWin = window.open('', '_blank', 'width=900,height=700');
+                        if (printWin) {
+                            printWin.document.write(
+                                '<!DOCTYPE html><ht' + 'ml><he' + 'ad><title>' + escapeTopHtml(filename) +
+                                '</title></he' + 'ad><bo' + 'dy style="margin:0; padding:12px;">' +
+                                reportEl.outerHTML +
+                                '</bo' + 'dy></ht' + 'ml>'
+                            );
+                            printWin.document.close();
+                            printWin.focus();
+                            setTimeout(() => { printWin.print(); }, 350);
+                        } else {
+                            alert('Popup diblokir browser dan library PDF belum termuat.');
+                        }
+                    }
+                };
 
                 function renderChartMix() {
                     if (!cacheDataGlobal) return;
