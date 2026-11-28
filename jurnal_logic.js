@@ -94,13 +94,34 @@ function appendRelasiToGroup(dRelasi, zRelasi) {
     return `${dRelasi}, ${zRelasi}`;
 }
 
+const EXACT_KELOMPOK_TERNAK_SET = new Set([
+    'kapalang', 'dewasa', 'pedet', 'pedet pm', 'pedet spn',
+    'jantan', 'bx', 'domba', 'kambing', 'transit', 'potong',
+    'laktasi', 'bunting', 'darbun', 'dara', 'perah', 'kerbau',
+    'rl', 'rd', 'sapi transit', 'sapi potong', 'sapi perah',
+    'sapi campur', 'cibulakan'
+]);
+
+function isMasterKonsumenJurnal(relasi) {
+    let rel = String(relasi || '').trim().toLowerCase();
+    if (!rel) return false;
+    if (typeof globalRelasi !== 'undefined' && Array.isArray(globalRelasi)) {
+        let m = globalRelasi.find(r => String(r.nama || '').trim().toLowerCase() === rel);
+        if (m && m.kategori) {
+            let kat = String(m.kategori).trim().toLowerCase();
+            if (kat === 'konsumen' || kat === 'peternak' || kat === 'mitra') return true;
+        }
+    }
+    return false;
+}
+
 function isKelompokTernakRelasi(relasi, pakan = '') {
     let rel = String(relasi || '').trim().toLowerCase();
     if (!rel) return false;
+    if (isMasterKonsumenJurnal(rel)) return false;
     let pkn = String(pakan || '').trim().toLowerCase();
-    const ternakRegex = /\b(kapalang|dewasa|pedet|jantan|bx|domba|kambing|transit|potong|laktasi|bunting|darbun|dara|perah|kerbau|rl|rd)\b/i;
-    if (ternakRegex.test(rel)) return true;
-    if (rel === 'sapi transit' || rel === 'sapi potong' || rel.includes('sapi perah') || rel.includes('sapi transit') || rel.includes('sapi potong')) return true;
+    if (EXACT_KELOMPOK_TERNAK_SET.has(rel)) return true;
+    if (rel.startsWith('sapi ') && (rel.includes('transit') || rel.includes('potong') || rel.includes('perah') || rel.includes('campur'))) return true;
     if ((rel === 'spn' || rel.startsWith('kandang')) && (pkn.includes('laktasi') || pkn.includes('darbun'))) return true;
     return false;
 }
@@ -157,8 +178,10 @@ function classifyKonsumsiTernakBranch(t) {
     let relLower = rel.toLowerCase();
     let cab = (t.cabang || '').trim().toLowerCase();
     let pkn = (t.pakan || '').trim().toLowerCase();
+    if (pkn.includes('ongkir')) return null;
 
-    if (!isKelompokTernakRelasi(rel, pkn)) return null;
+    let isCabKandang = cab.includes('kandang') && !isMasterKonsumenJurnal(rel);
+    if (!isCabKandang && !isKelompokTernakRelasi(rel, pkn)) return null;
 
     if (cab.includes('spn')) {
         if (relLower === 'kandang' || relLower === 'spn' || relLower === 'pembibitan') return null;
@@ -2284,13 +2307,10 @@ async function fetchDataMentah() {
             'Authorization': `Bearer ${SUPA_ANON_KEY}`
         };
 
-        let [resPakan, resCF] = await Promise.all([
-            fetch(`${SUPA_URL}/rest/v1/transaksi_pakan?tanggal=gte.${startDate}&tanggal=lte.${endDate}&order=tanggal.desc,id.desc`, { headers }),
-            fetch(`${SUPA_URL}/rest/v1/cashflow?tanggal=gte.${startDate}&tanggal=lte.${endDate}&order=tanggal.desc,id.desc`, { headers })
+        let [rowsPakan, rowsCF] = await Promise.all([
+            fetchJurnalPaged(`${SUPA_URL}/rest/v1/transaksi_pakan?tanggal=gte.${startDate}&tanggal=lte.${endDate}&order=tanggal.desc,id.desc`, headers),
+            fetchJurnalPaged(`${SUPA_URL}/rest/v1/cashflow?tanggal=gte.${startDate}&tanggal=lte.${endDate}&order=tanggal.desc,id.desc`, headers)
         ]);
-
-        let rowsPakan = resPakan.ok ? await resPakan.json() : [];
-        let rowsCF = resCF.ok ? await resCF.json() : [];
 
         let combined = [];
 
