@@ -3932,49 +3932,78 @@
             <h2 style="display:flex; justify-content:center; align-items:center; gap:8px; color:#1a5c40;">
                 <span class="material-symbols-outlined" style="font-size:26px;">manufacturing</span> Portal Upah Giling
             </h2>
-            <div class="sub-header" style="margin-bottom:15px;">Pengajuan & Koreksi OPR SPN Mandiri</div>
+            <div class="sub-header" style="margin-bottom:12px;">Pengajuan & Kartu Hutang Upah Giling SPN</div>
 
-            <div
-                style="margin-bottom:15px; background:#fff; padding:15px; border-radius:12px; border:1px solid #DBE4C9;">
-                <div class="form-row" style="margin-bottom:10px;">
-                    <div style="margin-bottom:0;"><label style="font-size:10px;">Dari Tanggal</label><input type="date"
-                            id="giling_start"></div>
-                    <div style="margin-bottom:0;"><label style="font-size:10px;">Sampai Tanggal</label><input
-                            type="date" id="giling_end"></div>
-                </div>
-                <button class="btn-submit" onclick="tarikDataGiling()"
-                    style="margin:0; background:#8AA624; width:100%;">
-                    <span class="material-symbols-outlined" style="font-size:16px;">search</span> Tarik Rincian
+            <!-- Switcher Tab Portal Upah Giling -->
+            <div style="display:flex; gap:8px; margin-bottom:15px;">
+                <button id="btn-tab-giling-opr" onclick="switchTabGiling('opr')" class="btn-submit" style="flex:1; margin:0; padding:9px; font-size:12px; background:#8AA624; border-radius:8px;">
+                    <span class="material-symbols-outlined" style="font-size:15px; vertical-align:middle;">fact_check</span> Pengajuan & Koreksi OPR
+                </button>
+                <button id="btn-tab-giling-hutang" onclick="switchTabGiling('hutang')" class="btn-submit" style="flex:1; margin:0; padding:9px; font-size:12px; background:#64748b; border-radius:8px;">
+                    <span class="material-symbols-outlined" style="font-size:15px; vertical-align:middle;">account_balance_wallet</span> Kartu Hutang Upah Giling
                 </button>
             </div>
 
-            <div id="giling-loader" class="loader hidden">Mencari data gilingan di server...</div>
-
-            <div id="giling-result" class="hidden">
-                <div class="summary-card"
-                    style="background: linear-gradient(135deg, #1a5c40, #2e7d32); margin-bottom: 15px;">
-                    <div style="font-size:12px; opacity:0.9; margin-bottom:5px;">Ringkasan Periode (Kg):</div>
-                    <div style="font-size:24px; font-weight:bold; color:#FFFFF0;" id="giling_total_vol">0 Kg</div>
-                    <div style="font-size:11px; opacity:0.9; margin-bottom:15px;" id="giling_rincian_vol">(RD 0 Kg + RL
-                        0 Kg)</div>
-                    <div
-                        style="border-top:1px solid rgba(255,255,255,0.2); padding-top:10px; display:flex; justify-content:space-between; align-items:center;">
-                        <span style="font-size:12px;">TOTAL UPAH OPR:</span>
-                        <span style="font-size:18px; font-weight:bold; color:#FEA405;" id="giling_total_upah">Rp
-                            0</span>
+            <!-- TAB 1: PENGAJUAN & KOREKSI OPR -->
+            <div id="giling-tab-opr">
+                <div
+                    style="margin-bottom:15px; background:#fff; padding:15px; border-radius:12px; border:1px solid #DBE4C9;">
+                    <div class="form-row" style="margin-bottom:10px;">
+                        <div style="margin-bottom:0;"><label style="font-size:10px;">Dari Tanggal</label><input type="date"
+                                id="giling_start"></div>
+                        <div style="margin-bottom:0;"><label style="font-size:10px;">Sampai Tanggal</label><input
+                                type="date" id="giling_end"></div>
                     </div>
+                    <button class="btn-submit" onclick="tarikDataGiling()"
+                        style="margin:0; background:#8AA624; width:100%;">
+                        <span class="material-symbols-outlined" style="font-size:16px;">search</span> Tarik Rincian
+                    </button>
                 </div>
 
-                <div class="rekap-card">
-                    <div class="rekap-title"><span class="material-symbols-outlined"
-                            style="font-size:18px;">list_alt</span> Detail Harian (Bisa Dikoreksi)</div>
-                    <div id="giling_list_harian"></div>
+                <div id="giling-loader" class="loader hidden">Mencari data gilingan di server...</div>
+
+                <div id="giling-result" class="hidden">
+                    <div class="summary-card"
+                        style="background: linear-gradient(135deg, #1a5c40, #2e7d32); margin-bottom: 15px;">
+                        <div style="font-size:12px; opacity:0.9; margin-bottom:5px;">Ringkasan Periode (Kg):</div>
+                        <div style="font-size:24px; font-weight:bold; color:#FFFFF0;" id="giling_total_vol">0 Kg</div>
+                        <div style="font-size:11px; opacity:0.9; margin-bottom:15px;" id="giling_rincian_vol">(RD 0 Kg + RL
+                            0 Kg)</div>
+                        <div
+                            style="border-top:1px solid rgba(255,255,255,0.2); padding-top:10px; display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:12px;">TOTAL UPAH OPR:</span>
+                            <span style="font-size:18px; font-weight:bold; color:#FEA405;" id="giling_total_upah">Rp
+                                0</span>
+                        </div>
+                    </div>
+
+                    <div class="rekap-card">
+                        <div class="rekap-title"><span class="material-symbols-outlined"
+                                style="font-size:18px;">list_alt</span> Detail Harian (Bisa Dikoreksi)</div>
+                        <div id="giling_list_harian"></div>
+                    </div>
+
+                    <button class="btn-submit" onclick="cetakPengajuanGiling()"
+                        style="background:#4A90E2; margin-top:15px;">
+                        <span class="material-symbols-outlined">picture_as_pdf</span> Cetak PDF & Ajukan WA
+                    </button>
+                </div>
+            </div>
+
+            <!-- TAB 2: KARTU HUTANG UPAH GILING (FIFO) -->
+            <div id="giling-tab-hutang" class="hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; background:#fff; padding:12px 14px; border-radius:10px; border:1px solid #DBE4C9;">
+                    <div style="font-size:11px; color:#475569; line-height:1.4;">
+                        Tracking otomatis <b>Akrual Upah Giling (Tonase × Rp 100)</b> vs <b>Pembayaran Kas (Kategori: Upah Giling)</b> secara FIFO.
+                    </div>
+                    <button onclick="muatKartuHutangGiling()" class="btn-submit" style="margin:0; padding:7px 12px; font-size:11px; background:#8AA624; white-space:nowrap;">
+                        <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">sync</span> Refresh
+                    </button>
                 </div>
 
-                <button class="btn-submit" onclick="cetakPengajuanGiling()"
-                    style="background:#4A90E2; margin-top:15px;">
-                    <span class="material-symbols-outlined">picture_as_pdf</span> Cetak PDF & Ajukan WA
-                </button>
+                <div id="giling-hutang-loader" class="loader hidden">Menghitung Kartu Hutang Upah Giling (FIFO)...</div>
+
+                <div id="giling-hutang-content"></div>
             </div>
         </div>
 
@@ -5866,6 +5895,31 @@
                     border: 1px solid #e2e8f0 !important;
                 }
 
+                .jurnal-sticky-wrap {
+                    max-height: 68vh;
+                    overflow: auto;
+                    background: white;
+                    border-radius: 8px;
+                    border: 1px solid #ddd;
+                    margin-bottom: 12px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                }
+
+                .jurnal-sticky-wrap table thead th {
+                    position: sticky;
+                    top: 0;
+                    z-index: 12;
+                    box-shadow: 0 1px 0 #94a3b8;
+                }
+
+                .jurnal-sticky-wrap table tfoot td {
+                    position: sticky;
+                    bottom: 0;
+                    z-index: 11;
+                    background: #e8f0fe;
+                    box-shadow: 0 -2px 0 #cbd5e1;
+                }
+
                 .jurnal-filter-card {
                     display: flex;
                     gap: 15px;
@@ -6335,80 +6389,40 @@
 
             <!-- ================= SUB-HALAMAN: JURNAL UMUM ================= -->
             <div id="view-jurnal-umum">
-                <div class="jurnal-filter-card">
-                    <!-- Kolom Filter (3/4) -->
-                    <div class="jurnal-filter-inputs">
-                        <!-- Baris 1: Filter Bulan dan Tahun -->
-                        <div style="display:flex; gap:10px;">
-                            <div style="flex:1;">
-                                <label class="jurnal-filter-label">Bulan</label>
-                                <select id="jurnal-bulan" class="jurnal-filter-control">
-                                    <option value="ALL">Semua Bulan</option>
-                                    <option value="01">Januari</option>
-                                    <option value="02">Februari</option>
-                                    <option value="03">Maret</option>
-                                    <option value="04">April</option>
-                                    <option value="05">Mei</option>
-                                    <option value="06">Juni</option>
-                                    <option value="07">Juli</option>
-                                    <option value="08">Agustus</option>
-                                    <option value="09">September</option>
-                                    <option value="10">Oktober</option>
-                                    <option value="11">November</option>
-                                    <option value="12">Desember</option>
-                                </select>
-                            </div>
-                            <div style="flex:1;">
-                                <label class="jurnal-filter-label">Tahun</label>
-                                <select id="jurnal-tahun" class="jurnal-filter-control">
-                                    <option value="2025">2025</option>
-                                    <option value="2026">2026</option>
-                                    <option value="2027">2027</option>
-                                    <option value="2028">2028</option>
-                                </select>
-                            </div>
-                        </div>
-                        <!-- Baris 2: Kode, Perkiraan, dan Relasi (Satu Baris) -->
-                        <div class="jurnal-filter-row-col3" style="display:flex; gap:10px;">
-                            <div style="flex:1;">
-                                <label class="jurnal-filter-label">Kode</label>
-                                <select id="jurnal-kode" class="jurnal-filter-control">
-                                    <option value="">Semua Kode</option>
-                                    <option value="1">1 - Aset / Piutang / Kas</option>
-                                    <option value="2">2 - Kewajiban / Hutang</option>
-                                    <option value="3">3 - Ekuitas / Modal</option>
-                                    <option value="4">4 - Pendapatan Penjualan</option>
-                                    <option value="5">5 - Biaya / HPP</option>
-                                </select>
-                            </div>
-                            <div style="flex:1;">
-                                <label class="jurnal-filter-label">Perkiraan</label>
-                                <input type="text" id="jurnal-perkiraan" placeholder="Semua Perkiraan..."
-                                    class="jurnal-filter-control">
-                            </div>
-                            <div style="flex:1;">
-                                <label class="jurnal-filter-label">Relasi</label>
-                                <div class="autocomplete-wrapper">
-                                    <input type="text" id="jurnal-relasi" placeholder="Ketik nama relasi..."
-                                        autocomplete="off" oninput="tampilkanSaran(this, 'saran-relasi-jurnal', false)"
-                                        class="jurnal-filter-control">
-                                    <div id="saran-relasi-jurnal" class="autocomplete-items hidden"></div>
-                                </div>
-                            </div>
-                        </div>
+                <div class="jurnal-filter-card" style="padding:12px 15px; align-items:flex-end; flex-wrap:wrap; gap:12px;">
+                    <div style="flex:1.2; min-width:140px;">
+                        <label class="jurnal-filter-label">Bulan</label>
+                        <select id="jurnal-bulan" class="jurnal-filter-control">
+                            <option value="ALL">Semua Bulan</option>
+                            <option value="01">Januari</option>
+                            <option value="02">Februari</option>
+                            <option value="03">Maret</option>
+                            <option value="04">April</option>
+                            <option value="05">Mei</option>
+                            <option value="06">Juni</option>
+                            <option value="07">Juli</option>
+                            <option value="08">Agustus</option>
+                            <option value="09">September</option>
+                            <option value="10">Oktober</option>
+                            <option value="11">November</option>
+                            <option value="12">Desember</option>
+                        </select>
                     </div>
-
-                    <!-- Tombol Aksi Search & Download (1/4) -->
-                    <div class="jurnal-filter-actions">
-                        <div>
-                            <label class="jurnal-filter-label" style="visibility:hidden;">Aksi</label>
-                            <button class="btn-submit jurnal-btn-action" onclick="fetchDataJurnal()"
-                                style="background:#8AA624;" title="Cari Data Jurnal">
-                                <span class="material-symbols-outlined" style="font-size:18px;">search</span> Cari
-                            </button>
-                        </div>
-                        <div style="position:relative;">
-                            <label class="jurnal-filter-label" style="visibility:hidden;">Download</label>
+                    <div style="flex:0.8; min-width:100px;">
+                        <label class="jurnal-filter-label">Tahun</label>
+                        <select id="jurnal-tahun" class="jurnal-filter-control">
+                            <option value="2025">2025</option>
+                            <option value="2026">2026</option>
+                            <option value="2027">2027</option>
+                            <option value="2028">2028</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; gap:10px; flex:1.2; min-width:220px;">
+                        <button class="btn-submit jurnal-btn-action" onclick="fetchDataJurnal()"
+                            style="flex:1; background:#8AA624;" title="Cari Data Jurnal">
+                            <span class="material-symbols-outlined" style="font-size:18px;">search</span> Cari
+                        </button>
+                        <div style="position:relative; flex:1;">
                             <button id="btn-jurnal-download" class="btn-submit jurnal-btn-action" onclick="toggleDropdownExportJurnal(event)"
                                 style="background:#2196F3;" title="Pilih Format Download">
                                 <span class="material-symbols-outlined" style="font-size:18px;">download</span> Download ▾
@@ -6436,16 +6450,30 @@
                         style="animation: spin 1s linear infinite;">sync</span><br>Memuat Buku Jurnal...
                 </div>
 
-                <div
-                    style="overflow-x:auto; background:white; border-radius:8px; border:1px solid #ddd; margin-bottom:20px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+                <div class="jurnal-sticky-wrap">
                     <table class="inv-table" style="width:100%; min-width:900px; border-collapse:collapse;">
                         <thead>
                             <tr>
                                 <th style="padding:10px; font-size:11px; width:8%;">Tanggal</th>
-                                <th style="padding:10px; font-size:11px; width:5%;">KODE</th>
-                                <th style="padding:10px; font-size:11px; width:15%;">Perkiraan</th>
-                                <th style="padding:10px; font-size:11px; width:12%;">Relasi</th>
-                                <th style="padding:10px; font-size:11px; width:26%;">Uraian</th>
+                                <th style="padding:10px; font-size:11px; width:6%;">
+                                    <div style="display:inline-flex; align-items:center; justify-content:center; gap:3px; cursor:pointer;" onclick="toggleHeaderFilter(event, 'jurnal', 'kode')" title="Filter KODE Akun">
+                                        <span>KODE</span>
+                                        <span id="filter-icon-jurnal-kode" class="material-symbols-outlined" style="font-size:15px; color:#cbd5e1;">filter_alt</span>
+                                    </div>
+                                </th>
+                                <th style="padding:10px; font-size:11px; width:15%;">
+                                    <div style="display:inline-flex; align-items:center; justify-content:center; gap:3px; cursor:pointer;" onclick="toggleHeaderFilter(event, 'jurnal', 'perkiraan')" title="Filter Perkiraan">
+                                        <span>Perkiraan</span>
+                                        <span id="filter-icon-jurnal-perkiraan" class="material-symbols-outlined" style="font-size:15px; color:#cbd5e1;">filter_alt</span>
+                                    </div>
+                                </th>
+                                <th style="padding:10px; font-size:11px; width:13%;">
+                                    <div style="display:inline-flex; align-items:center; justify-content:center; gap:3px; cursor:pointer;" onclick="toggleHeaderFilter(event, 'jurnal', 'relasi')" title="Filter Relasi">
+                                        <span>Relasi</span>
+                                        <span id="filter-icon-jurnal-relasi" class="material-symbols-outlined" style="font-size:15px; color:#cbd5e1;">filter_alt</span>
+                                    </div>
+                                </th>
+                                <th style="padding:10px; font-size:11px; width:24%;">Uraian</th>
                                 <th style="padding:10px; font-size:11px; width:12%;">Debit</th>
                                 <th style="padding:10px; font-size:11px; width:12%;">Kredit</th>
                                 <th style="padding:10px; font-size:11px; width:10%;">Saldo</th>
@@ -6470,6 +6498,9 @@
                             </tr>
                         </tfoot>
                     </table>
+                </div>
+                <div id="jurnal-hpp-legend" class="hidden" style="padding:8px 12px; margin-bottom:20px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; font-size:11px; color:#1e40af;">
+                    * <b>Keterangan Warna Biru:</b> Angka HPP & Persediaan sementara (estimasi batch terakhir) — <i>Menunggu input HPP</i>. Akan otomatis terbarui ke HPP riil saat HPP masuk diinput.
                 </div>
             </div>
             <!-- ================= AKHIR SUB-HALAMAN: JURNAL UMUM ================= -->
@@ -6637,6 +6668,12 @@
                                 </select>
                             </div>
                         </div>
+                        <div style="margin-top:10px; padding-top:8px; border-top:1px dashed #e2e8f0; display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" id="lr-toggle-konsolidasi" onchange="if(typeof labaRugiDataGlobal !== 'undefined' && labaRugiDataGlobal) renderLabaRugi(labaRugiDataGlobal);" style="width:15px; height:15px; cursor:pointer; accent-color:#1e3a8a;">
+                            <label for="lr-toggle-konsolidasi" style="font-size:12px; font-weight:600; color:#334155; cursor:pointer; user-select:none;">
+                                Sertakan Alokasi Pemakaian Pakan Ternak Sendiri (Konsolidasian Holding)
+                            </label>
+                        </div>
                     </div>
                     <div class="jurnal-filter-actions">
                         <div>
@@ -6650,8 +6687,11 @@
                             <button id="btn-lr-download" class="btn-submit jurnal-btn-action" onclick="toggleDropdownExportLR(event)" style="background:#2196F3;" title="Download Laba Rugi">
                                 <span class="material-symbols-outlined" style="font-size:18px;">download</span> Download ▾
                             </button>
-                            <div id="dropdown-export-lr" class="hidden" style="position:absolute; right:0; top:100%; margin-top:4px; background:white; border:1px solid #cbd5e1; border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,0.15); z-index:1000; min-width:160px; overflow:hidden;">
-                                <button onclick="exportLabaRugi('xlsx')" style="display:flex; align-items:center; gap:8px; width:100%; padding:10px 14px; border:none; background:white; text-align:left; font-size:13px; font-weight:600; color:#1e293b; cursor:pointer;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">
+                            <div id="dropdown-export-lr" class="hidden" style="position:absolute; right:0; top:100%; margin-top:4px; background:white; border:1px solid #cbd5e1; border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,0.15); z-index:1000; min-width:180px; overflow:hidden;">
+                                <button onclick="exportLabaRugi('pdf')" style="display:flex; align-items:center; gap:8px; width:100%; padding:10px 14px; border:none; background:white; text-align:left; font-size:13px; font-weight:600; color:#1e293b; cursor:pointer;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">
+                                    <span style="background:#dc2626; color:white; border-radius:4px; padding:2px 6px; font-size:10px; font-weight:bold;">PDF</span> Dokumen PDF Resmi
+                                </button>
+                                <button onclick="exportLabaRugi('xlsx')" style="display:flex; align-items:center; gap:8px; width:100%; padding:10px 14px; border:none; background:white; text-align:left; font-size:13px; font-weight:600; color:#1e293b; cursor:pointer; border-top:1px solid #f1f5f9;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">
                                     <span style="background:#107c41; color:white; border-radius:4px; padding:2px 6px; font-size:10px; font-weight:bold;">XLSX</span> Excel (.xlsx)
                                 </button>
                                 <button onclick="exportLabaRugi('csv')" style="display:flex; align-items:center; gap:8px; width:100%; padding:10px 14px; border:none; background:white; text-align:left; font-size:13px; font-weight:600; color:#1e293b; cursor:pointer; border-top:1px solid #f1f5f9;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">
@@ -6707,6 +6747,12 @@
                                 </select>
                             </div>
                         </div>
+                        <div style="margin-top:10px; padding-top:8px; border-top:1px dashed #e2e8f0; display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" id="neraca-toggle-prive" onchange="if(typeof neracaDataGlobal !== 'undefined' && neracaDataGlobal) renderNeraca(neracaDataGlobal);" style="width:15px; height:15px; cursor:pointer; accent-color:#1e3a8a;">
+                            <label for="neraca-toggle-prive" style="font-size:12px; font-weight:600; color:#334155; cursor:pointer; user-select:none;">
+                                Mode Konsolidasian / Prive Internal (Pakan Kandang Sendiri Mengurangi Ekuitas)
+                            </label>
+                        </div>
                     </div>
                     <div class="jurnal-filter-actions">
                         <div>
@@ -6720,8 +6766,11 @@
                             <button id="btn-neraca-download" class="btn-submit jurnal-btn-action" onclick="toggleDropdownExportNeraca(event)" style="background:#2196F3;" title="Download Neraca">
                                 <span class="material-symbols-outlined" style="font-size:18px;">download</span> Download ▾
                             </button>
-                            <div id="dropdown-export-neraca" class="hidden" style="position:absolute; right:0; top:100%; margin-top:4px; background:white; border:1px solid #cbd5e1; border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,0.15); z-index:1000; min-width:160px; overflow:hidden;">
-                                <button onclick="exportNeraca('xlsx')" style="display:flex; align-items:center; gap:8px; width:100%; padding:10px 14px; border:none; background:white; text-align:left; font-size:13px; font-weight:600; color:#1e293b; cursor:pointer;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">
+                            <div id="dropdown-export-neraca" class="hidden" style="position:absolute; right:0; top:100%; margin-top:4px; background:white; border:1px solid #cbd5e1; border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,0.15); z-index:1000; min-width:180px; overflow:hidden;">
+                                <button onclick="exportNeraca('pdf')" style="display:flex; align-items:center; gap:8px; width:100%; padding:10px 14px; border:none; background:white; text-align:left; font-size:13px; font-weight:600; color:#1e293b; cursor:pointer;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">
+                                    <span style="background:#dc2626; color:white; border-radius:4px; padding:2px 6px; font-size:10px; font-weight:bold;">PDF</span> Dokumen PDF Resmi
+                                </button>
+                                <button onclick="exportNeraca('xlsx')" style="display:flex; align-items:center; gap:8px; width:100%; padding:10px 14px; border:none; background:white; text-align:left; font-size:13px; font-weight:600; color:#1e293b; cursor:pointer; border-top:1px solid #f1f5f9;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">
                                     <span style="background:#107c41; color:white; border-radius:4px; padding:2px 6px; font-size:10px; font-weight:bold;">XLSX</span> Excel (.xlsx)
                                 </button>
                                 <button onclick="exportNeraca('csv')" style="display:flex; align-items:center; gap:8px; width:100%; padding:10px 14px; border:none; background:white; text-align:left; font-size:13px; font-weight:600; color:#1e293b; cursor:pointer; border-top:1px solid #f1f5f9;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">
@@ -8115,11 +8164,13 @@
                     "OPR Ekspedisi Pakan",
                     // Operasional Gudang, Kandang & Kantor
                     "Bongkar Muat",
+                    "Upah Giling",
                     "OPR Kandang",
                     "Listrik, Air & Internet",
                     "Perlengkapan & Kebersihan",
                     "Konsumsi & Dapur",
                     // Transaksi Kas / Non-Operasional
+                    "Bayar Hutang Pakan",
                     "Tarik Deposit",
                     "Kasbon",
                     "Lainnya"
@@ -9070,6 +9121,7 @@
                     let payloadsToProcess = dt.isBatch ? dt.items : [dt];
                     let supabaseRows = [];
                     let cashflowRows = [];
+                    let pendingDompetBongkar = [];
 
                     try {
                         // 🔥 PERUBAHAN PENTING: Ganti forEach menjadi for...of agar await berfungsi normal
@@ -9532,12 +9584,14 @@
                             // ===============================================
                             if (pl.uangBongkar) {
                                 let biayaBongkar = totalKgBongkar * 30; // Rp 30 / kg
+                                let bmTgl = pl.tanggal || new Date().toISOString().split('T')[0];
+                                let bmRelasi = "Kuli Gudang " + cabangStr;
                                 cashflowRows.push({
-                                    tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
+                                    tanggal: bmTgl,
                                     jenis: "Keluar",
                                     metode: "Cash",
                                     kategori: "Bongkar Muat",
-                                    relasi: "Kuli Gudang " + cabangStr,
+                                    relasi: bmRelasi,
                                     nominal: biayaBongkar,
                                     diskon: 0,
                                     keterangan: `Upah bongkar pakan masuk (${totalKgBongkar} Kg)`,
@@ -9545,17 +9599,16 @@
                                     petugas: pl.petugas || 'Admin'
                                 });
 
-                                // Auto-sync ke Dompet Rembes (Kas Kecil)
-                                if (typeof syncBongkarMuatKeDompet === 'function') {
-                                    syncBongkarMuatKeDompet({
-                                        tanggal: pl.tanggal || new Date().toISOString().split('T')[0],
-                                        nominal: biayaBongkar,
-                                        keterangan: `[BM] Upah bongkar pakan masuk (${totalKgBongkar} Kg)`,
-                                        relasi: "Kuli Gudang " + cabangStr,
-                                        cabangStr: cabangStr,
-                                        petugas: pl.petugas || 'Wildan'
-                                    });
-                                }
+                                // Antrekan auto-sync ke Dompet Rembes setelah POST cashflow sukses agar mendapat cashflow_id
+                                pendingDompetBongkar.push({
+                                    tanggal: bmTgl,
+                                    nominal: biayaBongkar,
+                                    keterangan: `[BM] Upah bongkar pakan masuk (${totalKgBongkar} Kg)`,
+                                    relasi: bmRelasi,
+                                    cabangStr: cabangStr,
+                                    petugas: pl.petugas || 'Wildan',
+                                    buktiUrl: urlSJ
+                                });
                             }
                         }
 
@@ -9615,16 +9668,39 @@
                                     'apikey': SUPA_ANON_KEY,
                                     'Authorization': `Bearer ${SUPA_ANON_KEY}`,
                                     'Content-Type': 'application/json',
-                                    'Prefer': 'return=minimal, resolution=ignore-duplicates',
+                                    'Prefer': 'return=representation, resolution=ignore-duplicates',
                                     'x-pin-karyawan': currentLoggedPin // <--- TAMBAHKAN BARIS INI
                                 },
                                 body: JSON.stringify(cashflowRows)
                             });
-                            if (resCF.ok && typeof broadcastRealtimeUpdate === 'function') {
-                                for (let cfRow of cashflowRows) {
-                                    broadcastRealtimeUpdate(cfRow);
+                            if (resCF.ok) {
+                                let insertedCfRows = await resCF.json().catch(() => []);
+                                if (typeof broadcastRealtimeUpdate === 'function') {
+                                    for (let cfRow of cashflowRows) {
+                                        broadcastRealtimeUpdate(cfRow);
+                                    }
                                 }
-                            } else if (!resCF.ok && resCF.status !== 409) {
+                                if (pendingDompetBongkar.length > 0 && typeof syncBongkarMuatKeDompet === 'function') {
+                                    let usedCfIndices = new Set();
+                                    for (let bm of pendingDompetBongkar) {
+                                        let matchedId = null;
+                                        if (Array.isArray(insertedCfRows)) {
+                                            let idxMatch = insertedCfRows.findIndex((r, idx) =>
+                                                !usedCfIndices.has(idx) &&
+                                                r && r.kategori === 'Bongkar Muat' &&
+                                                r.tanggal === bm.tanggal &&
+                                                Number(r.nominal) === Number(bm.nominal) &&
+                                                r.relasi === bm.relasi
+                                            );
+                                            if (idxMatch >= 0) {
+                                                usedCfIndices.add(idxMatch);
+                                                matchedId = insertedCfRows[idxMatch].id || null;
+                                            }
+                                        }
+                                        await syncBongkarMuatKeDompet({ ...bm, cashflowId: matchedId });
+                                    }
+                                }
+                            } else if (resCF.status !== 409) {
                                 console.error("Gagal insert cashflow");
                             }
                         }
@@ -11954,7 +12030,7 @@
 
                                     mutasiGrouped[r].tagihan.push({
                                         tgl: row.tanggal, pakan: namaPakanInvoice, qty: qtyTagihan,
-                                        satuan: row.satuan || 'Kg', nominal: nominalTagihan, terbayar: 0, raw: row
+                                        satuan: row.satuan || 'Kg', harga_satuan: parseFloat(row.harga_satuan) || (qtyTagihan > 0 ? Math.round(nominalTagihan / qtyTagihan) : 0), nominal: nominalTagihan, terbayar: 0, raw: row
                                     });
                                 }
                             });
@@ -11968,7 +12044,7 @@
                                     relMatchObj.kategori.toLowerCase() === 'mitra'
                                 );
                                 let kelompokSapi = ['bx', 'domba', 'rd', 'rl', 'darbun', 'laktasi', 'kapalang', 'dewasa', 'jantan', 'pedet', 'kerbau', 'bunting', 'kambing'];
-                                if (!isRelKonsumen && (rLower === 'kandang' || rLower === 'kandang pm' || rLower === 'kandang spn' || rLower === 'spn' || rLower === 'rph' || rLower === 'cibulakan' || rLower.includes('pembibitan') || kelompokSapi.includes(rLower))) return;
+                                if (!isRelKonsumen && (rLower === 'kandang' || rLower === 'kandang pm' || rLower === 'kandang spn' || rLower === 'kandang rph' || rLower === 'pm' || rLower === 'spn' || rLower === 'rph' || rLower === 'cibulakan' || rLower.includes('pembibitan') || kelompokSapi.includes(rLower))) return;
 
                                 let namaRelasi = d.relasi;
                                 let sisaPiutangDB = parseFloat(d.sisa_piutang);
@@ -11987,7 +12063,7 @@
                                         // 🔥 TAMBAHAN: Buat wadah potonganMasuk untuk menyimpan riwayat DP di dalam nota
                                         if (!groupedNota[item.tgl]) groupedNota[item.tgl] = { tgl: item.tgl, totalTagihan: 0, terbayar: 0, items: [], potonganMasuk: [] };
                                         groupedNota[item.tgl].totalTagihan += item.nominal;
-                                        groupedNota[item.tgl].items.push({ pakan: item.pakan, qty: item.qty, nominal: item.nominal, satuan: item.satuan });
+                                        groupedNota[item.tgl].items.push({ pakan: item.pakan, qty: item.qty, harga_satuan: item.harga_satuan, nominal: item.nominal, satuan: item.satuan });
                                     });
                                     let arrNota = Object.values(groupedNota).sort((a, b) => new Date(a.tgl) - new Date(b.tgl));
 
@@ -12012,7 +12088,7 @@
                                                 let tglIndo = tglParts.length === 3 ? `${tglParts[2]}/${tglParts[1]}/${tglParts[0]}` : matchedNota.tgl;
 
                                                 uangMasuk.detailPotongan.push({
-                                                    tglNota: tglIndo, hutangSblm: matchedNota.totalTagihan, jumlah: dipotong, sisaAkhir: matchedNota.totalTagihan - dipotong, isTunai: true
+                                                    tglNota: tglIndo, hutangSblm: matchedNota.totalTagihan, jumlah: dipotong, sisaAkhir: matchedNota.totalTagihan - dipotong, isTunai: true, items: matchedNota.items
                                                 });
                                                 if (!matchedNota.potonganMasuk) matchedNota.potonganMasuk = [];
                                                 matchedNota.potonganMasuk.push({ nominal: dipotong, metode: uangMasuk.metode, pakanRetur: uangMasuk.pakanRetur, tglBayar: tglIndo });
@@ -12038,7 +12114,7 @@
                                                 let tglIndo = tglParts.length === 3 ? `${tglParts[2]}/${tglParts[1]}/${tglParts[0]}` : matchedNota.tgl;
 
                                                 uangMasuk.detailPotongan.push({
-                                                    tglNota: tglIndo, hutangSblm: sisaNota, jumlah: dipotong, sisaAkhir: sisaNota - dipotong, isDiskon: true
+                                                    tglNota: tglIndo, hutangSblm: sisaNota, jumlah: dipotong, sisaAkhir: sisaNota - dipotong, isDiskon: true, items: matchedNota.items
                                                 });
                                                 if (!matchedNota.potonganMasuk) matchedNota.potonganMasuk = [];
                                                 matchedNota.potonganMasuk.push({ nominal: dipotong, metode: "Diskon", pakanRetur: "", tglBayar: tglIndo });
@@ -12121,7 +12197,7 @@
                                                 let tglIndo = tglParts.length === 3 ? `${tglParts[2]}/${tglParts[1]}/${tglParts[0]}` : nota.tgl;
 
                                                 uangMasuk.detailPotongan.push({
-                                                    tglNota: tglIndo, hutangSblm: sisaHutangNotaVisual, jumlah: dipotong, sisaAkhir: sisaHutangNotaVisual - dipotong
+                                                    tglNota: tglIndo, hutangSblm: sisaHutangNotaVisual, jumlah: dipotong, sisaAkhir: sisaHutangNotaVisual - dipotong, items: nota.items
                                                 });
                                                 sisaHutangNotaVisual -= dipotong;
 
@@ -12221,7 +12297,9 @@
                                 // Rakit teks potongan nota dari hasil kalkulasi memori
                                 let uraianText = "[Deposit / Saldo Menganggur]";
                                 if (bayar.detailPotongan && bayar.detailPotongan.length > 0) {
-                                    let teksPotong = bayar.detailPotongan.map(p => `Nota ${p.tglNota} (Rp ${nf.format(p.jumlah)})`).join('; ');
+                                    let teksPotong = (typeof formatDetailPotonganNota === 'function')
+                                        ? formatDetailPotonganNota(bayar.detailPotongan, nf)
+                                        : bayar.detailPotongan.map(p => `Nota ${p.tglNota} (Rp ${nf.format(p.jumlah)})`).join('; ');
                                     uraianText = `[Memotong: ${teksPotong}]`;
                                 }
 
@@ -17822,14 +17900,22 @@
                             if (!Array.isArray(data)) throw new Error(data.message || "Gagal memuat data dari Supabase");
 
                             let serverData = [];
-                            data.forEach(row => {
+                            const isRawGilinganRow = (row) => {
+                                let hashU = String(row.hash_str || "").toUpperCase();
+                                let cabU = String(row.cabang || "").toUpperCase();
+                                let pknL = String(row.pakan || "").toLowerCase();
+                                if (hashU.includes('_GILING_') || cabU.includes('KANDANG')) return false;
+                                if (pknL.includes('ongkir') || pknL.includes('ransum laktasi') || pknL.includes('ransum darbun')) return false;
                                 let relasiRaw = String(row.relasi || "").toUpperCase();
-                                let isGilingan = relasiRaw.includes('RD') || relasiRaw.includes('RL') || relasiRaw.includes('DARBUN') || relasiRaw.includes('LAKTASI');
+                                return /\b(RD|RL)\b/.test(relasiRaw) || relasiRaw.includes('DARBUN') || relasiRaw.includes('LAKTASI');
+                            };
 
-                                if (isGilingan) {
+                            data.forEach(row => {
+                                if (isRawGilinganRow(row)) {
+                                    let relasiRaw = String(row.relasi || "").toUpperCase();
                                     let tglParts = String(row.tanggal).split('-');
                                     let tglStr = tglParts.length === 3 ? `${tglParts[2]}/${tglParts[1]}/${tglParts[0]}` : row.tanggal;
-                                    let relasiClean = (relasiRaw.includes('RD') || relasiRaw.includes('DARBUN')) ? 'RD' : 'RL';
+                                    let relasiClean = (/\bRD\b/.test(relasiRaw) || relasiRaw.includes('DARBUN')) ? 'RD' : 'RL';
 
                                     serverData.push({
                                         tglMs: new Date(row.tanggal).getTime(),
@@ -17850,10 +17936,10 @@
 
                             pendingMaster.forEach(p => {
                                 let relasiRaw = String(p.relasi || "").toUpperCase();
-                                let isGilingan = relasiRaw.includes('RD') || relasiRaw.includes('RL') || relasiRaw.includes('DARBUN') || relasiRaw.includes('LAKTASI');
+                                let isGilingan = isRawGilinganRow(p);
 
                                 if (isGilingan && p.tgl >= start && p.tgl <= end) {
-                                    let relasiClean = (relasiRaw.includes('RD') || relasiRaw.includes('DARBUN')) ? 'RD' : 'RL';
+                                    let relasiClean = (/\bRD\b/.test(relasiRaw) || relasiRaw.includes('DARBUN')) ? 'RD' : 'RL';
                                     let pQty = parseFloat(p.qty) || 0;
 
                                     // CEK SILANG: Apakah data bayangan ini sudah ada di serverData?
@@ -17992,6 +18078,212 @@
           </tr>`;
                     document.getElementById('pdf_tbody_giling').innerHTML = pdfTbody;
                     document.getElementById('giling-result').classList.remove('hidden');
+                }
+
+                function switchTabGiling(tab) {
+                    let btnOpr = document.getElementById('btn-tab-giling-opr');
+                    let btnHut = document.getElementById('btn-tab-giling-hutang');
+                    let tabOpr = document.getElementById('giling-tab-opr');
+                    let tabHut = document.getElementById('giling-tab-hutang');
+                    if (tab === 'hutang') {
+                        if (btnOpr) btnOpr.style.background = '#64748b';
+                        if (btnHut) btnHut.style.background = '#1e3a8a';
+                        tabOpr?.classList.add('hidden');
+                        tabHut?.classList.remove('hidden');
+                        muatKartuHutangGiling();
+                    } else {
+                        if (btnOpr) btnOpr.style.background = '#8AA624';
+                        if (btnHut) btnHut.style.background = '#64748b';
+                        tabOpr?.classList.remove('hidden');
+                        tabHut?.classList.add('hidden');
+                    }
+                }
+
+                async function muatKartuHutangGiling() {
+                    let loader = document.getElementById('giling-hutang-loader');
+                    let cont = document.getElementById('giling-hutang-content');
+                    if (!cont) return;
+                    loader?.classList.remove('hidden');
+                    cont.innerHTML = '';
+
+                    try {
+                        let headers = { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` };
+                        let fnFetch = typeof fetchSupabaseAll === 'function'
+                            ? fetchSupabaseAll
+                            : async (u) => { let r = await fetch(u, { headers }); return r.ok ? await r.json() : []; };
+
+                        let [trxAll, cfAll] = await Promise.all([
+                            fnFetch(`${SUPA_URL}/rest/v1/transaksi_pakan?order=tanggal.asc,id.asc&select=id,tanggal,cabang,status,relasi,pakan,qty,hash_str`),
+                            fnFetch(`${SUPA_URL}/rest/v1/cashflow?jenis=ilike.*keluar*&order=tanggal.asc,id.asc&select=id,tanggal,kategori,nominal,keterangan,metode,bukti_url`)
+                        ]);
+
+                        // 1. Hitung Akrual Tagihan Gilingan per Tanggal (RD & RL, tarif Rp 100/Kg)
+                        let tagihanHarianMap = {};
+                        (trxAll || []).forEach(row => {
+                            let hStr = String(row.hash_str || '').toUpperCase();
+                            let cabU = String(row.cabang || '').toUpperCase();
+                            let pknL = String(row.pakan || '').toLowerCase();
+                            if (hStr.includes('_GILING_') || cabU.includes('KANDANG')) return;
+                            if (pknL.includes('ongkir') || pknL.includes('ransum laktasi') || pknL.includes('ransum darbun')) return;
+                            let relU = String(row.relasi || '').toUpperCase();
+                            let isGilingan = /\b(RD|RL)\b/.test(relU) || relU.includes('DARBUN') || relU.includes('LAKTASI');
+                            if (!isGilingan) return;
+
+                            let tgl = row.tanggal;
+                            if (!tgl) return;
+                            let gol = (/\bRD\b/.test(relU) || relU.includes('DARBUN')) ? 'RD' : 'RL';
+                            let isMasuk = String(row.status || '').toLowerCase().includes('masuk');
+                            let qtyDelta = (parseFloat(row.qty) || 0) * (isMasuk ? -1 : 1);
+
+                            if (!tagihanHarianMap[tgl]) {
+                                tagihanHarianMap[tgl] = { tgl, kgRD: 0, kgRL: 0, totalKg: 0, tagihanRp: 0, terbayar: 0, potongan: [] };
+                            }
+                            if (gol === 'RD') tagihanHarianMap[tgl].kgRD += qtyDelta;
+                            else tagihanHarianMap[tgl].kgRL += qtyDelta;
+                            tagihanHarianMap[tgl].totalKg += qtyDelta;
+                        });
+
+                        let arrTagihan = Object.values(tagihanHarianMap)
+                            .filter(g => g.totalKg > 0)
+                            .map(g => ({ ...g, tagihanRp: Math.round(g.totalKg * 100) }))
+                            .sort((a, b) => a.tgl.localeCompare(b.tgl));
+
+                        // 2. Ambil Pembayaran Kas Upah Giling dari Cashflow
+                        let arrBayar = (cfAll || []).filter(c => {
+                            let kat = String(c.kategori || '').toLowerCase();
+                            return kat.includes('upah giling') || kat === 'giling' || kat.includes('opr giling');
+                        }).map(c => ({
+                            id: c.id,
+                            tgl: c.tanggal,
+                            nominal: Number(c.nominal) || 0,
+                            sisa: Number(c.nominal) || 0,
+                            metode: c.metode || 'Cash',
+                            ket: c.keterangan || '',
+                            bukti_url: c.bukti_url,
+                            memotong: []
+                        })).filter(b => b.nominal > 0);
+
+                        // 3. FIFO Matching: Pembayaran tertua memotong tagihan gilingan tertua
+                        let iTag = 0;
+                        arrBayar.forEach(b => {
+                            while (b.sisa > 0 && iTag < arrTagihan.length) {
+                                let t = arrTagihan[iTag];
+                                let sisaT = t.tagihanRp - t.terbayar;
+                                if (sisaT <= 0) { iTag++; continue; }
+                                let pot = Math.min(sisaT, b.sisa);
+                                t.terbayar += pot;
+                                t.potongan.push({ tglBayar: b.tgl, jumlah: pot, metode: b.metode });
+                                b.memotong.push({ tglGiling: t.tgl, jumlah: pot });
+                                b.sisa -= pot;
+                                if (t.terbayar >= t.tagihanRp) iTag++;
+                            }
+                        });
+
+                        let nf = new Intl.NumberFormat('id-ID');
+                        let totalTagihan = arrTagihan.reduce((s, t) => s + t.tagihanRp, 0);
+                        let totalKgAll = arrTagihan.reduce((s, t) => s + t.totalKg, 0);
+                        let totalBayar = arrBayar.reduce((s, b) => s + b.nominal, 0);
+                        let sisaHutang = totalTagihan - totalBayar;
+
+                        // Hitung Saldo Berjalan secara kronologis (lama -> terbaru)
+                        let runningSaldoBerjalan = 0;
+                        arrTagihan.forEach(t => {
+                            runningSaldoBerjalan += (t.tagihanRp - t.terbayar);
+                            t.saldoBerjalan = runningSaldoBerjalan;
+                        });
+
+                        let fmtTgl = (iso) => iso ? iso.split('-').reverse().join('/') : '-';
+
+                        let rowsTagihanHtml = arrTagihan.map(t => {
+                            let sisa = t.tagihanRp - t.terbayar;
+                            let badge = sisa <= 0
+                                ? `<span style="background:#dcfce7; color:#15803d; padding:2px 7px; border-radius:10px; font-size:10px; font-weight:bold;">Lunas</span>`
+                                : (t.terbayar > 0
+                                    ? `<span style="background:#fef3c7; color:#b45309; padding:2px 7px; border-radius:10px; font-size:10px; font-weight:bold;">Sebagian</span>`
+                                    : `<span style="background:#fee2e2; color:#b91c1c; padding:2px 7px; border-radius:10px; font-size:10px; font-weight:bold;">Belum Bayar</span>`);
+                            let potInfo = t.potongan.length > 0
+                                ? `<div style="font-size:9.5px; color:#475569; margin-top:2px;">Dibayar: ${t.potongan.map(p => `${fmtTgl(p.tglBayar)} (Rp ${nf.format(p.jumlah)})`).join(', ')}</div>`
+                                : '';
+                            return `
+                                <tr style="border-bottom:1px solid #f1f5f9;">
+                                    <td style="padding:7px 8px; font-weight:600;">${fmtTgl(t.tgl)}</td>
+                                    <td style="padding:7px 8px; font-size:10.5px;">RD: ${nf.format(t.kgRD)} Kg | RL: ${nf.format(t.kgRL)} Kg${potInfo}</td>
+                                    <td style="padding:7px 8px; text-align:right; font-weight:600;">${nf.format(t.totalKg)} Kg</td>
+                                    <td style="padding:7px 8px; text-align:right;">Rp ${nf.format(t.tagihanRp)}</td>
+                                    <td style="padding:7px 8px; text-align:right; font-weight:bold; color:${t.saldoBerjalan > 0 ? '#b91c1c' : '#15803d'};">Rp ${nf.format(t.saldoBerjalan)}</td>
+                                    <td style="padding:7px 8px; text-align:center;">${badge}</td>
+                                </tr>`;
+                        }).join('') || `<tr><td colspan="6" style="text-align:center; padding:18px; color:#94a3b8;">Belum ada riwayat gilingan.</td></tr>`;
+
+                        let rowsBayarHtml = [...arrBayar].reverse().map(b => {
+                            let memotongTxt = b.memotong.length > 0
+                                ? `Memotong giling: ${b.memotong.map(m => `${fmtTgl(m.tglGiling)} (Rp ${nf.format(m.jumlah)})`).join('; ')}`
+                                : 'Deposit / Lebih Bayar';
+                            return `
+                                <tr style="border-bottom:1px solid #f1f5f9;">
+                                    <td style="padding:7px 8px; font-weight:600;">${fmtTgl(b.tgl)}</td>
+                                    <td style="padding:7px 8px; font-size:10.5px;">${b.metode}${b.ket ? ' — ' + b.ket : ''}<div style="font-size:9.5px; color:#15803d;">${memotongTxt}</div></td>
+                                    <td style="padding:7px 8px; text-align:right; font-weight:bold; color:#15803d;">Rp ${nf.format(b.nominal)}</td>
+                                </tr>`;
+                        }).join('') || `<tr><td colspan="3" style="text-align:center; padding:18px; color:#94a3b8;">Belum ada input pengeluaran cashflow kategori "Upah Giling".</td></tr>`;
+
+                        cont.innerHTML = `
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:15px;">
+                                <div style="background:#fff; padding:12px; border-radius:10px; border:1px solid #cbd5e1;">
+                                    <div style="font-size:10px; color:#64748b; font-weight:600;">TOTAL AKRUAL UPAH (${nf.format(totalKgAll)} Kg)</div>
+                                    <div style="font-size:16px; font-weight:bold; color:#1e3a8a; margin-top:4px;">Rp ${nf.format(totalTagihan)}</div>
+                                </div>
+                                <div style="background:#fff; padding:12px; border-radius:10px; border:1px solid #cbd5e1;">
+                                    <div style="font-size:10px; color:#64748b; font-weight:600;">SUDAH DIBAYAR (CASHFLOW)</div>
+                                    <div style="font-size:16px; font-weight:bold; color:#15803d; margin-top:4px;">Rp ${nf.format(totalBayar)}</div>
+                                </div>
+                                <div style="background:${sisaHutang > 0 ? '#fef2f2' : '#ecfdf5'}; padding:12px; border-radius:10px; border:1px solid ${sisaHutang > 0 ? '#fecaca' : '#a7f3d0'};">
+                                    <div style="font-size:10px; color:${sisaHutang > 0 ? '#991b1b' : '#065f46'}; font-weight:600;">SISA HUTANG UPAH GILING</div>
+                                    <div style="font-size:16px; font-weight:900; color:${sisaHutang > 0 ? '#dc2626' : '#059669'}; margin-top:4px;">Rp ${nf.format(sisaHutang)}</div>
+                                </div>
+                            </div>
+
+                            <div class="rekap-card" style="margin-bottom:15px;">
+                                <div class="rekap-title" style="margin-bottom:8px;"><span class="material-symbols-outlined" style="font-size:18px;">receipt_long</span> Rincian Tagihan Upah Giling per Tanggal (FIFO)</div>
+                                <div style="overflow-x:auto;">
+                                    <table style="width:100%; border-collapse:collapse; font-size:11px;">
+                                        <thead>
+                                            <tr style="background:#f1f5f9; border-bottom:1px solid #cbd5e1;">
+                                                <th style="padding:7px 8px; text-align:left;">Tgl Giling</th>
+                                                <th style="padding:7px 8px; text-align:left;">Rincian & Pelunasan</th>
+                                                <th style="padding:7px 8px; text-align:right;">Tonase</th>
+                                                <th style="padding:7px 8px; text-align:right;">Tagihan (@100)</th>
+                                                <th style="padding:7px 8px; text-align:right;">Saldo Berjalan</th>
+                                                <th style="padding:7px 8px; text-align:center;">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>${rowsTagihanHtml}</tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="rekap-card">
+                                <div class="rekap-title" style="margin-bottom:8px;"><span class="material-symbols-outlined" style="font-size:18px;">payments</span> Riwayat Pencairan Kas ("Upah Giling")</div>
+                                <div style="overflow-x:auto;">
+                                    <table style="width:100%; border-collapse:collapse; font-size:11px;">
+                                        <thead>
+                                            <tr style="background:#f1f5f9; border-bottom:1px solid #cbd5e1;">
+                                                <th style="padding:7px 8px; text-align:left;">Tanggal Bayar</th>
+                                                <th style="padding:7px 8px; text-align:left;">Keterangan & Alokasi FIFO</th>
+                                                <th style="padding:7px 8px; text-align:right;">Nominal Cair</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>${rowsBayarHtml}</tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        `;
+                    } catch (err) {
+                        console.error("Gagal muat kartu hutang giling:", err);
+                        cont.innerHTML = `<div style="padding:15px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; color:#991b1b; font-size:12px;">Gagal memuat data: ${err.message}</div>`;
+                    } finally {
+                        loader?.classList.add('hidden');
+                    }
                 }
 
                 function hapusPendingGiling(tglStr, relasi) {
