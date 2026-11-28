@@ -4,6 +4,326 @@
 // ==========================================
 
 let jurnalDataGlobal = [];
+let jurnalNotaItemsGlobal = {};
+
+function normalizeTglToIso(tglStr) {
+    if (!tglStr) return '';
+    let s = String(tglStr).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+        let p = s.split('/');
+        return `${p[2]}-${p[1]}-${p[0]}`;
+    }
+    return s;
+}
+
+function formatTglIndoShort(tglStr) {
+    let iso = normalizeTglToIso(tglStr);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+        return iso.split('-').reverse().join('/');
+    }
+    return tglStr || '-';
+}
+
+function formatDetailPotonganNota(detailPotongan, nf, notaLookupMap = null, relasi = '') {
+    if (!detailPotongan || detailPotongan.length === 0) return '';
+    return detailPotongan.map(p => {
+        let tglDisp = formatTglIndoShort(p.tglNota);
+        let items = (p.items && p.items.length > 0) ? p.items : null;
+        if (!items && notaLookupMap && relasi) {
+            let iso = normalizeTglToIso(p.tglNota);
+            let key = `${relasi.toLowerCase().trim()}|${iso}`;
+            if (notaLookupMap[key] && notaLookupMap[key].length > 0) {
+                items = notaLookupMap[key];
+            }
+        }
+
+        if (items && items.length > 0) {
+            let totalNotaItems = items.reduce((s, it) => s + (Number(it.nominal) || 0), 0);
+            let rincianStr = items.map(it => {
+                let qtyNum = Number(it.qty) || 0;
+                let nomNum = Number(it.nominal) || 0;
+                let hsNum = Number(it.harga_satuan) || (qtyNum > 0 ? Math.round(nomNum / qtyNum) : 0);
+                let qPart = qtyNum > 0 ? ` ${nf.format(qtyNum)} ${it.satuan || 'Kg'}` : '';
+                let hPart = hsNum > 0 ? ` @Rp ${nf.format(hsNum)}` : '';
+                return `${it.pakan}${qPart}${hPart} = Rp ${nf.format(nomNum)}`;
+            }).join('; ');
+
+            if (totalNotaItems > 0 && Math.abs(p.jumlah - totalNotaItems) > 100) {
+                return `Nota ${tglDisp} (${rincianStr} | Potong: Rp ${nf.format(p.jumlah)})`;
+            }
+            return `Nota ${tglDisp} (${rincianStr})`;
+        }
+        return `Nota ${tglDisp} (Rp ${nf.format(p.jumlah)})`;
+    }).join('; ');
+}
+
+function formatDeskripsiNominal(deskripsi, nf) {
+    if (!deskripsi) return "";
+    let nfQty = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 });
+    let out = String(deskripsi).replace(/(@|Rp\s*)(\d{1,3}(?:\.\d{3})+(?!\d)|\d+(?:\.\d+)?)/g, (match, prefix, numStr) => {
+        if (/^\d{1,3}(\.\d{3})+$/.test(numStr)) {
+            return prefix + nf.format(Number(numStr.replace(/\./g, '')));
+        }
+        let num = Number(numStr);
+        if (isNaN(num)) return match;
+        return prefix + nf.format(Math.round(num));
+    });
+    out = out.replace(/(\b\d{1,3}(?:\.\d{3})+|\b\d+(?:\.\d+)?)\s*(Kg|Ltr|Liter|Rit|Ekor|Sak|Karung)\b/gi, (match, numStr, unit) => {
+        if (/^\d{1,3}(\.\d{3})+$/.test(numStr)) {
+            return `${nfQty.format(Number(numStr.replace(/\./g, '')))} ${unit}`;
+        }
+        let num = Number(numStr);
+        if (isNaN(num)) return match;
+        return `${nfQty.format(num)} ${unit}`;
+    });
+    return out;
+}
+
+function relasiIncludes(dRelasi, zRelasi) {
+    if (!dRelasi || !zRelasi) return false;
+    let target = String(zRelasi).trim().toLowerCase();
+    let tokens = String(dRelasi).split(',').map(s => s.trim().toLowerCase());
+    return tokens.includes(target);
+}
+
+function appendRelasiToGroup(dRelasi, zRelasi) {
+    if (!zRelasi) return dRelasi || '';
+    if (!dRelasi) return zRelasi;
+    if (relasiIncludes(dRelasi, zRelasi)) return dRelasi;
+    return `${dRelasi}, ${zRelasi}`;
+}
+
+function isKelompokTernakRelasi(relasi, pakan = '') {
+    let rel = String(relasi || '').trim().toLowerCase();
+    if (!rel) return false;
+    let pkn = String(pakan || '').trim().toLowerCase();
+    const ternakRegex = /\b(kapalang|dewasa|pedet|jantan|bx|domba|kambing|transit|potong|laktasi|bunting|darbun|dara|perah|kerbau|rl|rd)\b/i;
+    if (ternakRegex.test(rel)) return true;
+    if (rel === 'sapi transit' || rel === 'sapi potong' || rel.includes('sapi perah') || rel.includes('sapi transit') || rel.includes('sapi potong')) return true;
+    if ((rel === 'spn' || rel.startsWith('kandang')) && (pkn.includes('laktasi') || pkn.includes('darbun'))) return true;
+    return false;
+}
+
+function isPakanGilingJadi(pakanName) {
+    let p = String(pakanName || '').trim().toLowerCase();
+    return p.includes('ransum laktasi') || p.includes('ransum darbun') || p === 'rl' || p === 'rd';
+}
+
+function getEffectiveHppWithGiling(rawTotalHpp, qty, pakanName, fallbackUnitHpp = 0, hargaSatuan = 0) {
+    let q = Number(qty) || 0;
+    let h = Number(rawTotalHpp) || 0;
+    let isGiling = isPakanGilingJadi(pakanName);
+    if (q <= 0) return { totalHpp: h, unitHpp: 0, isEstimasi: false, hasGilingCost: false };
+
+    if (h > 0) {
+        let upah = isGiling ? Math.round(q * 100) : 0;
+        let tot = h + upah;
+        return { totalHpp: tot, unitHpp: Math.round(tot / q), isEstimasi: false, hasGilingCost: isGiling };
+    }
+
+    let unitRaw = fallbackUnitHpp > 0 ? Math.round(fallbackUnitHpp) : (hargaSatuan > 0 ? Math.round(hargaSatuan * 0.85) : 0);
+    if (unitRaw > 0) {
+        let unitEff = isGiling ? (unitRaw + 100) : unitRaw;
+        return { totalHpp: Math.round(q * unitEff), unitHpp: unitEff, isEstimasi: true, hasGilingCost: isGiling };
+    }
+    return { totalHpp: 0, unitHpp: 0, isEstimasi: false, hasGilingCost: false };
+}
+
+function isLogistikTransferShared(t) {
+    let rel = (t.relasi || '').trim().toLowerCase();
+    let cat = (t.catatan || '').toLowerCase();
+    if (['kandang', 'kandang pm', 'kandang spn', 'kandang rph', 'spn', 'pm', 'rph', 'mutasi'].includes(rel)) return true;
+    if (rel === 'pembibitan' || rel.includes('pembibitan') || rel === 'cibulakan' || rel.includes('cibulakan')) return true;
+    if (cat.includes('[auto mutasi]') || cat.includes('kiriman dari') || cat.includes('mutasi antar gudang') || cat.includes('mutasi internal')) return true;
+    return false;
+}
+
+function isBahanBakuGilinganShared(t) {
+    let cab = (t.cabang || '').trim().toUpperCase();
+    let rel = (t.relasi || '').trim().toUpperCase();
+    let cat = (t.catatan || '').toLowerCase();
+    if (cab.includes('SPN') && !cab.includes('KANDANG')) {
+        if (rel === 'RL' || rel === 'RD' || rel === 'DARBUN' || rel === 'LAKTASI' || rel.includes('GILING') || cat.includes('giling')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function classifyKonsumsiTernakBranch(t) {
+    if (isLogistikTransferShared(t) || isBahanBakuGilinganShared(t)) return null;
+    let rel = (t.relasi || '').trim();
+    let relLower = rel.toLowerCase();
+    let cab = (t.cabang || '').trim().toLowerCase();
+    let pkn = (t.pakan || '').trim().toLowerCase();
+
+    if (!isKelompokTernakRelasi(rel, pkn)) return null;
+
+    if (cab.includes('spn')) {
+        if (relLower === 'kandang' || relLower === 'spn' || relLower === 'pembibitan') return null;
+        let unit = relLower.includes('laktasi') || relLower === 'rl' || pkn.includes('laktasi') ? 'Laktasi (RL)'
+                 : (relLower.includes('bunting') || relLower.includes('darbun') || relLower === 'rd' || pkn.includes('darbun') ? 'Bunting / Dara (RD)'
+                 : (relLower.includes('pedet') ? 'Pedet SPN' : 'Sapi Perah (SPN)'));
+        return { cabangKey: 'SPN', unit };
+    }
+    if (cab === 'rph' || cab.includes('rph')) {
+        if (relLower === 'kandang' || relLower === 'rph' || relLower === 'pembibitan') return null;
+        let unit = relLower.includes('jantan') ? 'Jantan'
+                 : (relLower.includes('bx') ? 'BX'
+                 : (relLower.includes('domba') ? 'Domba'
+                 : (relLower.includes('kambing') ? 'Kambing'
+                 : (relLower.includes('transit') || relLower.includes('potong') ? 'Sapi Transit / Potong' : rel))));
+        return { cabangKey: 'RPH', unit };
+    }
+    if (cab === 'pm' || cab.includes('pm') || (cab.includes('kandang') && !cab.includes('spn') && !cab.includes('rph'))) {
+        if (relLower === 'kandang' || relLower === 'pm' || relLower === 'pembibitan') return null;
+        let unit = relLower.includes('kapalang') ? 'Kapalang'
+                 : (relLower.includes('dewasa') ? 'Dewasa'
+                 : (relLower.includes('pedet') ? 'Pedet PM'
+                 : (relLower.includes('jantan') ? 'Jantan' : rel)));
+        return { cabangKey: 'PM', unit };
+    }
+
+    if (relLower.includes('laktasi') || relLower.includes('bunting') || relLower.includes('darbun') || relLower.includes('perah') || relLower === 'rl' || relLower === 'rd' || pkn.includes('laktasi') || pkn.includes('darbun')) {
+        let unit = (relLower.includes('laktasi') || relLower === 'rl' || pkn.includes('laktasi')) ? 'Laktasi (RL)'
+                 : ((relLower.includes('bunting') || relLower.includes('darbun') || relLower === 'rd' || pkn.includes('darbun')) ? 'Bunting / Dara (RD)' : 'Sapi Perah (SPN)');
+        return { cabangKey: 'SPN', unit };
+    }
+    if (['jantan', 'bx', 'domba', 'kambing', 'transit', 'potong'].some(k => relLower.includes(k))) {
+        let unit = relLower.includes('jantan') ? 'Jantan' : (relLower.includes('bx') ? 'BX' : (relLower.includes('domba') ? 'Domba' : (relLower.includes('kambing') ? 'Kambing' : 'Sapi Transit / Potong')));
+        return { cabangKey: 'RPH', unit };
+    }
+    if (['kapalang', 'dewasa', 'pedet'].some(k => relLower.includes(k))) {
+        let unit = relLower.includes('kapalang') ? 'Kapalang' : (relLower.includes('dewasa') ? 'Dewasa' : 'Pedet PM');
+        return { cabangKey: 'PM', unit };
+    }
+    return null;
+}
+
+function escapeRegexJurnal(str) {
+    return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function injectEstimasiIntoRow(row, z) {
+    if (!row._estTokens) row._estTokens = [];
+    let idx = row._estTokens.length;
+    let placeholder = `%%EST_TOKEN_${idx}%%`;
+    let tagText = `x @${z._estUnitHpp} [HPP ESTIMASI SEMENTARA]`;
+
+    let desc = row.deskripsi || '';
+    let pknEsc = escapeRegexJurnal(z.pakan);
+    let qtyEsc = escapeRegexJurnal(String(z.qty));
+    let satEsc = escapeRegexJurnal(z.satuan || 'Kg');
+    let relEsc = escapeRegexJurnal(z.relasi || '');
+
+    let itemRx = new RegExp(`(${pknEsc}\\s+${qtyEsc}\\b(?:\\s+(?:${satEsc}|[A-Za-z]+)\\b)?)(?!\\s*x\\s*@)`, 'i');
+
+    if (z.relasi) {
+        let blockRx = new RegExp(`(${relEsc}\\s*\\([^;]*?)(;|$)`, 'i');
+        let bMatch = desc.match(blockRx);
+        if (bMatch && itemRx.test(bMatch[1])) {
+            let updatedBlock = bMatch[1].replace(itemRx, (m, g1) => {
+                row._estTokens.push(`${g1} ${tagText}`);
+                return placeholder;
+            });
+            row.deskripsi = desc.replace(blockRx, updatedBlock + bMatch[2]);
+            return;
+        }
+    }
+
+    if (itemRx.test(desc)) {
+        row.deskripsi = desc.replace(itemRx, (m, g1) => {
+            row._estTokens.push(`${g1} ${tagText}`);
+            return placeholder;
+        });
+        return;
+    }
+
+    row._estTokens.push(`${z.pakan} ${z.qty} ${z.satuan || 'Kg'} ${tagText}`);
+    if (z.relasi && new RegExp(`${relEsc}\\s*\\(`, 'i').test(desc)) {
+        let appendInBlockRx = new RegExp(`(${relEsc}\\s*\\([^;]*?)(;|$)`, 'i');
+        row.deskripsi = desc.replace(appendInBlockRx, `$1 + (${placeholder})$2`);
+    } else {
+        row.deskripsi = (desc ? desc + '; ' : '') + `${z.relasi} (${placeholder})`;
+    }
+}
+
+/**
+ * Helper terpusat untuk menarik seluruh baris Supabase tanpa batas 1.000 baris,
+ * fallback ke fetch standar jika dipanggil terisolasi tanpa fetchSupabaseAll atau bila URL memiliki limit=.
+ */
+async function fetchJurnalPaged(url, headers) {
+    if (url.includes('limit=')) {
+        let res = await fetch(url, { headers });
+        if (!res.ok) {
+            let errBody = await res.json().catch(() => ({}));
+            throw new Error(errBody.message || `HTTP ${res.status}`);
+        }
+        let data = await res.json();
+        return Array.isArray(data) ? data : [];
+    }
+
+    const limit = 1000;
+    const sep = url.includes('?') ? '&' : '?';
+    const firstRes = await fetch(`${url}${sep}offset=0&limit=${limit}`, {
+        headers: { ...headers, 'Prefer': 'count=exact' }
+    });
+    if (!firstRes.ok) {
+        let errBody = await firstRes.json().catch(() => ({}));
+        throw new Error(errBody.message || `HTTP ${firstRes.status}`);
+    }
+    const firstRows = await firstRes.json();
+    if (!Array.isArray(firstRows)) return [];
+    if (firstRows.length < limit) return firstRows;
+
+    const rangeHdr = firstRes.headers && typeof firstRes.headers.get === 'function' ? firstRes.headers.get('content-range') : null;
+    const totalMatch = rangeHdr ? rangeHdr.match(/\/(\d+)$/) : null;
+    const totalCount = totalMatch ? parseInt(totalMatch[1], 10) : null;
+
+    if (totalCount && totalCount > limit) {
+        let offsets = [];
+        for (let off = limit; off < totalCount; off += limit) offsets.push(off);
+        let all = firstRows.slice();
+        for (let i = 0; i < offsets.length; i += 4) {
+            let chunk = offsets.slice(i, i + 4);
+            let pages = await Promise.all(chunk.map(async (off) => {
+                let r = await fetch(`${url}${sep}offset=${off}&limit=${limit}`, { headers });
+                if (!r.ok) {
+                    let errBody = await r.json().catch(() => ({}));
+                    throw new Error(errBody.message || `HTTP ${r.status}`);
+                }
+                let rows = await r.json();
+                return Array.isArray(rows) ? rows : [];
+            }));
+            pages.forEach(p => { all = all.concat(p); });
+        }
+        return all;
+    }
+
+    let fnFetch = (typeof fetchSupabaseAll === 'function')
+        ? fetchSupabaseAll
+        : (typeof window !== 'undefined' && typeof window.fetchSupabaseAll === 'function' ? window.fetchSupabaseAll : null);
+    if (fnFetch) {
+        let all = firstRows.slice();
+        let offset = limit;
+        let keep = true;
+        while (keep) {
+            let r = await fetch(`${url}${sep}offset=${offset}&limit=${limit}`, { headers });
+            if (!r.ok) {
+                let errBody = await r.json().catch(() => ({}));
+                throw new Error(errBody.message || `HTTP ${r.status}`);
+            }
+            let page = await r.json();
+            if (!Array.isArray(page) || page.length === 0) break;
+            all = all.concat(page);
+            if (page.length < limit) keep = false;
+            else offset += limit;
+        }
+        return all;
+    }
+    return firstRows;
+}
 
 async function fetchDataJurnal(silent = false) {
     let bulan = document.getElementById('jurnal-bulan').value;
@@ -26,24 +346,410 @@ async function fetchDataJurnal(silent = false) {
     }
 
     try {
-        let fnFetch = (typeof fetchSupabaseAll === 'function') ? fetchSupabaseAll : (typeof window !== 'undefined' && typeof window.fetchSupabaseAll === 'function' ? window.fetchSupabaseAll : null);
-        let urlTarget = `${SUPA_URL}/rest/v1/view_jurnal_umum?tanggal=gte.${start}&tanggal=lte.${end}&order=tanggal.asc,id_jurnal.asc`;
-        
-        let data = [];
-        if (fnFetch) {
-            data = await fnFetch(urlTarget);
-        } else {
-            let res = await fetch(urlTarget, {
-                headers: {
-                    'apikey': SUPA_ANON_KEY,
-                    'Authorization': `Bearer ${SUPA_ANON_KEY}`
+        let headers = {
+            'apikey': SUPA_ANON_KEY,
+            'Authorization': `Bearer ${SUPA_ANON_KEY}`
+        };
+
+        let urlJurnal = `${SUPA_URL}/rest/v1/view_jurnal_umum?tanggal=gte.${start}&tanggal=lte.${end}&order=tanggal.asc,id_jurnal.asc`;
+        let urlTrx = `${SUPA_URL}/rest/v1/transaksi_pakan?tanggal=gte.${start}&tanggal=lte.${end}&status=ilike.*keluar*&select=id,tanggal,cabang,relasi,pakan,qty,satuan,harga_satuan,total_hpp,catatan,hash_str&order=tanggal.asc,id.asc`;
+        let urlBatch = `${SUPA_URL}/rest/v1/stok_batch?order=tanggal_masuk.desc,id.desc&limit=1500&select=pakan,hpp`;
+
+        let [data, trxOut, batchList] = await Promise.all([
+            fetchJurnalPaged(urlJurnal, headers),
+            fetchJurnalPaged(urlTrx, headers).catch(() => []),
+            fetchJurnalPaged(urlBatch, headers).catch(() => [])
+        ]);
+
+        // 1. Bangun map rincian item nota (relasi|tanggal -> items[]) agar deskripsi pelunasan selalu rinci
+        let notaMap = {};
+        // 2. Bangun fallback harga HPP dari batch gudang terbaru
+        let fallbackHppMap = {};
+        (batchList || []).forEach(b => {
+            let pkn = (b.pakan || '').trim();
+            let uHpp = Number(b.hpp) || 0;
+            if (uHpp > 0 && pkn && !fallbackHppMap[pkn]) fallbackHppMap[pkn] = uHpp;
+        });
+
+        let zeroHppTrxList = [];
+        let monthlyKandangMap = {}; // monthKey|cabangKey -> agregasi pemakaian kandang akhir bulan
+        let bahanBakuGilingMap = {}; // tanggal|RANSUM LAKTASI / RANSUM DARBUN / ALL -> rincian bahan baku + HPP
+
+        (trxOut || []).forEach(t => {
+            let rel = (t.relasi || '').trim();
+            let pkn = (t.pakan || '').trim();
+            let qty = Number(t.qty) || 0;
+            let hs = Number(t.harga_satuan) || 0;
+            let hpp = Number(t.total_hpp) || 0;
+            let nom = qty * hs;
+
+            if (rel && t.tanggal && (nom > 0 || qty > 0)) {
+                let key = `${rel.toLowerCase()}|${t.tanggal}`;
+                if (!notaMap[key]) notaMap[key] = [];
+                notaMap[key].push({
+                    pakan: pkn,
+                    qty: qty,
+                    satuan: pkn.toLowerCase().includes('ongkir') ? 'Rit' : (t.satuan || 'Kg'),
+                    harga_satuan: hs,
+                    nominal: nom
+                });
+            }
+
+            if (isBahanBakuGilinganShared(t) && !isPakanGilingJadi(pkn) && !pkn.toLowerCase().includes('ongkir') && qty > 0 && t.tanggal) {
+                let relL = rel.toLowerCase();
+                let catL = (t.catatan || '').toLowerCase();
+                let gilingTarget = (relL === 'rl' || relL.startsWith('rl ') || relL.includes('laktasi') || catL.includes('laktasi') || /\brl\b/.test(catL))
+                    ? 'RANSUM LAKTASI'
+                    : ((relL === 'rd' || relL.startsWith('rd ') || relL.includes('darbun') || catL.includes('darbun') || /\brd\b/.test(catL))
+                        ? 'RANSUM DARBUN'
+                        : 'ALL');
+                let effIng = getEffectiveHppWithGiling(hpp, qty, pkn, fallbackHppMap[pkn] || 0, hs);
+                let gKey = `${t.tanggal}|${gilingTarget}`;
+                if (!bahanBakuGilingMap[gKey]) bahanBakuGilingMap[gKey] = {};
+                let itemKey = `${pkn}|${effIng.unitHpp}|${effIng.isEstimasi ? '1' : '0'}`;
+                if (!bahanBakuGilingMap[gKey][itemKey]) {
+                    bahanBakuGilingMap[gKey][itemKey] = {
+                        pakan: pkn,
+                        satuan: t.satuan || 'Kg',
+                        qty: 0,
+                        unitHpp: effIng.unitHpp,
+                        totalHpp: 0,
+                        isEstimasi: effIng.isEstimasi
+                    };
                 }
+                bahanBakuGilingMap[gKey][itemKey].qty += qty;
+                bahanBakuGilingMap[gKey][itemKey].totalHpp += effIng.totalHpp;
+                return;
+            }
+
+            if (isLogistikTransferShared(t) || isBahanBakuGilinganShared(t)) return;
+            let isOngkir = pkn.toLowerCase().includes('ongkir');
+            if (isOngkir || qty <= 0) return;
+
+            let ternakInfo = classifyKonsumsiTernakBranch(t);
+            let eff = getEffectiveHppWithGiling(hpp, qty, pkn, fallbackHppMap[pkn] || 0, hs);
+
+            if (ternakInfo) {
+                // Kumpulkan untuk Rekap Pemakaian Kandang Akhir Bulan (1 baris per cabang, per kelompok sapi, per beda HPP)
+                let mKey = String(t.tanggal).slice(0, 7);
+                let bKey = `${mKey}|${ternakInfo.cabangKey}`;
+                if (!monthlyKandangMap[bKey]) {
+                    let [yr, mo] = mKey.split('-').map(Number);
+                    let lastD = new Date(yr, mo, 0).getDate();
+                    monthlyKandangMap[bKey] = {
+                        monthEndDate: `${mKey}-${('0' + lastD).slice(-2)}`,
+                        cabangKey: ternakInfo.cabangKey,
+                        units: {},
+                        totalHpp: 0,
+                        hasEstimasi: false
+                    };
+                }
+                let grpBranch = monthlyKandangMap[bKey];
+                if (!grpBranch.units[ternakInfo.unit]) grpBranch.units[ternakInfo.unit] = {};
+                let itemKey = `${pkn}|${eff.unitHpp}|${eff.isEstimasi ? '1' : '0'}`;
+                if (!grpBranch.units[ternakInfo.unit][itemKey]) {
+                    grpBranch.units[ternakInfo.unit][itemKey] = {
+                        pakan: pkn,
+                        satuan: t.satuan || 'Kg',
+                        unitHpp: eff.unitHpp,
+                        isEstimasi: eff.isEstimasi,
+                        qty: 0,
+                        totalHpp: 0
+                    };
+                }
+                grpBranch.units[ternakInfo.unit][itemKey].qty += qty;
+                grpBranch.units[ternakInfo.unit][itemKey].totalHpp += eff.totalHpp;
+                grpBranch.totalHpp += eff.totalHpp;
+                if (eff.isEstimasi) grpBranch.hasEstimasi = true;
+            } else if (hpp === 0 && eff.unitHpp > 0) {
+                // Penjualan komersial yang HPP-nya masih 0
+                zeroHppTrxList.push({
+                    ...t,
+                    _isInternalKandang: false,
+                    _estUnitHpp: eff.unitHpp,
+                    _estTotalHpp: eff.totalHpp
+                });
+            }
+        });
+        jurnalNotaItemsGlobal = notaMap;
+
+        // 2B. Transformasi Konversi Gilingan SPN (+Rp 100/Kg Upah Giling -> Hutang Upah Giling),
+        // Reklasifikasi pembayaran cashflow "Upah Giling" ke pelunasan Hutang Upah Giling,
+        // serta bersihkan baris harian Pemakaian Pakan Kandang agar diganti Rekap Akhir Bulan
+        let nfLocal = new Intl.NumberFormat('id-ID');
+        let nfQtyLocal = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 });
+        let formatRincianBahanGiling = (tanggal, descLower) => {
+            let targetKey = descLower.includes('laktasi')
+                ? `${tanggal}|RANSUM LAKTASI`
+                : (descLower.includes('darbun') ? `${tanggal}|RANSUM DARBUN` : `${tanggal}|ALL`);
+            let mapItems = bahanBakuGilingMap[targetKey] || bahanBakuGilingMap[`${tanggal}|ALL`] || null;
+            if (!mapItems) return '';
+            let items = Object.values(mapItems);
+            if (items.length === 0) return '';
+            return items.map(it => {
+                let qtyStr = `${nfQtyLocal.format(it.qty)} ${it.satuan}`;
+                if (it.totalHpp > 0 || it.unitHpp > 0) {
+                    let estTag = it.isEstimasi ? ' [Estimasi]' : '';
+                    return `${it.pakan} ${qtyStr} x @${nfLocal.format(it.unitHpp)} (Rp ${nfLocal.format(Math.round(it.totalHpp))})${estTag}`;
+                }
+                return `${it.pakan} ${qtyStr}`;
+            }).join(' + ');
+        };
+        let sqlSudahHandleGiling = (data || []).some(r =>
+            String(r.id_jurnal || '').startsWith('TP-GIL-') ||
+            (r.nama_akun || '').trim() === 'Hutang Upah Giling'
+        );
+        let removedPemakaianKeys = new Set();
+        (data || []).forEach(d => {
+            if ((d.nama_akun || '').toLowerCase().includes('pemakaian pakan')) {
+                removedPemakaianKeys.add(`${d.tanggal}|${Number(d.debit) || 0}`);
+            }
+        });
+
+        let cleanedData = [];
+        (data || []).forEach(rawRow => {
+            let d = { ...rawRow };
+            let nama = (d.nama_akun || '').trim();
+            let desc = d.deskripsi || '';
+            let descL = desc.toLowerCase();
+            let relU = (d.relasi || '').trim().toUpperCase();
+            let isMutasiRow = String(d.id_jurnal || '').startsWith('TP-MUT-') || String(d.referensi || '').toLowerCase().includes('mutasi');
+
+            // Hapus baris harian Pemakaian Pakan Kandang (digantikan rekap akhir bulan per cabang)
+            if (nama.toLowerCase().includes('pemakaian pakan')) return;
+            if (!isMutasiRow && nama === 'Persediaan Pakan' && Number(d.kredit) > 0 && Number(d.debit) === 0) {
+                let relTokens = String(d.relasi || '').split(',').map(s => s.trim()).filter(Boolean);
+                let allKandangRel = relTokens.length > 0 && relTokens.every(tok => isKelompokTernakRelasi(tok) || tok.toLowerCase().startsWith('kandang'));
+                let matchedDailyPemakaian = descL.includes('pemakaian') && removedPemakaianKeys.has(`${d.tanggal}|${Number(d.kredit)}`);
+                if (allKandangRel || matchedDailyPemakaian) return;
+            }
+
+            // Sisipkan rincian bahan baku + HPP pada baris Konversi Bahan Baku Gilingan (Hasil Giling tetap total ringkas)
+            if (nama === 'Persediaan Pakan' && Number(d.kredit) > 0 && descL.includes('konversi bahan baku gilingan')) {
+                let rincianBahan = formatRincianBahanGiling(d.tanggal, descL);
+                if (rincianBahan && !desc.includes('Bahan Baku:')) {
+                    d.deskripsi = `${desc} [Bahan Baku: ${rincianBahan}]`;
+                }
+            }
+
+            // Konversi hasil giling SPN (RL / RD) hanya jika view_jurnal_umum belum menanganinya secara native
+            if (!sqlSudahHandleGiling && !String(d.id_jurnal || '').startsWith('TP-GIL-') && !descL.includes('upah giling') && relU === 'SPN' && (descL.includes('ransum laktasi') || descL.includes('ransum darbun'))) {
+                let qtyMatch = desc.match(/(\d+(?:\.\d+)?)\s*Kg/i);
+                let qtyG = qtyMatch ? Number(qtyMatch[1]) : 0;
+                let upahG = Math.round(qtyG * 100);
+
+                if (nama === 'Persediaan Pakan' && Number(d.debit) > 0 && upahG > 0) {
+                    let rawHpp = Number(d.debit);
+                    let effTotal = rawHpp + upahG;
+                    let effUnit = qtyG > 0 ? Math.round(effTotal / qtyG) : 0;
+                    d.debit = effTotal;
+                    d.deskripsi = `${desc.replace(/\s*x\s*@[\d.,]+/i, '')} x @${nfLocal.format(effUnit)} (Bahan Baku Rp ${nfLocal.format(rawHpp)} + Upah Giling @100)`;
+                    cleanedData.push(d);
+                    return;
+                }
+                if (nama === 'Hutang Pakan' && Number(d.kredit) > 0) {
+                    let rincianBahan = formatRincianBahanGiling(d.tanggal, descL);
+                    cleanedData.push({
+                        ...d,
+                        kode_akun: '103',
+                        nama_akun: 'Persediaan Pakan',
+                        deskripsi: `Konversi Bahan Baku Gilingan (${desc})${rincianBahan ? ` [Bahan Baku: ${rincianBahan}]` : ''}`
+                    });
+                    if (upahG > 0) {
+                        cleanedData.push({
+                            id_jurnal: `${d.id_jurnal || 'GIL'}-UPAH`,
+                            tanggal: d.tanggal,
+                            kode_akun: '202',
+                            nama_akun: 'Hutang Upah Giling',
+                            relasi: 'OPR Giling SPN',
+                            deskripsi: `Akrual Upah Giling ${qtyG} Kg x @100`,
+                            debit: 0,
+                            kredit: upahG
+                        });
+                    }
+                    return;
+                }
+            }
+
+            // Reklasifikasi pembayaran cashflow "Upah Giling" menjadi Debit Hutang Upah Giling (idempoten dengan SQL baru)
+            if (d.id_jurnal && String(d.id_jurnal).startsWith('CF-') && Number(d.debit) > 0 && nama !== 'Kas' && nama !== 'Hutang Upah Giling') {
+                let txtCheck = `${nama} ${desc}`.toLowerCase();
+                if (txtCheck.includes('upah giling') || txtCheck.includes('opr giling') || nama.toLowerCase() === 'giling' || nama.toLowerCase() === 'biaya giling') {
+                    d.kode_akun = '202';
+                    d.nama_akun = 'Hutang Upah Giling';
+                }
+            }
+
+            cleanedData.push(d);
+        });
+        data = cleanedData;
+
+        // 2C. Sisipkan Rekap Pemakaian Kandang Akhir Bulan (1 baris per cabang, per kelompok sapi, per beda HPP di baris yang sama)
+        Object.values(monthlyKandangMap).forEach(grpBranch => {
+            if (grpBranch.totalHpp <= 0) return;
+            let tokens = [];
+            let unitDescParts = [];
+            Object.keys(grpBranch.units).sort().forEach(unitName => {
+                let items = Object.values(grpBranch.units[unitName]);
+                let itemStrs = items.map(it => {
+                    let baseTxt = `${it.pakan} ${nfLocal.format(it.qty)} ${it.satuan} x @${nfLocal.format(it.unitHpp)}`;
+                    if (it.isEstimasi) {
+                        let tIdx = tokens.length;
+                        tokens.push(`${baseTxt} [HPP ESTIMASI SEMENTARA]`);
+                        return `(%%EST_TOKEN_${tIdx}%%)`;
+                    }
+                    return `(${baseTxt})`;
+                });
+                unitDescParts.push(`${unitName} ${itemStrs.join(' + ')}`);
             });
-            if (res.ok) data = await res.json();
-            else console.error("Gagal load jurnal", await res.text());
-        }
-        
+
+            let cabangLabel = `Kandang ${grpBranch.cabangKey}`;
+            let combinedDesc = `Rekap Pemakaian ${cabangLabel}: ${unitDescParts.join('; ')}`;
+
+            data.push({
+                id_jurnal: `REKAP-PMK-D-${grpBranch.monthEndDate}-${grpBranch.cabangKey}`,
+                tanggal: grpBranch.monthEndDate,
+                kode_akun: '505',
+                nama_akun: 'Pemakaian Pakan Kandang',
+                relasi: cabangLabel,
+                deskripsi: combinedDesc,
+                debit: grpBranch.totalHpp,
+                kredit: 0,
+                _estTokens: [...tokens],
+                _isHppSementara: grpBranch.hasEstimasi,
+                _hasInlineSementara: grpBranch.hasEstimasi
+            });
+            data.push({
+                id_jurnal: `REKAP-PMK-K-${grpBranch.monthEndDate}-${grpBranch.cabangKey}`,
+                tanggal: grpBranch.monthEndDate,
+                kode_akun: '103',
+                nama_akun: 'Persediaan Pakan',
+                relasi: cabangLabel,
+                deskripsi: `Persediaan Keluar ${cabangLabel}: ${unitDescParts.join('; ')}`,
+                debit: 0,
+                kredit: grpBranch.totalHpp,
+                _estTokens: [...tokens],
+                _isHppSementara: grpBranch.hasEstimasi,
+                _hasInlineSementara: grpBranch.hasEstimasi
+            });
+        });
+
+        // 3. Suntikkan HPP sementara penjualan komersial langsung ke baris kelompok HPP / Persediaan tanggal tsb
+        let unmatchedGrouped = {};
+
+        zeroHppTrxList.forEach(z => {
+            // Cross-check jurnal: jika relasi ada di Pendapatan Penjualan / Piutang Pakan / HPP pada tanggal tsb -> PASTI Penjualan Komersial
+            let adaDiPenjualanKomersial = data.some(d =>
+                d.tanggal === z.tanggal &&
+                relasiIncludes(d.relasi, z.relasi) &&
+                ['Pendapatan Penjualan', 'Piutang Pakan', 'Harga Pokok Penjualan (HPP)'].includes((d.nama_akun || '').trim())
+            );
+            let isInternal = adaDiPenjualanKomersial ? false : z._isInternalKandang;
+
+            let findPairForDate = (requireRelasiMatch) => {
+                let dRow = data.find(d => {
+                    if (d.tanggal !== z.tanggal) return false;
+                    if (requireRelasiMatch && !relasiIncludes(d.relasi, z.relasi)) return false;
+                    let nama = (d.nama_akun || '').trim();
+                    if (isInternal) return nama.toLowerCase().includes('pemakaian pakan');
+                    return nama === 'Harga Pokok Penjualan (HPP)' && Number(d.kredit) === 0;
+                });
+                let kRow = data.find(d => {
+                    if (d.tanggal !== z.tanggal) return false;
+                    if (requireRelasiMatch && !relasiIncludes(d.relasi, z.relasi)) return false;
+                    let nama = (d.nama_akun || '').trim();
+                    let descLower = (d.deskripsi || '').toLowerCase();
+                    if (nama !== 'Persediaan Pakan') return false;
+                    if (Number(d.debit) > 0 && !descLower.includes('keluar')) return false;
+                    if (isInternal) return descLower.includes('pemakaian') || descLower.includes('persediaan keluar');
+                    return descLower.includes('persediaan keluar') || (Number(d.kredit) > 0 && Number(d.debit) === 0 && !descLower.includes('pemakaian'));
+                });
+                return { dRow, kRow };
+            };
+
+            let { dRow: debitRow, kRow: kreditRow } = findPairForDate(true);
+            // Jika penjualan komersial (misal semua barangnya HPP 0 shg namanya tertinggal dari baris rekap HPP), gabung ke baris rekap komersial tgl tsb
+            if ((!debitRow || !kreditRow) && !isInternal) {
+                let fallbackPair = findPairForDate(false);
+                if (fallbackPair.dRow && fallbackPair.kRow) {
+                    debitRow = fallbackPair.dRow;
+                    kreditRow = fallbackPair.kRow;
+                }
+            }
+
+            // BALANCE LOCK: Hanya suntikkan ke baris kelompok jika KEDUA sisi (Debit & Kredit) ditemukan berpasangan
+            if (debitRow && kreditRow) {
+                debitRow.relasi = appendRelasiToGroup(debitRow.relasi, z.relasi);
+                debitRow.debit = (Number(debitRow.debit) || 0) + z._estTotalHpp;
+                injectEstimasiIntoRow(debitRow, z);
+                debitRow._isHppSementara = true;
+                debitRow._hasInlineSementara = true;
+
+                kreditRow.relasi = appendRelasiToGroup(kreditRow.relasi, z.relasi);
+                kreditRow.kredit = (Number(kreditRow.kredit) || 0) + z._estTotalHpp;
+                injectEstimasiIntoRow(kreditRow, z);
+                kreditRow._isHppSementara = true;
+                kreditRow._hasInlineSementara = true;
+            } else {
+                // Hanya jika di tanggal tsb belum ada sama sekali pasangan kelompok HPP/Pemakaian, kelompokkan per tanggal secara seimbang
+                let gKey = `${z.tanggal}|${isInternal ? 'PEMAKAIAN' : 'HPP'}`;
+                if (!unmatchedGrouped[gKey]) {
+                    unmatchedGrouped[gKey] = {
+                        tanggal: z.tanggal,
+                        isInternal: isInternal,
+                        relasiList: [],
+                        itemsDesc: [],
+                        tokens: [],
+                        totalEst: 0
+                    };
+                }
+                let grp = unmatchedGrouped[gKey];
+                if (z.relasi && !grp.relasiList.includes(z.relasi)) grp.relasiList.push(z.relasi);
+                let tokIdx = grp.tokens.length;
+                grp.tokens.push(`${z.pakan} ${z.qty} ${z.satuan || 'Kg'} x @${z._estUnitHpp} [HPP ESTIMASI SEMENTARA]`);
+                grp.itemsDesc.push(`${z.relasi} (%%EST_TOKEN_${tokIdx}%%)`);
+                grp.totalEst += z._estTotalHpp;
+            }
+        });
+
+        Object.values(unmatchedGrouped).forEach(grp => {
+            let relJoin = grp.relasiList.join(', ');
+            let descJoin = grp.itemsDesc.join('; ');
+            data.push({
+                id_jurnal: `EST-${grp.isInternal ? 'PMK' : 'HPP'}-D-${grp.tanggal}`,
+                tanggal: grp.tanggal,
+                kode_akun: grp.isInternal ? '505' : '402',
+                nama_akun: grp.isInternal ? 'Pemakaian Pakan Kandang' : 'Harga Pokok Penjualan (HPP)',
+                relasi: relJoin,
+                deskripsi: `${grp.isInternal ? 'Pemakaian' : 'HPP'} ${descJoin}`,
+                debit: grp.totalEst,
+                kredit: 0,
+                _estTokens: [...grp.tokens],
+                _isHppSementara: true,
+                _hasInlineSementara: true
+            });
+            data.push({
+                id_jurnal: `EST-${grp.isInternal ? 'PMK' : 'HPP'}-K-${grp.tanggal}`,
+                tanggal: grp.tanggal,
+                kode_akun: '103',
+                nama_akun: 'Persediaan Pakan',
+                relasi: relJoin,
+                deskripsi: `Persediaan Keluar ${descJoin}`,
+                debit: 0,
+                kredit: grp.totalEst,
+                _estTokens: [...grp.tokens],
+                _isHppSementara: true,
+                _hasInlineSementara: true
+            });
+        });
+
+        data.sort((a, b) => (a.tanggal || '').localeCompare(b.tanggal || '') || String(a.id_jurnal || '').localeCompare(String(b.id_jurnal || '')));
+
         jurnalDataGlobal = data;
+        if (!silent && ssFilterState && ssFilterState.jurnal) {
+            ssFilterState.jurnal = { kode: null, perkiraan: null, relasi: null };
+            ['kode', 'perkiraan', 'relasi'].forEach(f => updateHeaderFilterIcons('jurnal', f));
+        }
         renderJurnal(data);
     } catch (e) {
         console.error("Network error jurnal", e);
@@ -52,35 +758,53 @@ async function fetchDataJurnal(silent = false) {
     }
 }
 
+function getJurnalRelasiTokens(relasiStr) {
+    let raw = String(relasiStr || '').trim();
+    if (!raw) return ['__EMPTY__'];
+    let parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+    return parts.length > 0 ? parts : ['__EMPTY__'];
+}
+
+function getFilteredJurnalRows(data) {
+    let rows = Array.isArray(data) ? data : [];
+    let jf = (typeof ssFilterState !== 'undefined' && ssFilterState.jurnal) ? ssFilterState.jurnal : {};
+    let fKode = jf.kode;
+    let fPerkiraan = jf.perkiraan;
+    let fRelasi = jf.relasi;
+
+    if (!fKode && !fPerkiraan && !fRelasi) return rows;
+
+    return rows.filter(d => {
+        let kodeDepan = d.kode_akun ? String(d.kode_akun).charAt(0) : '-';
+        let matchKode = !fKode || fKode.has(kodeDepan);
+
+        let namaAkun = (d.nama_akun || '').trim() || '-';
+        let matchPerkiraan = !fPerkiraan || fPerkiraan.has(namaAkun);
+
+        let matchRelasi = true;
+        if (fRelasi) {
+            let tokens = getJurnalRelasiTokens(d.relasi);
+            matchRelasi = tokens.some(tok => fRelasi.has(tok));
+        }
+        return matchKode && matchPerkiraan && matchRelasi;
+    });
+}
+
 function renderJurnal(data) {
     let tbody = document.getElementById('tbody-jurnal');
     let tDebit = 0;
     let tKredit = 0;
+    let hasSementara = false;
     
     let html = "";
-    
-    // Ambil nilai dari filter tambahan
-    let fKode = document.getElementById('jurnal-kode').value;
-    let fPerkiraan = document.getElementById('jurnal-perkiraan').value.toLowerCase();
-    let fRelasi = document.getElementById('jurnal-relasi').value.toLowerCase();
-    
-    let filtered = data;
-    
-    if (fKode || fPerkiraan || fRelasi) {
-        filtered = data.filter(d => {
-            let matchKode = !fKode || (d.kode_akun && d.kode_akun.startsWith(fKode));
-            let matchPerkiraan = !fPerkiraan || (d.nama_akun && d.nama_akun.toLowerCase().includes(fPerkiraan));
-            // Autocomplete di web ini mengembalikan nama exact, tapi kalau user ngetik manual bisa sebagian
-            let matchRelasi = !fRelasi || (d.relasi && d.relasi.toLowerCase() === fRelasi);
-            return matchKode && matchPerkiraan && matchRelasi;
-        });
-    }
+    let filtered = getFilteredJurnalRows(data);
     
     if (filtered.length === 0) {
         tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:20px; color:#888;">Tidak ada transaksi jurnal pada rentang ini.</td></tr>`;
         document.getElementById('jurnal-total-debit').innerText = "0";
         document.getElementById('jurnal-total-kredit').innerText = "0";
         document.getElementById('jurnal-total-saldo').innerText = "0";
+        document.getElementById('jurnal-hpp-legend')?.classList.add('hidden');
         return;
     }
 
@@ -111,32 +835,46 @@ function renderJurnal(data) {
         runningSaldo += (debNum - kreNum);
         let saldoStr = runningSaldo === 0 ? "0" : nf.format(runningSaldo);
         
-        // Format nominal mentah di dalam deskripsi (seperti @5000 atau Rp 50000)
-        let deskripsiFormat = d.deskripsi ? d.deskripsi.replace(/(@|Rp\s*)(\d+)/g, (match, prefix, numStr) => {
-            return prefix + nf.format(Number(numStr));
-        }) : "";
+        // Format nominal mentah di dalam deskripsi (pembulatan desimal & pemisah ribuan)
+        let deskripsiFormat = formatDeskripsiNominal(d.deskripsi, nf);
+        if (d._estTokens && d._estTokens.length > 0) {
+            d._estTokens.forEach((tokStr, tIdx) => {
+                let tokFormatted = formatDeskripsiNominal(tokStr, nf);
+                deskripsiFormat = deskripsiFormat.replace(
+                    `%%EST_TOKEN_${tIdx}%%`,
+                    `<span style="color:#2563eb; font-weight:600;">${tokFormatted}</span>`
+                );
+            });
+        }
 
         // Gabungkan Uraian Dasar
         let uraian = `${d.nama_akun}. ${tglUraian} ${d.relasi ? d.relasi + ' ' : ''}${deskripsiFormat}`;
         
-        // 🔥 INJEKSI DETAIL NOTA PIUTANG JIKA INI ADALAH PEMBAYARAN KAS
-        if (d.id_jurnal && d.id_jurnal.startsWith('CF-') && piutangParsed && d.relasi && piutangParsed[d.relasi] && piutangParsed[d.relasi].riwayat_all) {
+        // 🔥 INJEKSI DETAIL NOTA PIUTANG JIKA INI ADALAH PEMBAYARAN KAS (dan belum ada di uraian_fifo DB)
+        let riwayatList = piutangParsed && d.relasi && piutangParsed[d.relasi]
+            ? (piutangParsed[d.relasi].riwayat_all || piutangParsed[d.relasi].riwayat)
+            : null;
+        if (d.id_jurnal && d.id_jurnal.startsWith('CF-') && riwayatList && !uraian.includes('[Memotong:')) {
             let nominalCari = debNum > 0 ? debNum : kreNum;
-            // Cari pembayaran yang cocok di riwayat_all (berdasarkan tgl & nominal)
-            // Karena mungkin ada double, kita cari yang belum diproses (kita tandai sementara)
-            let matchedBayar = piutangParsed[d.relasi].riwayat_all.find(b => b.tgl === d.tanggal && b.nominal === nominalCari && !b._jurnal_used);
+            let matchedBayar = riwayatList.find(b => b.tgl === d.tanggal && b.nominal === nominalCari && !b._jurnal_used);
             
             if (matchedBayar && matchedBayar.detailPotongan && matchedBayar.detailPotongan.length > 0) {
-                matchedBayar._jurnal_used = true; // Tandai agar tidak ganda jika ada pembayaran kembar
-                let teksPotong = matchedBayar.detailPotongan.map(p => {
-                    return `Nota ${p.tglNota} (Rp ${nf.format(p.jumlah)})`;
-                }).join('; ');
-                
+                matchedBayar._jurnal_used = true;
+                let teksPotong = formatDetailPotonganNota(matchedBayar.detailPotongan, nf, jurnalNotaItemsGlobal, d.relasi);
                 uraian += ` [Memotong: ${teksPotong}]`;
+            }
+        }
+
+        let isSementara = Boolean(d._isHppSementara);
+        if (isSementara) {
+            hasSementara = true;
+            if (!d._hasInlineSementara) {
+                uraian += ` <span style="color:#2563eb; font-weight:bold; font-size:10px;">[HPP ESTIMASI SEMENTARA]</span>`;
             }
         }
         
         let bg = index % 2 === 0 ? "background:#ffffff;" : "background:#f8fafc;";
+        let numStyle = isSementara ? "color:#2563eb; font-weight:bold;" : "";
         
         html += `<tr style="${bg}">
             <td style="padding:10px;">${tglStr}</td>
@@ -144,8 +882,8 @@ function renderJurnal(data) {
             <td style="padding:10px;">${d.nama_akun}</td>
             <td style="padding:10px;">${d.relasi || ''}</td>
             <td style="padding:10px; line-height:1.4;">${uraian}</td>
-            <td style="padding:10px; text-align:right;">${debStr}</td>
-            <td style="padding:10px; text-align:right;">${kreStr}</td>
+            <td style="padding:10px; text-align:right; ${numStyle}" title="${isSementara ? 'HPP Sementara (Estimasi) - Menunggu input HPP' : ''}">${debStr}</td>
+            <td style="padding:10px; text-align:right; ${numStyle}" title="${isSementara ? 'HPP Sementara (Estimasi) - Menunggu input HPP' : ''}">${kreStr}</td>
             <td style="padding:10px; text-align:right; font-weight:bold;">${saldoStr}</td>
         </tr>`;
         
@@ -157,6 +895,11 @@ function renderJurnal(data) {
     document.getElementById('jurnal-total-debit').innerText = nf.format(tDebit);
     document.getElementById('jurnal-total-kredit').innerText = nf.format(tKredit);
     document.getElementById('jurnal-total-saldo').innerText = nf.format(tDebit - tKredit);
+    let legendEl = document.getElementById('jurnal-hpp-legend');
+    if (legendEl) {
+        if (hasSementara) legendEl.classList.remove('hidden');
+        else legendEl.classList.add('hidden');
+    }
     
     // Peringatan jika tidak balance
     if (tDebit !== tKredit) {
@@ -184,19 +927,7 @@ function exportExcelJurnal(targetFormat = 'xlsx') {
     }
 
     // Ambil data yang terfilter saat ini (sama persis dengan yang tampil di tabel)
-    let fKode = document.getElementById('jurnal-kode')?.value || '';
-    let fPerkiraan = (document.getElementById('jurnal-perkiraan')?.value || '').toLowerCase();
-    let fRelasi = (document.getElementById('jurnal-relasi')?.value || '').toLowerCase();
-
-    let filtered = jurnalDataGlobal;
-    if (fKode || fPerkiraan || fRelasi) {
-        filtered = jurnalDataGlobal.filter(d => {
-            let matchKode = !fKode || (d.kode_akun && d.kode_akun.startsWith(fKode));
-            let matchPerkiraan = !fPerkiraan || (d.nama_akun && d.nama_akun.toLowerCase().includes(fPerkiraan));
-            let matchRelasi = !fRelasi || (d.relasi && d.relasi.toLowerCase() === fRelasi);
-            return matchKode && matchPerkiraan && matchRelasi;
-        });
-    }
+    let filtered = getFilteredJurnalRows(jurnalDataGlobal);
 
     if (filtered.length === 0) {
         alert("Tidak ada data yang sesuai filter untuk diexport!");
@@ -216,8 +947,9 @@ function exportExcelJurnal(targetFormat = 'xlsx') {
     let cloneRiwayat = {};
     if (piutangParsed) {
         Object.keys(piutangParsed).forEach(rel => {
-            if (piutangParsed[rel] && piutangParsed[rel].riwayat_all) {
-                cloneRiwayat[rel] = piutangParsed[rel].riwayat_all.map(b => ({ ...b, _exp_used: false }));
+            let srcList = piutangParsed[rel] && (piutangParsed[rel].riwayat_all || piutangParsed[rel].riwayat);
+            if (srcList) {
+                cloneRiwayat[rel] = srcList.map(b => ({ ...b, _exp_used: false }));
             }
         });
     }
@@ -235,20 +967,27 @@ function exportExcelJurnal(targetFormat = 'xlsx') {
 
         runningSaldo += (debNum - kreNum);
 
-        let deskripsiFormat = d.deskripsi ? d.deskripsi.replace(/(@|Rp\s*)(\d+)/g, (match, prefix, numStr) => {
-            return prefix + nf.format(Number(numStr));
-        }) : "";
+        let deskripsiFormat = formatDeskripsiNominal(d.deskripsi, nf);
+        if (d._estTokens && d._estTokens.length > 0) {
+            d._estTokens.forEach((tokStr, tIdx) => {
+                let tokFormatted = formatDeskripsiNominal(tokStr, nf);
+                deskripsiFormat = deskripsiFormat.replace(`%%EST_TOKEN_${tIdx}%%`, tokFormatted);
+            });
+        }
 
         let uraian = `${d.nama_akun}. ${tglUraian} ${d.relasi ? d.relasi + ' ' : ''}${deskripsiFormat}`;
 
-        if (d.id_jurnal && d.id_jurnal.startsWith('CF-') && cloneRiwayat[d.relasi]) {
+        if (d.id_jurnal && d.id_jurnal.startsWith('CF-') && cloneRiwayat[d.relasi] && !uraian.includes('[Memotong:')) {
             let nominalCari = debNum > 0 ? debNum : kreNum;
             let matchedBayar = cloneRiwayat[d.relasi].find(b => b.tgl === d.tanggal && b.nominal === nominalCari && !b._exp_used);
             if (matchedBayar && matchedBayar.detailPotongan && matchedBayar.detailPotongan.length > 0) {
                 matchedBayar._exp_used = true;
-                let teksPotong = matchedBayar.detailPotongan.map(p => `Nota ${p.tglNota} (Rp ${nf.format(p.jumlah)})`).join('; ');
+                let teksPotong = formatDetailPotonganNota(matchedBayar.detailPotongan, nf, jurnalNotaItemsGlobal, d.relasi);
                 uraian += ` [Memotong: ${teksPotong}]`;
             }
+        }
+        if (d._isHppSementara && !d._hasInlineSementara) {
+            uraian += ` [HPP ESTIMASI SEMENTARA]`;
         }
 
         exportRows.push({
@@ -339,11 +1078,6 @@ document.addEventListener('click', (e) => {
         dd.classList.add('hidden');
     }
 });
-
-// Tambahkan Event Listener Search Realtime
-document.getElementById('jurnal-kode')?.addEventListener('change', () => renderJurnal(jurnalDataGlobal));
-document.getElementById('jurnal-perkiraan')?.addEventListener('input', () => renderJurnal(jurnalDataGlobal));
-document.getElementById('jurnal-relasi')?.addEventListener('input', () => renderJurnal(jurnalDataGlobal));
 
 // ==========================================
 // SUB-MENU: KARTU PIUTANG KONSUMEN
@@ -532,7 +1266,7 @@ function hitungKartuPiutang(data, namaKonsumen, periode) {
             let matched = arrNota.find(n => n.tgl === uang.tgl && n.totalTagihan > 0 && n.terbayar === 0 && !n.isExactMatched);
             if (matched) {
                 let dipotong = Math.min(matched.totalTagihan, uang.sisaBayar);
-                uang.detailPotongan.push({ tglNota: matched.tgl, jumlah: dipotong, isTunai: true });
+                uang.detailPotongan.push({ tglNota: matched.tgl, jumlah: dipotong, isTunai: true, items: matched.items });
                 matched.terbayar += dipotong;
                 uang.sisaBayar -= dipotong;
                 if (matched.terbayar >= matched.totalTagihan) matched.isExactMatched = true;
@@ -548,7 +1282,7 @@ function hitungKartuPiutang(data, namaKonsumen, periode) {
             if (matched) {
                 let sisaNota = matched.totalTagihan - matched.terbayar;
                 let dipotong = Math.min(sisaNota, uang.sisaBayar);
-                uang.detailPotongan.push({ tglNota: matched.tgl, jumlah: dipotong, isDiskon: true });
+                uang.detailPotongan.push({ tglNota: matched.tgl, jumlah: dipotong, isDiskon: true, items: matched.items });
                 matched.terbayar += dipotong;
                 uang.sisaBayar -= dipotong;
                 if (matched.terbayar >= matched.totalTagihan) matched.isExactMatched = true;
@@ -569,7 +1303,7 @@ function hitungKartuPiutang(data, namaKonsumen, periode) {
             if (sisaNota <= 0) continue;
 
             let dipotong = Math.min(sisaNota, uang.sisaBayar);
-            uang.detailPotongan.push({ tglNota: nota.tgl, jumlah: dipotong });
+            uang.detailPotongan.push({ tglNota: nota.tgl, jumlah: dipotong, items: nota.items });
             nota.terbayar += dipotong;
             uang.sisaBayar -= dipotong;
 
@@ -1646,6 +2380,11 @@ async function fetchDataMentah() {
 // SPREADSHEET-STYLE HEADER COLUMN FILTERS
 // ==========================================
 let ssFilterState = {
+    jurnal: {
+        kode: null,
+        perkiraan: null,
+        relasi: null
+    },
     mentah: {
         kategori: null,
         cabang: null,
@@ -1756,9 +2495,46 @@ function toggleHeaderFilter(event, context, field) {
                 distinctMap[stObj.code].count++;
             });
         }
+    } else if (context === 'jurnal') {
+        let rows = jurnalDataGlobal || [];
+        const kodeLabels = {
+            '1': '1 - Aset / Piutang / Kas',
+            '2': '2 - Kewajiban / Hutang',
+            '3': '3 - Ekuitas / Modal',
+            '4': '4 - Pendapatan Penjualan',
+            '5': '5 - Biaya / HPP'
+        };
+        if (field === 'kode') {
+            title = "Filter KODE Akun";
+            rows.forEach(r => {
+                let k = r.kode_akun ? String(r.kode_akun).charAt(0) : '-';
+                if (!distinctMap[k]) distinctMap[k] = { val: k, label: kodeLabels[k] || k, count: 0 };
+                distinctMap[k].count++;
+            });
+        } else if (field === 'perkiraan') {
+            title = "Filter Perkiraan";
+            rows.forEach(r => {
+                let p = (r.nama_akun || '').trim() || '-';
+                if (!distinctMap[p]) distinctMap[p] = { val: p, label: p, count: 0 };
+                distinctMap[p].count++;
+            });
+        } else if (field === 'relasi') {
+            title = "Filter Relasi";
+            rows.forEach(r => {
+                let tokens = getJurnalRelasiTokens(r.relasi);
+                let seenInRow = new Set();
+                tokens.forEach(tok => {
+                    if (seenInRow.has(tok)) return;
+                    seenInRow.add(tok);
+                    let lbl = tok === '__EMPTY__' ? '(Tanpa Relasi)' : tok;
+                    if (!distinctMap[tok]) distinctMap[tok] = { val: tok, label: lbl, count: 0 };
+                    distinctMap[tok].count++;
+                });
+            });
+        }
     }
 
-    currentOpenFilter.distinctValues = Object.values(distinctMap);
+    currentOpenFilter.distinctValues = Object.values(distinctMap).sort((a, b) => a.label.localeCompare(b.label, 'id'));
 
     let activeSaved = ssFilterState[context][field];
     if (activeSaved) {
@@ -1852,6 +2628,8 @@ function applyHeaderFilter() {
         renderDataMentah();
     } else if (context === 'outflow' || context === 'inflow') {
         renderTrackingHPP();
+    } else if (context === 'jurnal') {
+        renderJurnal(jurnalDataGlobal);
     }
 }
 
@@ -2330,21 +3108,45 @@ function renderTrackingOutflow() {
     }
 
     let nf = new Intl.NumberFormat('id-ID');
-    let totalKg = filtered.reduce((acc, c) => acc + (Number(c.qty) || 0), 0);
-    let totalHpp = filtered.reduce((acc, c) => acc + (Number(c.total_hpp) || 0), 0);
-    let avgHpp = totalKg > 0 ? Math.round(totalHpp / totalKg) : 0;
-    let countDefisit = filtered.filter(c => {
+    let totalKg = 0;
+    let totalHpp = 0;
+    let countDefisit = 0;
+    let countEstimasi = 0;
+
+    filtered.forEach(c => {
         let isOng = (c.pakan || '').toLowerCase().includes('ongkir');
-        if (isOng) return false;
-        return (Number(c.qty_defisit) || 0) > 0 || Number(c.total_hpp) === 0;
-    }).length;
+        let q = Number(c.qty) || 0;
+        let rawH = Number(c.total_hpp) || 0;
+        let h = rawH;
+        totalKg += q;
+        if (!isOng) {
+            if (rawH > 0) {
+                h = getEffectiveHppWithGiling(rawH, q, c.pakan, 0, Number(c.harga_satuan) || 0).totalHpp;
+            } else if (q > 0) {
+                let match = (hppInflowGlobal || []).find(b => b.pakan === c.pakan && Number(b.hpp) > 0);
+                if (match) {
+                    h = getEffectiveHppWithGiling(0, q, c.pakan, Math.round(Number(match.hpp)), 0).totalHpp;
+                    countEstimasi++;
+                } else {
+                    countDefisit++;
+                }
+            }
+        }
+        totalHpp += h;
+    });
+
+    let avgHpp = totalKg > 0 ? Math.round(totalHpp / totalKg) : 0;
 
     document.getElementById('hpp-kpi-val-1').innerText = nf.format(totalKg) + ' Kg';
     document.getElementById('hpp-kpi-val-2').innerText = 'Rp ' + nf.format(totalHpp);
     document.getElementById('hpp-kpi-val-3').innerText = 'Rp ' + nf.format(avgHpp) + ' / Kg';
-    document.getElementById('hpp-kpi-val-4').innerHTML = countDefisit > 0 
-        ? `<span style="color:#dc2626; font-weight:bold;">${countDefisit} Tx Defisit</span>` 
-        : `<span style="color:#15803d; font-weight:bold;">Normal</span>`;
+    if (countDefisit > 0) {
+        document.getElementById('hpp-kpi-val-4').innerHTML = `<span style="color:#dc2626; font-weight:bold;">${countDefisit} Tx Defisit</span>`;
+    } else if (countEstimasi > 0) {
+        document.getElementById('hpp-kpi-val-4').innerHTML = `<span style="color:#2563eb; font-weight:bold;">${countEstimasi} Tx Estimasi Sementara</span>`;
+    } else {
+        document.getElementById('hpp-kpi-val-4').innerHTML = `<span style="color:#15803d; font-weight:bold;">Normal</span>`;
+    }
 
     if (filtered.length === 0) {
         tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:30px; color:#64748b;">Tidak ada data pengeluaran HPP yang sesuai filter.</td></tr>`;
@@ -2356,21 +3158,38 @@ function renderTrackingOutflow() {
         let tglStr = r.tanggal ? r.tanggal.split('-').reverse().join('/') : '-';
         let qty = Number(r.qty) || 0;
         let hs = Number(r.harga_satuan) || 0;
-        let hpp = Number(r.total_hpp) || 0;
+        let rawHpp = Number(r.total_hpp) || 0;
+        let hpp = rawHpp;
         let unitHpp = qty > 0 && hpp > 0 ? Math.round(hpp / qty) : 0;
+        let isOngkir = (r.pakan || '').toLowerCase().includes('ongkir');
+        let isEstimasiHpp = false;
+
+        // 🚨 Fallback HPP jika HPP masih 0 + Kapitalisasi Upah Giling (+Rp 100/Kg utk RD/RL)
+        if (!isOngkir && qty > 0) {
+            let matchedInflow = (hppInflowGlobal || []).find(b => b.pakan === r.pakan && Number(b.hpp) > 0);
+            let fallbackUnit = matchedInflow ? Math.round(Number(matchedInflow.hpp)) : 0;
+            let eff = getEffectiveHppWithGiling(rawHpp, qty, r.pakan, fallbackUnit, hs);
+            hpp = eff.totalHpp;
+            unitHpp = eff.unitHpp;
+            isEstimasiHpp = eff.isEstimasi;
+        }
+
         let margin = hs > 0 && unitHpp > 0 ? (hs - unitHpp) : 0;
         let marginPct = hs > 0 && margin > 0 ? ((margin / hs) * 100).toFixed(1) + '%' : '-';
-        let isOngkir = (r.pakan || '').toLowerCase().includes('ongkir');
 
         // Silsilah Batch
-        let matchedBatch = hppInflowGlobal.find(b => b.pakan === r.pakan && (b.cabang === r.cabang || !b.cabang));
+        let matchedBatch = (hppInflowGlobal || []).find(b => b.pakan === r.pakan && (b.cabang === r.cabang || !b.cabang));
         let silsilahText = "";
         if (isOngkir) {
             silsilahText = `<span style="color:#64748b; font-style:italic;">Bukan stok fisik (Jasa Ongkir)</span>`;
+        } else if (isEstimasiHpp) {
+            silsilahText = `<span style="color:#2563eb; font-weight:600;">• Estimasi Terakhir @${nf.format(unitHpp)}<br/><span style="font-size:10px; color:#3b82f6; font-style:italic;">(Menunggu input HPP)</span></span>`;
         } else if (unitHpp > 0 && matchedBatch) {
-            silsilahText = `• Batch #${matchedBatch.id} (${matchedBatch.tanggal_masuk}) @${nf.format(matchedBatch.hpp || unitHpp)}`;
+            let batchRawHpp = Math.round(Number(matchedBatch.hpp || 0));
+            let batchDispHpp = isPakanGilingJadi(r.pakan) ? (batchRawHpp > 0 ? batchRawHpp + 100 : unitHpp) : (matchedBatch.hpp || unitHpp);
+            silsilahText = `• Batch #${matchedBatch.id} (${matchedBatch.tanggal_masuk}) @${nf.format(batchDispHpp)}${isPakanGilingJadi(r.pakan) ? ' <span style="font-size:10px;color:#0f766e;">(+Giling 100)</span>' : ''}`;
         } else if (unitHpp > 0) {
-            silsilahText = `• FIFO Stok Masuk @${nf.format(unitHpp)}`;
+            silsilahText = `• FIFO Stok Masuk @${nf.format(unitHpp)}${isPakanGilingJadi(r.pakan) ? ' <span style="font-size:10px;color:#0f766e;">(+Giling 100)</span>' : ''}`;
         } else {
             silsilahText = `<span style="color:#dc2626; font-weight:bold;">Tidak ada batch aktif (Stok defisit)</span>`;
         }
@@ -2378,6 +3197,8 @@ function renderTrackingOutflow() {
         let statusBadge = "";
         if (isOngkir) {
             statusBadge = `<span style="background:#e2e8f0; color:#475569; padding:2px 8px; border-radius:10px; font-weight:bold; font-size:10px;">Non-Stok</span>`;
+        } else if (isEstimasiHpp) {
+            statusBadge = `<span style="background:#dbeafe; color:#1d4ed8; padding:2px 8px; border-radius:10px; font-weight:bold; font-size:10px; border:1px solid #bfdbfe;" title="HPP Sementara (Estimasi) - Menunggu input HPP">Estimasi Sementara</span>`;
         } else if (hpp > 0) {
             statusBadge = `<span style="background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:10px; font-weight:bold; font-size:10px;">Ter-Cover</span>`;
         } else {
@@ -2393,8 +3214,11 @@ function renderTrackingOutflow() {
             <td style="padding:8px;">${escapeHtmlKP(r.pakan || '-')}</td>
             <td style="padding:8px; text-align:right; font-weight:bold;">${qty > 0 ? nf.format(qty) + ' ' + (r.satuan || 'Kg') : '-'}</td>
             <td style="padding:8px; font-size:11px; line-height:1.4;">${silsilahText}</td>
-            <td style="padding:8px; text-align:right; color:#c2410c; font-weight:bold;">${hpp > 0 ? 'Rp ' + nf.format(hpp) : 'Rp 0'}</td>
-            <td style="padding:8px; text-align:right;">${unitHpp > 0 ? 'Rp ' + nf.format(unitHpp) : '-'}</td>
+            <td style="padding:8px; text-align:right; font-weight:bold; color:${isEstimasiHpp ? '#2563eb' : (hpp > 0 ? '#c2410c' : '#dc2626')};" title="${isEstimasiHpp ? 'HPP Sementara (Estimasi) - Menunggu input HPP' : ''}">
+                ${hpp > 0 ? 'Rp ' + nf.format(hpp) : 'Rp 0'}
+                ${isEstimasiHpp ? '<span style="font-size:9px; background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; border-radius:3px; padding:0 3px; margin-left:3px; font-weight:normal;">Sementara</span>' : ''}
+            </td>
+            <td style="padding:8px; text-align:right; font-weight:${isEstimasiHpp ? 'bold' : 'normal'}; color:${isEstimasiHpp ? '#2563eb' : 'inherit'};">${unitHpp > 0 ? 'Rp ' + nf.format(unitHpp) : '-'}</td>
             <td style="padding:8px; text-align:right;">${hs > 0 ? 'Rp ' + nf.format(hs) : '-'}</td>
             <td style="padding:8px; text-align:right; color:${margin > 0 ? '#15803d' : '#64748b'}; font-weight:600;">
                 ${margin > 0 ? '+' + nf.format(margin) + ` (${marginPct})` : '-'}
@@ -2437,7 +3261,11 @@ function renderTrackingInflow() {
     let nf = new Intl.NumberFormat('id-ID');
     let batchAktif = filtered.filter(b => (Number(b.qty_sisa) || 0) > 0);
     let totalSisaKg = batchAktif.reduce((acc, b) => acc + (Number(b.qty_sisa) || 0), 0);
-    let totalAsetSisa = batchAktif.reduce((acc, b) => acc + ((Number(b.qty_sisa) || 0) * (Number(b.hpp) || 0)), 0);
+    let totalAsetSisa = batchAktif.reduce((acc, b) => {
+        let qSisa = Number(b.qty_sisa) || 0;
+        let hppEff = (Number(b.hpp) || 0) + (isPakanGilingJadi(b.pakan) ? 100 : 0);
+        return acc + (qSisa * hppEff);
+    }, 0);
 
     document.getElementById('hpp-kpi-val-1').innerText = nf.format(batchAktif.length) + ' Batch';
     document.getElementById('hpp-kpi-val-2').innerText = 'Rp ' + nf.format(totalAsetSisa);
@@ -2467,7 +3295,8 @@ function renderTrackingInflow() {
         let qtyAwal = Number(b.qty_awal) || 0;
         let qtySisa = Number(b.qty_sisa) || 0;
         let qtyPakai = Math.max(0, qtyAwal - qtySisa);
-        let hpp = Number(b.hpp) || 0;
+        let isGilingJadi = isPakanGilingJadi(b.pakan);
+        let hpp = (Number(b.hpp) || 0) + (isGilingJadi ? 100 : 0);
         let nilaiAset = qtySisa * hpp;
 
         let pctSisa = qtyAwal > 0 ? Math.round((qtySisa / qtyAwal) * 100) : 0;
@@ -2630,16 +3459,23 @@ async function muatLabaRugi() {
             'Authorization': `Bearer ${SUPA_ANON_KEY}`
         };
 
-        // Fetch view_jurnal_umum, transaksi_pakan (keluar), dan cashflow (keluar) secara paralel
-        let [resJurnal, resTrxOut, resCF] = await Promise.all([
-            fetch(`${SUPA_URL}/rest/v1/view_jurnal_umum?tanggal=gte.${startDate}&tanggal=lte.${endDate}&order=tanggal.asc`, { headers }),
-            fetch(`${SUPA_URL}/rest/v1/transaksi_pakan?tanggal=gte.${startDate}&tanggal=lte.${endDate}&status=ilike.*keluar*&order=tanggal.asc`, { headers }),
-            fetch(`${SUPA_URL}/rest/v1/cashflow?tanggal=gte.${startDate}&tanggal=lte.${endDate}&jenis=ilike.*keluar*&order=tanggal.asc`, { headers })
+        // Fetch view_jurnal_umum, transaksi_pakan (keluar), cashflow (keluar), dan stok_batch secara paralel (bebas limit 1.000 baris)
+        let [jData, trxData, cfData, batchData] = await Promise.all([
+            fetchJurnalPaged(`${SUPA_URL}/rest/v1/view_jurnal_umum?tanggal=gte.${startDate}&tanggal=lte.${endDate}&select=tanggal,kode_akun,nama_akun,relasi,deskripsi,debit,kredit&order=tanggal.asc,id_jurnal.asc`, headers),
+            fetchJurnalPaged(`${SUPA_URL}/rest/v1/transaksi_pakan?tanggal=gte.${startDate}&tanggal=lte.${endDate}&status=ilike.*keluar*&select=id,tanggal,cabang,status,relasi,pakan,qty,satuan,harga_satuan,total_hpp,catatan,hash_str&order=tanggal.asc,id.asc`, headers),
+            fetchJurnalPaged(`${SUPA_URL}/rest/v1/cashflow?tanggal=gte.${startDate}&tanggal=lte.${endDate}&jenis=ilike.*keluar*&select=tanggal,relasi,kategori,keterangan,nominal&order=tanggal.asc,id.asc`, headers),
+            fetchJurnalPaged(`${SUPA_URL}/rest/v1/stok_batch?order=tanggal_masuk.desc,id.desc&limit=1500&select=pakan,hpp`, headers)
         ]);
 
-        let jData = resJurnal.ok ? await resJurnal.json() : [];
-        let trxData = resTrxOut.ok ? await resTrxOut.json() : [];
-        let cfData = resCF.ok ? await resCF.json() : [];
+        // Build fallback HPP map dari batch terbaru di gudang
+        let fallbackHppMap = {};
+        batchData.forEach(b => {
+            let pkn = (b.pakan || '').trim();
+            let unitHpp = Number(b.hpp) || 0;
+            if (unitHpp > 0 && pkn && !fallbackHppMap[pkn]) {
+                fallbackHppMap[pkn] = unitHpp;
+            }
+        });
 
         // 1. Ambil data diskon & retur dari jurnal
         let revDiskon = 0;
@@ -2658,6 +3494,10 @@ async function muatLabaRugi() {
         let revPenjualanPakan = 0;
         let revJasaOngkir = 0;
         let cogsPakanKomersial = 0;
+        let cogsHasEstimasi = false;
+        let countHppSementara = 0;
+        let countHppSementaraKomersial = 0;
+        let countHppSementaraInternal = 0;
 
         // Price lookup dari transaksi komersial untuk menghitung harga jual normal bagi pemakaian kandang
         let priceLookup = {};
@@ -2669,92 +3509,16 @@ async function muatLabaRugi() {
             }
         });
 
-        // Helper untuk cek apakah baris transaksi adalah transfer logistik antar gudang / drop ke kandang
-        function isLogistikTransferRow(t) {
-            let rel = (t.relasi || '').trim().toLowerCase();
-            let cat = (t.catatan || '').toLowerCase();
-            if (rel === 'kandang' || rel === 'kandang pm' || rel === 'kandang spn' || rel === 'kandang rph') return true;
-            if (rel === 'spn' || rel === 'pm' || rel === 'rph' || rel === 'mutasi') return true;
-            if (cat.includes('[auto mutasi]') || cat.includes('kiriman dari') || cat.includes('mutasi antar gudang')) return true;
-            return false;
-        }
-
-        // Helper untuk cek apakah baris transaksi adalah pengeluaran bahan baku untuk digiling di Gudang SPN
-        function isBahanBakuGilinganRow(t) {
-            let cab = (t.cabang || '').trim().toUpperCase();
-            let rel = (t.relasi || '').trim().toUpperCase();
-            let cat = (t.catatan || '').toLowerCase();
-            if (cab.includes('SPN') && !cab.includes('KANDANG')) {
-                if (rel === 'RL' || rel === 'RD' || rel === 'DARBUN' || rel === 'LAKTASI' || 
-                    rel.includes('GILING') || cat.includes('giling')) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // Helper untuk mendeteksi konsumsi ternak internal riil (dan cabang tujuannya)
-        function getKonsumsiTernakInfo(t) {
-            if (isLogistikTransferRow(t) || isBahanBakuGilinganRow(t)) return null;
-
-            let rel = (t.relasi || '').trim();
-            let relLower = rel.toLowerCase();
-            let cab = (t.cabang || '').trim().toLowerCase();
-            let pkn = (t.pakan || '').trim().toLowerCase();
-
-            // 1. KANDANG SPN (Sapi Perah: Laktasi, Bunting / Darbun, Dara, Pedet SPN, Perah)
-            let isSPNGroup = cab.includes('spn') || 
-                             relLower.includes('laktasi') || 
-                             relLower.includes('bunting') || 
-                             relLower.includes('darbun') || 
-                             relLower.includes('perah') ||
-                             pkn.includes('laktasi') ||
-                             pkn.includes('darbun');
-
-            if (isSPNGroup) {
-                let unit = rel;
-                if (relLower.includes('laktasi') || pkn.includes('laktasi')) unit = 'Laktasi (RL)';
-                else if (relLower.includes('bunting') || relLower.includes('darbun') || pkn.includes('darbun')) unit = 'Bunting / Dara (RD)';
-                else if (relLower.includes('pedet')) unit = 'Pedet SPN';
-                else if (relLower.includes('perah') || relLower === 'spn') unit = 'Sapi Perah (SPN)';
-                else if (!unit || unit.toLowerCase() === 'kandang') unit = 'Sapi Perah (SPN)';
-                return { cabangKey: 'SPN', unit: unit };
-            }
-
-            // 2. KANDANG RPH (Sapi Transit / Potong)
-            let isRPHGroup = cab.includes('rph') || relLower.includes('transit');
-            if (isRPHGroup && (relLower.includes('transit') || cab.includes('kandang'))) {
-                let unit = relLower.includes('transit') ? 'Sapi Transit' : rel;
-                return { cabangKey: 'RPH', unit: unit };
-            }
-
-            // 3. KANDANG PM (Pembibitan Manoko: Kapalang, Dewasa, Jantan, BX, Domba, Pembibitan, Pedet PM)
-            let pmKelompok = ['kapalang', 'dewasa', 'jantan', 'bx', 'domba', 'pembibitan', 'pedet', 'kambing'];
-            let isPMMatch = pmKelompok.includes(relLower);
-            let isPMCabang = cab.includes('kandang pm') || (cab.includes('kandang') && !cab.includes('spn') && !cab.includes('rph'));
-
-            if (isPMMatch || isPMCabang) {
-                if (relLower === 'kandang') return null; // Drop logistik umum jangan masuk
-                let unit = rel;
-                if (relLower === 'kapalang' || (isPMCabang && relLower.includes('kapalang'))) unit = 'Kapalang';
-                else if (relLower === 'dewasa' || (isPMCabang && relLower.includes('dewasa'))) unit = 'Dewasa';
-                else if (relLower === 'jantan' || (isPMCabang && relLower.includes('jantan'))) unit = 'Jantan';
-                else if (relLower === 'bx' || (isPMCabang && relLower.includes('bx'))) unit = 'BX';
-                else if (relLower === 'domba' || (isPMCabang && relLower.includes('domba'))) unit = 'Domba';
-                else if (relLower === 'pembibitan' || (isPMCabang && relLower.includes('pembibitan'))) unit = 'Pembibitan';
-                else if (relLower === 'pedet' || (isPMCabang && relLower.includes('pedet'))) unit = 'Pedet PM';
-                else if (!isPMMatch && !isPMCabang) return null;
-                return { cabangKey: 'PM', unit: unit };
-            }
-
-            return null;
-        }
+        // Helper bersama untuk saring logistik transfer, bahan baku gilingan SPN, dan klasifikasi konsumsi ternak internal
+        let isLogistikTransferRow = isLogistikTransferShared;
+        let isBahanBakuGilinganRow = isBahanBakuGilinganShared;
+        let getKonsumsiTernakInfo = classifyKonsumsiTernakBranch;
 
         let pemakaianKandangDetail = {};
         let pemakaianKandangPerCabang = {
             'PM': { key: 'PM', label: 'KANDANG PM (Pembibitan Manoko)', items: {}, totalQty: 0, totalHpp: 0, totalJual: 0 },
-            'SPN': { key: 'SPN', label: 'KANDANG SPN (Sapi Perah)', items: {}, totalQty: 0, totalHpp: 0, totalJual: 0 },
-            'RPH': { key: 'RPH', label: 'KANDANG RPH', items: {}, totalQty: 0, totalHpp: 0, totalJual: 0 }
+            'RPH': { key: 'RPH', label: 'KANDANG RPH (Penggemukan & Potong)', items: {}, totalQty: 0, totalHpp: 0, totalJual: 0 },
+            'SPN': { key: 'SPN', label: 'KANDANG SPN (Sapi Perah)', items: {}, totalQty: 0, totalHpp: 0, totalJual: 0 }
         };
 
         trxData.forEach(t => {
@@ -2771,12 +3535,24 @@ async function muatLabaRugi() {
             let isOngkir = pkn.toLowerCase().includes('ongkir');
             let qty = Number(t.qty) || 0;
             let hs = Number(t.harga_satuan) || 0;
-            let hpp = Number(t.total_hpp) || 0;
+            let rawHpp = Number(t.total_hpp) || 0;
             let totalNilai = qty * hs;
+
+            // 🚨 PENANGANAN STOK DEFISIT / HPP 0 + KAPITALISASI UPAH GILING (+Rp 100/Kg utk RD/RL)
+            let fallbackUnit = fallbackHppMap[pkn] || 0;
+            let effHpp = isOngkir
+                ? { totalHpp: rawHpp, unitHpp: 0, isEstimasi: false, hasGilingCost: false }
+                : getEffectiveHppWithGiling(rawHpp, qty, pkn, fallbackUnit, hs);
+            let hpp = effHpp.totalHpp;
+            let isHppSementara = effHpp.isEstimasi;
+            if (isHppSementara) countHppSementara++;
+            t._isHppSementara = isHppSementara;
+            t._effectiveHpp = hpp;
 
             let ternakInfo = getKonsumsiTernakInfo(t);
 
             if (ternakInfo) {
+                if (isHppSementara) countHppSementaraInternal++;
                 // Alokasi Konsumsi Pakan Ternak Sendiri (Holding Internal)
                 let { cabangKey, unit } = ternakInfo;
                 let targetBranch = pemakaianKandangPerCabang[cabangKey] || pemakaianKandangPerCabang['PM'];
@@ -2786,22 +3562,31 @@ async function muatLabaRugi() {
                         unit: unit,
                         totalQty: 0,
                         totalHpp: 0,
-                        totalJual: 0
+                        totalJual: 0,
+                        hasEstimasi: false
                     };
                 }
                 targetBranch.items[unit].totalQty += qty;
                 targetBranch.items[unit].totalHpp += hpp;
+                if (isHppSementara) targetBranch.items[unit].hasEstimasi = true;
 
                 // Flat detail (backward compatibility)
                 if (!pemakaianKandangDetail[unit]) {
-                    pemakaianKandangDetail[unit] = { unit: unit, totalQty: 0, totalHpp: 0, totalJual: 0 };
+                    pemakaianKandangDetail[unit] = { unit: unit, totalQty: 0, totalHpp: 0, totalJual: 0, hasEstimasi: false };
                 }
                 pemakaianKandangDetail[unit].totalQty += qty;
                 pemakaianKandangDetail[unit].totalHpp += hpp;
+                if (isHppSementara) pemakaianKandangDetail[unit].hasEstimasi = true;
 
-                // Hitung nilai jual normal: pakai harga_satuan jika ada (>0), atau fallback priceLookup
-                let hargaJualAcuan = hs > 0 ? hs : (priceLookup[pkn] || (hpp > 0 && qty > 0 ? Math.round(hpp / qty * 1.1) : 0));
-                let nilaiJual = (qty * hargaJualAcuan);
+                // 🚨 KOREKSI NILAI JUAL NORMAL PASAR INTERNAL:
+                // Pastikan harga acuan jual tidak lebih murah dari HPP modal produksinya sendiri
+                let unitHpp = (qty > 0 && hpp > 0) ? Math.round(hpp / qty) : 0;
+                let acuanPasar = hs > 0 ? hs : (priceLookup[pkn] || 0);
+                if (acuanPasar < unitHpp || acuanPasar === 0) {
+                    acuanPasar = Math.round(unitHpp * 1.10); // Wajar: 10% di atas HPP produksi
+                }
+
+                let nilaiJual = (qty * acuanPasar);
                 targetBranch.items[unit].totalJual += nilaiJual;
                 pemakaianKandangDetail[unit].totalJual += nilaiJual;
 
@@ -2815,6 +3600,10 @@ async function muatLabaRugi() {
                 } else {
                     revPenjualanPakan += totalNilai;
                     cogsPakanKomersial += hpp;
+                    if (isHppSementara) {
+                        cogsHasEstimasi = true;
+                        countHppSementaraKomersial++;
+                    }
                 }
             }
         });
@@ -2860,12 +3649,36 @@ async function muatLabaRugi() {
 
         // 3. Beban Operasional Gudang & Lapangan (Dikelompokkan per Kategori Cashflow)
         let bebanOperasionalMap = {};
+        let bebanOperasionalDetailMap = {};
         cfData.forEach(c => {
             let rel = (c.relasi || '').trim();
             if (rel.toLowerCase().includes('bapera')) return;
             let kat = (c.kategori || '').trim() || 'Operasional Lainnya';
             let nom = Number(c.nominal) || 0;
+            let ket = (c.keterangan || '').toLowerCase();
+
+            // 🚨 FILTER CEGAH DOUBLE BIAYA & PENGELUARAN NON-BEBAN:
+            // 1. Pengeluaran uang jalan supir ambil pakan supplier & bongkar muat masuk sudah melebur ke HPP Persediaan
+            // 2. Pengeluaran Upah Giling dikapitalisasi ke HPP Persediaan pakan gilingan (RD/RL) & pelunasan Hutang Upah Giling
+            // 3. Pengeluaran non-operasional (Bayar Hutang Pakan, Tarik Deposit, Kasbon, Bagi Hasil, Saldo Awal) bukan beban Laba Rugi
+            let isPengantaranKomersial = ket.includes('pengantaran') || ket.includes('kirim ke') || ket.includes('antar ke');
+            let isAmbilPakan = !isPengantaranKomersial && (kat.includes('OPR Ekspedisi') || kat.includes('Ekspedisi')) &&
+                               (ket.includes('ambil') || ket.includes('pengambilan') || ket.includes('angkut') || ket.includes('jemput') || ket.includes('muat dari') || ket.includes('pembelian') || ket.includes('supplier'));
+            let isBongkarMasuk = kat.includes('Bongkar') && (ket.includes('masuk') || ket.includes('bongkar pakan masuk') || ket.includes('pembelian') || ((ket.includes('[bm]') || ket.startsWith('bm ')) && !ket.includes('keluar')));
+            let katLower = kat.toLowerCase();
+            let isUpahGiling = katLower.includes('upah giling') || katLower.includes('opr giling') || katLower === 'giling' || (katLower.includes('giling') && !katLower.includes('ongkir'));
+            let isNonBeban = katLower.includes('hutang') || katLower.includes('pembelian pakan') || katLower === 'tarik deposit' || katLower === 'kasbon' || (ket.includes('kasbon') && katLower !== 'kasbon mitra') || katLower === 'bagi hasil' || katLower === 'saldo awal';
+            
+            if (isAmbilPakan || isBongkarMasuk || isUpahGiling || isNonBeban) return;
+
             bebanOperasionalMap[kat] = (bebanOperasionalMap[kat] || 0) + nom;
+            if (!bebanOperasionalDetailMap[kat]) bebanOperasionalDetailMap[kat] = [];
+            bebanOperasionalDetailMap[kat].push({
+                tanggal: c.tanggal || '',
+                relasi: rel || '-',
+                keterangan: (c.keterangan || '').trim() || '-',
+                nominal: nom
+            });
         });
 
         // Fallback beban jika cfData kosong
@@ -2874,8 +3687,15 @@ async function muatLabaRugi() {
                 let deb = Number(d.debit) || 0;
                 let nama = (d.nama_akun || '').trim();
                 let kode = (d.kode_akun || '').charAt(0);
-                if (kode === '5' && nama !== 'Biaya Diskon & Lain-lain' && !nama.toLowerCase().includes('pemakaian pakan')) {
+                if (kode === '5' && nama !== 'Biaya Diskon & Lain-lain' && !nama.toLowerCase().includes('pemakaian pakan') && !nama.toLowerCase().includes('upah giling')) {
                     bebanOperasionalMap[nama] = (bebanOperasionalMap[nama] || 0) + deb;
+                    if (!bebanOperasionalDetailMap[nama]) bebanOperasionalDetailMap[nama] = [];
+                    bebanOperasionalDetailMap[nama].push({
+                        tanggal: d.tanggal || '',
+                        relasi: (d.relasi || '').trim() || '-',
+                        keterangan: (d.deskripsi || '').trim() || '-',
+                        nominal: deb
+                    });
                 }
             });
         }
@@ -2909,9 +3729,11 @@ async function muatLabaRugi() {
             revRetur,
             netSalesKomersial,
             cogsPakanKomersial,
+            cogsHasEstimasi,
             grossProfitKomersial,
             grossMarginKomersial,
             bebanOperasionalMap,
+            bebanOperasionalDetailMap,
             totalBebanOperasionalGudang,
             labaBersihDivisiPakan,
             netMarginDivisiPakan,
@@ -2921,7 +3743,10 @@ async function muatLabaRugi() {
             totalPemakaianHpp,
             totalPemakaianJual,
             totalSubsidiInternal,
-            labaBersihKonsolidasian
+            labaBersihKonsolidasian,
+            countHppSementara,
+            countHppSementaraKomersial,
+            countHppSementaraInternal
         };
 
         renderLabaRugi(labaRugiDataGlobal);
@@ -2938,102 +3763,152 @@ function renderLabaRugi(lr) {
     if (!cont || !lr) return;
 
     let nf = new Intl.NumberFormat('id-ID');
+    let showKonsolidasi = document.getElementById('lr-toggle-konsolidasi')?.checked === true;
+    let activeSementaraCount = showKonsolidasi
+        ? (lr.countHppSementara || 0)
+        : (lr.countHppSementaraKomersial || 0);
 
-    // Rincian Beban Operasional Gudang & Lapangan
+    // Rincian Beban Operasional Gudang & Lapangan (bisa diklik untuk lihat detail transaksi)
     let htmlBiayaOperasional = "";
-    Object.keys(lr.bebanOperasionalMap).sort().forEach(kat => {
+    Object.keys(lr.bebanOperasionalMap).sort().forEach((kat, idxKat) => {
+        let detList = (lr.bebanOperasionalDetailMap && lr.bebanOperasionalDetailMap[kat]) ? lr.bebanOperasionalDetailMap[kat] : [];
+        let detRowsHtml = detList.map(item => {
+            let tglStr = item.tanggal ? String(item.tanggal).split('-').reverse().join('/') : '-';
+            return `
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:4px 6px; white-space:nowrap; color:#64748b;">${tglStr}</td>
+                    <td style="padding:4px 6px; color:#334155; font-weight:500;">${escapeHtmlKP(item.relasi)}</td>
+                    <td style="padding:4px 6px; color:#475569;">${escapeHtmlKP(item.keterangan)}</td>
+                    <td style="padding:4px 6px; text-align:right; font-weight:600; color:#b91c1c; white-space:nowrap;">Rp ${nf.format(Math.round(item.nominal || 0))}</td>
+                </tr>
+            `;
+        }).join('');
+
         htmlBiayaOperasional += `
-            <div style="display:flex; justify-content:space-between; padding:4px 0 4px 20px; font-size:12px; color:#475569;">
-                <span>• ${escapeHtmlKP(kat)}</span>
-                <span style="font-weight:600;">Rp ${nf.format(lr.bebanOperasionalMap[kat])}</span>
+            <div style="border-bottom:1px dashed #f1f5f9;">
+                <div onclick="document.getElementById('lr-exp-det-${idxKat}')?.classList.toggle('hidden')" style="display:flex; justify-content:space-between; align-items:center; padding:5px 6px 5px 16px; font-size:12px; color:#475569; cursor:${detList.length > 0 ? 'pointer' : 'default'}; border-radius:4px;" title="${detList.length > 0 ? 'Klik untuk lihat rincian transaksi' : ''}">
+                    <span>• ${escapeHtmlKP(kat)} ${detList.length > 0 ? `<span style="font-size:10px; background:#f1f5f9; color:#334155; padding:1px 6px; border-radius:10px; margin-left:4px; border:1px solid #e2e8f0;">${detList.length} tx ▾</span>` : ''}</span>
+                    <span style="font-weight:600;">Rp ${nf.format(Math.round(lr.bebanOperasionalMap[kat] || 0))}</span>
+                </div>
+                ${detList.length > 0 ? `
+                <div id="lr-exp-det-${idxKat}" class="hidden" style="margin:2px 0 8px 24px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; overflow-x:auto;">
+                    <table style="width:100%; border-collapse:collapse; font-size:11px;">
+                        <thead>
+                            <tr style="background:#f1f5f9; color:#64748b; border-bottom:1px solid #e2e8f0;">
+                                <th style="padding:4px 6px; text-align:left;">Tgl</th>
+                                <th style="padding:4px 6px; text-align:left;">Relasi</th>
+                                <th style="padding:4px 6px; text-align:left;">Keterangan</th>
+                                <th style="padding:4px 6px; text-align:right;">Nominal</th>
+                            </tr>
+                        </thead>
+                        <tbody>${detRowsHtml}</tbody>
+                    </table>
+                </div>` : ''}
             </div>
         `;
     });
 
-    // Tabel Pemakaian Pakan Ternak Sendiri (2 Harga: HPP vs Jual)
+    // Tabel Pemakaian Pakan Ternak Sendiri (Hanya jika mode Konsolidasian aktif)
     let activeBranches = Object.values(lr.pemakaianKandangPerCabang || {}).filter(b => Object.keys(b.items).length > 0);
     let htmlTablePemakaian = "";
-    if (activeBranches.length > 0) {
-        htmlTablePemakaian = `
-            <div style="overflow-x:auto; margin-top:8px; border:1px solid #cbd5e1; border-radius:6px;">
-                <table style="width:100%; border-collapse:collapse; font-size:11px;">
-                    <thead>
-                        <tr style="background:#f1f5f9; color:#334155; border-bottom:1px solid #cbd5e1;">
-                            <th style="padding:6px 8px; text-align:left;">Cabang / Unit Ternak</th>
-                            <th style="padding:6px 8px; text-align:right;">Total Qty (Kg)</th>
-                            <th style="padding:6px 8px; text-align:right;">Nilai Modal (HPP FIFO)</th>
-                            <th style="padding:6px 8px; text-align:right;">Nilai Harga Jual Normal</th>
-                            <th style="padding:6px 8px; text-align:right;">Selisih Nilai (Subsidi)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
-
-        activeBranches.forEach((branch, bIdx) => {
-            let branchItems = Object.values(branch.items).sort((a, b) => b.totalHpp - a.totalHpp);
-            let branchSelisih = branch.totalJual - branch.totalHpp;
-
-            let branchBg = branch.key === 'SPN' ? '#eff6ff' : (branch.key === 'RPH' ? '#fdf2f8' : '#f0fdf4');
-            let branchColor = branch.key === 'SPN' ? '#1e40af' : (branch.key === 'RPH' ? '#9d174d' : '#166534');
-            let branchIcon = branch.key === 'SPN' ? '🥛' : (branch.key === 'RPH' ? '🥩' : '🏢');
-
-            htmlTablePemakaian += `
-                <tr style="background:${branchBg}; border-top:${bIdx > 0 ? '2px solid #cbd5e1' : 'none'}; border-bottom:1px solid #cbd5e1;">
-                    <td colspan="5" style="padding:7px 8px; font-weight:bold; font-size:12px; color:${branchColor};">
-                        ${branchIcon} ${escapeHtmlKP(branch.label)}
-                    </td>
-                </tr>
+    if (showKonsolidasi) {
+        if (activeBranches.length > 0) {
+            htmlTablePemakaian = `
+                <div style="overflow-x:auto; margin-top:8px; border:1px solid #cbd5e1; border-radius:6px;">
+                    <table style="width:100%; border-collapse:collapse; font-size:11px;">
+                        <thead>
+                            <tr style="background:#f1f5f9; color:#334155; border-bottom:1px solid #cbd5e1;">
+                                <th style="padding:6px 8px; text-align:left;">Cabang / Unit Ternak</th>
+                                <th style="padding:6px 8px; text-align:right;">Total Qty (Kg)</th>
+                                <th style="padding:6px 8px; text-align:right;">Nilai Modal (HPP FIFO)</th>
+                                <th style="padding:6px 8px; text-align:right;">Nilai Harga Jual Normal</th>
+                                <th style="padding:6px 8px; text-align:right;">Selisih Nilai (Subsidi)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
             `;
 
-            branchItems.forEach((u, idx) => {
-                let selisih = u.totalJual - u.totalHpp;
-                let bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+            activeBranches.forEach((branch, bIdx) => {
+                let branchItems = Object.values(branch.items).sort((a, b) => b.totalHpp - a.totalHpp);
+                let branchSelisih = branch.totalJual - branch.totalHpp;
+
+                let branchBg = branch.key === 'SPN' ? '#eff6ff' : (branch.key === 'RPH' ? '#fdf2f8' : '#f0fdf4');
+                let branchColor = branch.key === 'SPN' ? '#1e40af' : (branch.key === 'RPH' ? '#9d174d' : '#166534');
+                let branchIcon = branch.key === 'SPN' ? '🥛' : (branch.key === 'RPH' ? '🥩' : '🏢');
+
                 htmlTablePemakaian += `
-                    <tr style="background:${bg}; border-bottom:1px solid #f1f5f9;">
-                        <td style="padding:6px 8px 6px 24px; font-weight:600; color:#1e293b;">• ${escapeHtmlKP(u.unit)}</td>
-                        <td style="padding:6px 8px; text-align:right;">${nf.format(u.totalQty)} Kg</td>
-                        <td style="padding:6px 8px; text-align:right; font-weight:bold; color:#c2410c;">Rp ${nf.format(u.totalHpp)}</td>
-                        <td style="padding:6px 8px; text-align:right; color:#475569;">Rp ${nf.format(u.totalJual)}</td>
-                        <td style="padding:6px 8px; text-align:right; color:#15803d; font-weight:600;">+Rp ${nf.format(selisih)}</td>
+                    <tr style="background:${branchBg}; border-top:${bIdx > 0 ? '2px solid #cbd5e1' : 'none'}; border-bottom:1px solid #cbd5e1;">
+                        <td colspan="5" style="padding:7px 8px; font-weight:bold; font-size:12px; color:${branchColor};">
+                            ${branchIcon} ${escapeHtmlKP(branch.label)}
+                        </td>
+                    </tr>
+                `;
+
+                branchItems.forEach((u, idx) => {
+                    let selisih = u.totalJual - u.totalHpp;
+                    let bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+                    htmlTablePemakaian += `
+                        <tr style="background:${bg}; border-bottom:1px solid #f1f5f9;">
+                            <td style="padding:6px 8px 6px 24px; font-weight:600; color:#1e293b;">• ${escapeHtmlKP(u.unit)}</td>
+                            <td style="padding:6px 8px; text-align:right;">${nf.format(u.totalQty)} Kg</td>
+                            <td style="padding:6px 8px; text-align:right; font-weight:bold; color:${u.hasEstimasi ? '#2563eb' : '#c2410c'};" title="${u.hasEstimasi ? 'HPP Sementara (Estimasi) - Menunggu input HPP' : ''}">
+                                Rp ${nf.format(u.totalHpp)}
+                                ${u.hasEstimasi ? '<span style="font-size:9px; background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; border-radius:3px; padding:0 3px; margin-left:3px; font-weight:normal;">*Sementara</span>' : ''}
+                            </td>
+                            <td style="padding:6px 8px; text-align:right; color:#475569;">Rp ${nf.format(u.totalJual)}</td>
+                            <td style="padding:6px 8px; text-align:right; color:#15803d; font-weight:600;">+Rp ${nf.format(selisih)}</td>
+                        </tr>
+                    `;
+                });
+
+                htmlTablePemakaian += `
+                    <tr style="background:#f8fafc; font-weight:600; border-top:1px solid #e2e8f0; border-bottom:1px solid #cbd5e1; font-size:11px;">
+                        <td style="padding:6px 8px 6px 20px; color:#475569; font-style:italic;">Subtotal ${escapeHtmlKP(branch.label)}</td>
+                        <td style="padding:6px 8px; text-align:right; color:#334155;">${nf.format(branch.totalQty)} Kg</td>
+                        <td style="padding:6px 8px; text-align:right; color:#c2410c;">Rp ${nf.format(branch.totalHpp)}</td>
+                        <td style="padding:6px 8px; text-align:right; color:#475569;">Rp ${nf.format(branch.totalJual)}</td>
+                        <td style="padding:6px 8px; text-align:right; color:#15803d;">+Rp ${nf.format(branchSelisih)}</td>
                     </tr>
                 `;
             });
 
             htmlTablePemakaian += `
-                <tr style="background:#f8fafc; font-weight:600; border-top:1px solid #e2e8f0; border-bottom:1px solid #cbd5e1; font-size:11px;">
-                    <td style="padding:6px 8px 6px 20px; color:#475569; font-style:italic;">Subtotal ${escapeHtmlKP(branch.label)}</td>
-                    <td style="padding:6px 8px; text-align:right; color:#334155;">${nf.format(branch.totalQty)} Kg</td>
-                    <td style="padding:6px 8px; text-align:right; color:#c2410c;">Rp ${nf.format(branch.totalHpp)}</td>
-                    <td style="padding:6px 8px; text-align:right; color:#475569;">Rp ${nf.format(branch.totalJual)}</td>
-                    <td style="padding:6px 8px; text-align:right; color:#15803d;">+Rp ${nf.format(branchSelisih)}</td>
-                </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr style="background:#f1f5f9; font-weight:bold; border-top:2px solid #cbd5e1;">
+                                <td style="padding:8px; color:#0f172a;">TOTAL PEMAKAIAN INTERNAL (HOLDING)</td>
+                                <td style="padding:8px; text-align:right; color:#0f172a;">${nf.format(lr.totalPemakaianQty)} Kg</td>
+                                <td style="padding:8px; text-align:right; color:#c2410c;">Rp ${nf.format(lr.totalPemakaianHpp)}</td>
+                                <td style="padding:8px; text-align:right; color:#0f172a;">Rp ${nf.format(lr.totalPemakaianJual)}</td>
+                                <td style="padding:8px; text-align:right; color:#15803d;">+Rp ${nf.format(lr.totalSubsidiInternal)}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
             `;
-        });
-
-        htmlTablePemakaian += `
-                    </tbody>
-                    <tfoot>
-                        <tr style="background:#f1f5f9; font-weight:bold; border-top:2px solid #cbd5e1;">
-                            <td style="padding:8px; color:#0f172a;">TOTAL PEMAKAIAN INTERNAL (HOLDING)</td>
-                            <td style="padding:8px; text-align:right; color:#0f172a;">${nf.format(lr.totalPemakaianQty)} Kg</td>
-                            <td style="padding:8px; text-align:right; color:#c2410c;">Rp ${nf.format(lr.totalPemakaianHpp)}</td>
-                            <td style="padding:8px; text-align:right; color:#0f172a;">Rp ${nf.format(lr.totalPemakaianJual)}</td>
-                            <td style="padding:8px; text-align:right; color:#15803d;">+Rp ${nf.format(lr.totalSubsidiInternal)}</td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        `;
-    } else {
-        htmlTablePemakaian = `<div style="padding:10px 20px; font-size:12px; color:#94a3b8; font-style:italic;">Tidak ada data pemakaian pakan internal untuk periode ini.</div>`;
+        } else {
+            htmlTablePemakaian = `<div style="padding:10px 20px; font-size:12px; color:#94a3b8; font-style:italic;">Tidak ada data pemakaian pakan internal untuk periode ini.</div>`;
+        }
     }
 
     cont.innerHTML = `
         <div style="text-align:center; border-bottom:2px solid #1e3a8a; padding-bottom:15px; margin-bottom:20px;">
-            <h2 style="margin:0; font-size:20px; color:#1e3a8a; text-transform:uppercase; letter-spacing:0.5px;">PT CITRA BANGUN LESTARI</h2>
-            <div style="font-size:15px; font-weight:bold; color:#334155; margin-top:4px;">LAPORAN LABA RUGI KOMPREHENSIF (MULTI-STEP)</div>
+            <h2 style="margin:0; font-size:20px; color:#1e3a8a; text-transform:uppercase; letter-spacing:0.5px;">PT. CITA BENGGALA LESTARI</h2>
+            <div style="font-size:15px; font-weight:bold; color:#334155; margin-top:4px;">
+                ${showKonsolidasi ? 'LAPORAN LABA RUGI KOMPREHENSIF (KONSOLIDASIAN HOLDING)' : 'LAPORAN LABA RUGI DIVISI PAKAN (KOMERSIAL STANDALONE)'}
+            </div>
             <div style="font-size:12px; color:#64748b; margin-top:2px;">Periode: <b>${lr.periodeLabel}</b></div>
         </div>
+
+        <!-- Banner Peringatan HPP Sementara (Jika Ada) -->
+        ${activeSementaraCount > 0 ? `
+        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-left:4px solid #2563eb; border-radius:6px; padding:10px 14px; margin-bottom:18px; display:flex; align-items:flex-start; gap:10px; text-align:left;">
+            <span class="material-symbols-outlined" style="color:#2563eb; font-size:20px; flex-shrink:0; margin-top:1px;">info</span>
+            <div style="font-size:12px; color:#1e40af; line-height:1.5;">
+                <b>Perhatian Akuntansi:</b> Terdapat <b>${activeSementaraCount} transaksi pakan</b> menggunakan <b>HPP Sementara / Estimasi (angka teks warna biru)</b> — <i>Menunggu input HPP</i>. Sistem menggunakan estimasi batch terakhir agar neraca & laba rugi tidak timpang, dan akan otomatis terbarui menjadi HPP riil saat harga pokok diinput.
+            </div>
+        </div>
+        ` : ''}
 
         <!-- I. PENDAPATAN OPERASIONAL KOMERSIAL -->
         <div style="margin-bottom:15px;">
@@ -3069,8 +3944,8 @@ function renderLabaRugi(lr) {
             <div style="font-weight:bold; font-size:13px; color:#1e3a8a; border-bottom:1px solid #cbd5e1; padding-bottom:4px; margin-bottom:8px;">
                 II. HARGA POKOK PENJUALAN KOMERSIAL (HPP FIFO / COGS)
             </div>
-            <div style="display:flex; justify-content:space-between; padding:4px 0 4px 10px; font-size:13px; color:#b91c1c;">
-                <span>Beban Pokok Penjualan Pakan Komersial</span>
+            <div style="display:flex; justify-content:space-between; padding:4px 0 4px 10px; font-size:13px; color:${lr.cogsHasEstimasi ? '#2563eb' : '#b91c1c'}; font-weight:${lr.cogsHasEstimasi ? 'bold' : 'normal'};">
+                <span>Beban Pokok Penjualan Pakan Komersial ${lr.cogsHasEstimasi ? '<span style="font-size:10px; background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; border-radius:3px; padding:0 4px; margin-left:4px;">*Termasuk Estimasi HPP</span>' : ''}</span>
                 <span>(Rp ${nf.format(lr.cogsPakanKomersial)})</span>
             </div>
             <div style="display:flex; justify-content:space-between; padding:8px 10px; font-size:14px; font-weight:bold; background:#e0f2fe; border-top:1px solid #93c5fd; border-bottom:1px solid #93c5fd; margin-top:8px;">
@@ -3092,7 +3967,7 @@ function renderLabaRugi(lr) {
         </div>
 
         <!-- BANNER SURPLUS OPERASIONAL DIVISI PAKAN KOMERSIAL -->
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; font-size:15px; font-weight:bold; background:#ecfdf5; border:2px solid #10b981; border-radius:8px; color:#065f46; margin-bottom:25px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; font-size:15px; font-weight:bold; background:#ecfdf5; border:2px solid #10b981; border-radius:8px; color:#065f46; margin-bottom:${showKonsolidasi ? '25px' : '5px'};">
             <div>
                 <div>LABA BERSIH OPERASIONAL DIVISI PAKAN (STANDALONE SURPLUS)</div>
                 <div style="font-size:11px; font-weight:normal; color:#047857; margin-top:2px;">
@@ -3102,6 +3977,7 @@ function renderLabaRugi(lr) {
             <div style="font-size:22px; font-weight:900;">Rp ${nf.format(lr.labaBersihDivisiPakan)}</div>
         </div>
 
+        ${showKonsolidasi ? `
         <!-- IV. ALOKASI KONSUMSI PAKAN TERNAK SENDIRI (HOLDING INTERNAL) -->
         <div style="margin-bottom:20px; background:#fbfcfe; padding:15px; border-radius:8px; border:1px solid #e2e8f0;">
             <div style="font-weight:bold; font-size:13px; color:#1e3a8a; border-bottom:1px solid #cbd5e1; padding-bottom:4px; margin-bottom:6px;">
@@ -3115,7 +3991,7 @@ function renderLabaRugi(lr) {
 
             <div style="font-size:11px; color:#475569; background:#fffbeb; border:1px solid #fef3c7; border-radius:6px; padding:10px; margin-top:10px; line-height:1.5;">
                 <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle; color:#b45309; margin-right:3px;">info</span>
-                <b>Catatan Akuntansi Pemeliharaan:</b> Pakan yang dikirim ke unit <b>SPN (Sapi Perah)</b> menghasilkan pendapatan penjualan susu harian yang dicatat pada pembukuan terpisah divisi SPN. Konsumsi pada kandang <b>Kapalang / PM</b> terkonversi menjadi pertambahan bobot daging ternak (ADG). Selisih nilai <b>+Rp ${nf.format(lr.totalSubsidiInternal)}</b> adalah efisiensi penghematan modal yang dinikmati grup peternakan.
+                <b>Catatan Akuntansi Pemeliharaan:</b> Pakan yang dikirim ke unit <b>SPN (Sapi Perah)</b> menghasilkan pendapatan penjualan susu harian yang dicatat pada pembukuan terpisah divisi SPN. Konsumsi pada kandang <b>PM / RPH</b> terkonversi menjadi pertambahan bobot daging ternak. Selisih nilai <b>+Rp ${nf.format(lr.totalSubsidiInternal)}</b> adalah efisiensi penghematan modal yang dinikmati grup peternakan.
             </div>
         </div>
 
@@ -3135,6 +4011,12 @@ function renderLabaRugi(lr) {
                 <span>Rp ${nf.format(lr.labaBersihKonsolidasian)}</span>
             </div>
         </div>
+        ` : `
+        <div style="margin-top:12px; padding:10px 14px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:6px; font-size:11.5px; color:#64748b;">
+            <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle; margin-right:4px;">visibility_off</span>
+            Alokasi pemakaian pakan ternak kandang sendiri (<b>Rp ${nf.format(Math.round(lr.totalPemakaianHpp || 0))}</b> dari ${nf.format(Math.round(lr.totalPemakaianQty || 0))} Kg) saat ini dipisahkan agar tidak membebani performa komersial Divisi Pakan. Centang opsi di atas bila ingin melihat tampilan Konsolidasian Holding.
+        </div>
+        `}
     `;
 }
 
@@ -3151,7 +4033,13 @@ function exportLabaRugi(fmt) {
         return;
     }
     let lr = labaRugiDataGlobal;
-    let filename = `Laba_Rugi_CBL_${lr.periodeLabel.replace(/\s+/g, '_')}`;
+    let showKonsolidasi = document.getElementById('lr-toggle-konsolidasi')?.checked === true;
+    let filename = `Laba_Rugi_CBL_${showKonsolidasi ? 'Konsolidasi_' : 'Divisi_Pakan_'}${lr.periodeLabel.replace(/\s+/g, '_')}`;
+
+    if (fmt === 'pdf') {
+        cetakPdfLabaRugi(lr, filename, showKonsolidasi);
+        return;
+    }
 
     let rows = [
         { 'Pos Akun': 'I. PENDAPATAN OPERASIONAL KOMERSIAL', 'Keterangan': '', 'Jumlah (Rp)': '' },
@@ -3175,40 +4063,34 @@ function exportLabaRugi(fmt) {
     rows.push({ 'Pos Akun': 'TOTAL BEBAN OPERASIONAL GUDANG', 'Keterangan': '', 'Jumlah (Rp)': -lr.totalBebanOperasionalGudang });
     rows.push({ 'Pos Akun': '', 'Keterangan': '', 'Jumlah (Rp)': '' });
     rows.push({ 'Pos Akun': 'LABA BERSIH DIVISI PAKAN (STANDALONE SURPLUS)', 'Keterangan': `${lr.netMarginDivisiPakan}% Margin Operasional`, 'Jumlah (Rp)': lr.labaBersihDivisiPakan });
-    rows.push({ 'Pos Akun': '', 'Keterangan': '', 'Jumlah (Rp)': '' });
 
-    rows.push({ 'Pos Akun': 'IV. ALOKASI KONSUMSI PAKAN TERNAK SENDIRI', 'Keterangan': '', 'Jumlah (Rp)': '' });
-    let activeBranches = Object.values(lr.pemakaianKandangPerCabang || {}).filter(b => Object.keys(b.items).length > 0);
-    if (activeBranches.length > 0) {
-        activeBranches.forEach(branch => {
-            rows.push({ 'Pos Akun': `[${branch.label}]`, 'Keterangan': '', 'Jumlah (Rp)': '' });
-            Object.values(branch.items).sort((a, b) => b.totalHpp - a.totalHpp).forEach(u => {
-                rows.push({
-                    'Pos Akun': `  • ${u.unit} (${u.totalQty.toLocaleString('id-ID')} Kg)`,
-                    'Keterangan': `HPP: Rp ${u.totalHpp.toLocaleString('id-ID')} | Pasar: Rp ${u.totalJual.toLocaleString('id-ID')}`,
-                    'Jumlah (Rp)': -u.totalHpp
+    if (showKonsolidasi) {
+        rows.push({ 'Pos Akun': '', 'Keterangan': '', 'Jumlah (Rp)': '' });
+        rows.push({ 'Pos Akun': 'IV. ALOKASI KONSUMSI PAKAN TERNAK SENDIRI', 'Keterangan': '', 'Jumlah (Rp)': '' });
+        let activeBranches = Object.values(lr.pemakaianKandangPerCabang || {}).filter(b => Object.keys(b.items).length > 0);
+        if (activeBranches.length > 0) {
+            activeBranches.forEach(branch => {
+                rows.push({ 'Pos Akun': `[${branch.label}]`, 'Keterangan': '', 'Jumlah (Rp)': '' });
+                Object.values(branch.items).sort((a, b) => b.totalHpp - a.totalHpp).forEach(u => {
+                    rows.push({
+                        'Pos Akun': `  • ${u.unit} (${u.totalQty.toLocaleString('id-ID')} Kg)`,
+                        'Keterangan': `HPP: Rp ${u.totalHpp.toLocaleString('id-ID')} | Pasar: Rp ${u.totalJual.toLocaleString('id-ID')}${u.hasEstimasi ? ' (*Sementara)' : ''}`,
+                        'Jumlah (Rp)': -u.totalHpp
+                    });
                 });
+                rows.push({
+                    'Pos Akun': `  Subtotal ${branch.label}`,
+                    'Keterangan': `${branch.totalQty.toLocaleString('id-ID')} Kg`,
+                    'Jumlah (Rp)': -branch.totalHpp
+                });
+                rows.push({ 'Pos Akun': '', 'Keterangan': '', 'Jumlah (Rp)': '' });
             });
-            rows.push({
-                'Pos Akun': `  Subtotal ${branch.label}`,
-                'Keterangan': `${branch.totalQty.toLocaleString('id-ID')} Kg`,
-                'Jumlah (Rp)': -branch.totalHpp
-            });
-            rows.push({ 'Pos Akun': '', 'Keterangan': '', 'Jumlah (Rp)': '' });
-        });
-    } else {
-        Object.values(lr.pemakaianKandangDetail).forEach(u => {
-            rows.push({
-                'Pos Akun': `Pemakaian ${u.unit} (${u.totalQty} Kg)`,
-                'Keterangan': `HPP: Rp ${u.totalHpp.toLocaleString('id-ID')} | Pasar: Rp ${u.totalJual.toLocaleString('id-ID')}`,
-                'Jumlah (Rp)': -u.totalHpp
-            });
-        });
-    }
+        }
 
-    rows.push({ 'Pos Akun': 'TOTAL ALOKASI MODAL PAKAN INTERNAL', 'Keterangan': `Efisiensi Subsidi: Rp ${lr.totalSubsidiInternal.toLocaleString('id-ID')}`, 'Jumlah (Rp)': -lr.totalPemakaianHpp });
-    rows.push({ 'Pos Akun': '', 'Keterangan': '', 'Jumlah (Rp)': '' });
-    rows.push({ 'Pos Akun': 'V. HASIL BERSIH KONSOLIDASIAN HOLDING', 'Keterangan': 'Laba Bersih Divisi - Modal Pemakaian Internal', 'Jumlah (Rp)': lr.labaBersihKonsolidasian });
+        rows.push({ 'Pos Akun': 'TOTAL ALOKASI MODAL PAKAN INTERNAL', 'Keterangan': `Efisiensi Subsidi: Rp ${lr.totalSubsidiInternal.toLocaleString('id-ID')}`, 'Jumlah (Rp)': -lr.totalPemakaianHpp });
+        rows.push({ 'Pos Akun': '', 'Keterangan': '', 'Jumlah (Rp)': '' });
+        rows.push({ 'Pos Akun': 'V. HASIL BERSIH KONSOLIDASIAN HOLDING', 'Keterangan': 'Laba Bersih Divisi - Modal Pemakaian Internal', 'Jumlah (Rp)': lr.labaBersihKonsolidasian });
+    }
 
     if (fmt === 'xlsx' && typeof XLSX !== 'undefined') {
         let wb = XLSX.utils.book_new();
@@ -3267,70 +4149,195 @@ async function muatNeraca() {
             'Authorization': `Bearer ${SUPA_ANON_KEY}`
         };
 
-        // Tarik saldo kumulatif jurnal hingga posisi endDate
-        let res = await fetch(`${SUPA_URL}/rest/v1/view_jurnal_umum?tanggal=lte.${endDate}&order=tanggal.asc`, { headers });
-        let jData = res.ok ? await res.json() : [];
+        // 1-5. Tarik ringkasan jurnal via RPC cepat (fallback ke paged view jika RPC belum terpasang), stok aktif, piutang, gilingan, dan pembayaran upah giling hingga endDate
+        let fetchNeracaJurnal = async () => {
+            try {
+                let rpcRes = await fetch(`${SUPA_URL}/rest/v1/rpc/get_neraca_summary`, {
+                    method: 'POST',
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ p_end_date: endDate })
+                });
+                if (rpcRes.ok) {
+                    let sumRows = await rpcRes.json();
+                    if (Array.isArray(sumRows)) {
+                        return sumRows.map(s => ({
+                            id_jurnal: s.has_giling ? 'TP-GIL-RPC' : 'RPC-SUM',
+                            kode_akun: s.kode_akun,
+                            nama_akun: s.nama_akun,
+                            debit: Number(s.total_debit) || 0,
+                            kredit: Number(s.total_kredit) || 0,
+                            is_prior_year: s.is_prior_year !== undefined ? Boolean(s.is_prior_year) : undefined
+                        }));
+                    }
+                }
+            } catch (eRpc) { /* fallback ke view_jurnal_umum */ }
+            return fetchJurnalPaged(`${SUPA_URL}/rest/v1/view_jurnal_umum?tanggal=lte.${endDate}&select=tanggal,id_jurnal,kode_akun,nama_akun,debit,kredit&order=tanggal.asc,id_jurnal.asc`, headers);
+        };
+
+        let [jData, bData, pData, gilingTrxData, cfGilingData] = await Promise.all([
+            fetchNeracaJurnal(),
+            fetchJurnalPaged(`${SUPA_URL}/rest/v1/stok_batch?qty_sisa=gt.0&tanggal_masuk=lte.${endDate}&select=pakan,qty_sisa,hpp`, headers),
+            fetchJurnalPaged(`${SUPA_URL}/rest/v1/view_rekap_piutang?select=sisa_piutang`, headers),
+            fetchJurnalPaged(`${SUPA_URL}/rest/v1/transaksi_pakan?status=eq.Keluar&tanggal=lte.${endDate}&or=(relasi.ilike.rd,relasi.ilike.rl,relasi.ilike.darbun,relasi.ilike.laktasi)&select=cabang,relasi,pakan,qty,hash_str`, headers),
+            fetchJurnalPaged(`${SUPA_URL}/rest/v1/cashflow?jenis=ilike.*keluar*&tanggal=lte.${endDate}&select=kategori,keterangan,nominal,relasi`, headers)
+        ]);
 
         // Hitung Saldo Akun Kumulatif
         let saldoKas = 0;
-        let saldoPiutang = 0;
-        let saldoPersediaan = 0;
+        let saldoPiutangJurnal = 0;
+        let saldoKasbonJurnal = 0;
+        let saldoPersediaanJurnal = 0;
         let saldoHutang = 0;
+        let saldoHutangUpahGilingJurnal = 0;
+        let hasJurnalGilingSql = false;
+        let modalDisetorJurnal = 0;
 
         let totalRev = 0;
         let totalExp = 0;
+        let totalPemakaianKandangRaw = 0;
+        let pemakaianKandangPriorRaw = 0;
+        let labaDitahanPriorRaw = 0;
+        let hasPriorYearCutoff = false;
+        let priorYear = Number(tahun) - 1;
 
         jData.forEach(d => {
             let deb = Number(d.debit) || 0;
             let kre = Number(d.kredit) || 0;
             let nama = (d.nama_akun || '').trim();
+            let namaLow = nama.toLowerCase();
             let kode = (d.kode_akun || '').charAt(0);
+            let isPriorYear = d.is_prior_year !== undefined
+                ? Boolean(d.is_prior_year)
+                : (d.tanggal ? String(d.tanggal).slice(0, 4) < String(tahun) : false);
 
-            if (nama === 'Kas') {
-                saldoKas += (deb - kre);
-            } else if (nama === 'Piutang Pakan') {
-                saldoPiutang += (deb - kre);
-            } else if (nama === 'Persediaan Pakan') {
-                saldoPersediaan += (deb - kre);
-            } else if (nama === 'Hutang Pakan') {
-                saldoHutang += (kre - deb);
+            if (String(d.id_jurnal || '').startsWith('TP-GIL-') || nama === 'Hutang Upah Giling') {
+                hasJurnalGilingSql = true;
             }
 
-            // Hitung Laba Bersih Berjalan (Akun 4 & 5)
-            if (kode === '4') {
-                if (nama === 'Pendapatan Penjualan') totalRev += kre;
-                else if (nama === 'Retur Penjualan') totalRev -= deb;
-                else if (nama === 'Harga Pokok Penjualan (HPP)') totalExp += deb;
-            } else if (kode === '5') {
-                totalExp += deb;
+            if (nama === 'Kas' || (kode === '1' && namaLow.includes('kas') && !namaLow.includes('kasbon'))) {
+                saldoKas += (deb - kre);
+            } else if (kode === '1' && (namaLow.includes('kasbon') || namaLow.includes('karyawan'))) {
+                saldoKasbonJurnal += (deb - kre);
+            } else if (nama === 'Piutang Pakan' || (kode === '1' && namaLow.includes('piutang'))) {
+                saldoPiutangJurnal += (deb - kre);
+            } else if (nama === 'Persediaan Pakan' || (kode === '1' && namaLow.includes('persediaan'))) {
+                saldoPersediaanJurnal += (deb - kre);
+            } else if (nama === 'Hutang Upah Giling' || (kode === '2' && namaLow.includes('upah giling'))) {
+                saldoHutangUpahGilingJurnal += (kre - deb);
+            } else if (nama === 'Hutang Pakan' || (kode === '2' && namaLow.includes('hutang'))) {
+                saldoHutang += (kre - deb);
+            } else if (kode === '3') {
+                modalDisetorJurnal += (kre - deb);
+            }
+
+            // Cut-off tahunan: Laba/Rugi tahun sebelumnya (< tahun) ditutup ke Laba Ditahan; Laba/Rugi tahun berjalan dihitung khusus tahun terpilih
+            if (kode === '4' || kode === '5') {
+                if (isPriorYear) {
+                    hasPriorYearCutoff = true;
+                    labaDitahanPriorRaw += (kode === '4') ? (kre - deb) : -(deb - kre);
+                    if (kode === '5' && namaLow.includes('pemakaian pakan')) {
+                        pemakaianKandangPriorRaw += (deb - kre);
+                    }
+                } else if (kode === '4') {
+                    totalRev += (kre - deb);
+                } else if (kode === '5') {
+                    totalExp += (deb - kre);
+                    if (namaLow.includes('pemakaian pakan')) {
+                        totalPemakaianKandangRaw += (deb - kre);
+                    }
+                }
             }
         });
 
-        let totalAktiva = saldoKas + saldoPiutang + saldoPersediaan;
-        let totalKewajiban = saldoHutang;
+        // Hitung Hutang Upah Giling Akumulasi (prioritaskan jurnal SQL baru bila tersedia; fallback ke perhitungan manual bila SQL belum diupdate)
+        let saldoHutangUpahGiling = 0;
+        if (hasJurnalGilingSql) {
+            saldoHutangUpahGiling = saldoHutangUpahGilingJurnal;
+        } else {
+            let totalKgGiling = 0;
+            gilingTrxData.forEach(t => {
+                let hash = (t.hash_str || '').toUpperCase();
+                let cab = (t.cabang || '').toUpperCase();
+                let rel = (t.relasi || '').trim().toUpperCase();
+                if (hash.includes('_GILING_') || cab.includes('KANDANG')) return;
+                if (isPakanGilingJadi(t.pakan)) return;
+                if (rel === 'RD' || rel === 'RL' || rel === 'DARBUN' || rel === 'LAKTASI') {
+                    totalKgGiling += (Number(t.qty) || 0);
+                }
+            });
+            let totalKewajibanUpahGiling = Math.round(totalKgGiling * 100);
+            let totalBayarUpahGiling = 0;
+            cfGilingData.forEach(c => {
+                if ((c.relasi || '').toLowerCase().includes('bapera')) return;
+                let katLower = (c.kategori || '').trim().toLowerCase();
+                if (katLower.includes('upah giling') || katLower.includes('opr giling') || katLower === 'giling' || (katLower.includes('giling') && !katLower.includes('ongkir'))) {
+                    totalBayarUpahGiling += (Number(c.nominal) || 0);
+                }
+            });
+            saldoHutangUpahGiling = totalKewajibanUpahGiling - totalBayarUpahGiling;
+        }
 
-        // Laba Bersih Berjalan dari pembukuan
-        let labaBerjalan = totalRev - totalExp;
+        // Valuasi Persediaan: jika SQL baru sudah memasukkan kapitalisasi +Rp 100/Kg ke Persediaan Pakan, pakai saldoPersediaanJurnal langsung tanpa dobel tambah
+        let totalUpahGilingStokAktif = bData.reduce((acc, b) => acc + (isPakanGilingJadi(b.pakan) ? ((Number(b.qty_sisa) || 0) * 100) : 0), 0);
+        let saldoPersediaanFisik = Math.round(bData.reduce((acc, b) => acc + ((Number(b.qty_sisa) || 0) * ((Number(b.hpp) || 0) + (isPakanGilingJadi(b.pakan) ? 100 : 0))), 0));
+        let saldoPersediaanRaw = saldoPersediaanJurnal > 0
+            ? (hasJurnalGilingSql ? saldoPersediaanJurnal : (saldoPersediaanJurnal + totalUpahGilingStokAktif))
+            : saldoPersediaanFisik;
 
-        // Ekuitas Penyeimbang (Modal Awal & Laba Ditahan)
-        let ekuitasModal = totalAktiva - totalKewajiban - labaBerjalan;
-        let totalEkuitas = ekuitasModal + labaBerjalan;
-        let totalPasiva = totalKewajiban + totalEkuitas;
+        // Piutang: Fallback ke rekap piutang hanya jika jurnal belum ada data
+        let totalPiutangRekap = pData.reduce((acc, p) => acc + (Number(p.sisa_piutang) || 0), 0);
+        let saldoPiutangRaw = jData.length > 0 ? saldoPiutangJurnal : totalPiutangRekap;
 
-        let selisih = totalAktiva - totalPasiva;
+        // Pembulatan bulat Rupiah tanpa angka di belakang koma
+        saldoKas = Math.round(saldoKas);
+        let saldoPiutang = Math.round(saldoPiutangRaw);
+        let saldoKasbon = Math.round(saldoKasbonJurnal);
+        let saldoPersediaan = Math.round(saldoPersediaanRaw);
+        let totalAktiva = saldoKas + saldoPiutang + saldoKasbon + saldoPersediaan;
+
+        saldoHutang = Math.round(saldoHutang);
+        saldoHutangUpahGiling = Math.round(saldoHutangUpahGiling);
+        let totalKewajiban = saldoHutang + saldoHutangUpahGiling;
+
+        // Laba/Rugi & alokasi kandang: siapkan angka Mode Komersial Mandiri (Piutang Antar-Divisi) maupun Mode Prive/Konsolidasian
+        let labaBerjalan = Math.round(totalRev - totalExp);
+        let totalPemakaianKandangKumulatif = Math.round(totalPemakaianKandangRaw);
+        let piutangAntarDivisi = Math.round(pemakaianKandangPriorRaw + totalPemakaianKandangRaw);
+        let pemakaianKandangPrior = piutangAntarDivisi - totalPemakaianKandangKumulatif;
+        let labaKomersialKumulatif = labaBerjalan + totalPemakaianKandangKumulatif;
+
+        let ekuitasModalPrive = Math.round(modalDisetorJurnal + labaDitahanPriorRaw);
+        let ekuitasModalKomersial = ekuitasModalPrive + pemakaianKandangPrior;
+        let totalEkuitasPrive = ekuitasModalPrive + labaKomersialKumulatif - totalPemakaianKandangKumulatif;
+        let totalPasivaPrive = totalKewajiban + totalEkuitasPrive;
+
+        // Selisih riil identik di kedua mode (Komersial Mandiri & Prive/Konsolidasian)
+        let selisih = totalAktiva - totalPasivaPrive;
 
         neracaDataGlobal = {
             asOfLabel,
+            tahunDipilih: tahun,
+            priorYear,
+            hasPriorYearCutoff,
             saldoKas,
             saldoPiutang,
+            saldoKasbon,
+            piutangAntarDivisi,
             saldoPersediaan,
+            saldoPersediaanFisik,
             totalAktiva,
             saldoHutang,
+            saldoHutangUpahGiling,
             totalKewajiban,
-            ekuitasModal,
+            ekuitasModal: ekuitasModalPrive,
+            ekuitasModalPrive,
+            ekuitasModalKomersial,
             labaBerjalan,
-            totalEkuitas,
-            totalPasiva,
+            labaKomersialKumulatif,
+            pemakaianKandangPrior,
+            totalPemakaianKandangKumulatif,
+            totalEkuitas: totalEkuitasPrive,
+            totalPasiva: totalPasivaPrive,
             selisih
         };
 
@@ -3343,25 +4350,65 @@ async function muatNeraca() {
     }
 }
 
+function getNeracaViewModel(n) {
+    let showPrive = Boolean(document.getElementById('neraca-toggle-prive')?.checked);
+    let piutangDivisiKandang = !showPrive ? (n.piutangAntarDivisi || 0) : 0;
+    let totalAktiva = n.totalAktiva + piutangDivisiKandang;
+    let ekuitasModal = !showPrive
+        ? (n.ekuitasModalKomersial !== undefined ? n.ekuitasModalKomersial : n.ekuitasModal)
+        : (n.ekuitasModalPrive !== undefined ? n.ekuitasModalPrive : n.ekuitasModal);
+    let potonganPrive = showPrive ? (n.totalPemakaianKandangKumulatif || 0) : 0;
+    let totalEkuitas = ekuitasModal + (n.labaKomersialKumulatif || 0) - potonganPrive;
+    let totalPasiva = n.totalKewajiban + totalEkuitas;
+    let selisih = totalAktiva - totalPasiva;
+    return {
+        ...n,
+        showPrive,
+        piutangDivisiKandang,
+        totalAktiva,
+        ekuitasModal,
+        potonganPrive,
+        totalEkuitas,
+        totalPasiva,
+        selisih,
+        modalLabel: n.hasPriorYearCutoff ? `Modal Disetor & Laba Ditahan (s/d ${n.priorYear})` : 'Modal Disetor & Laba Ditahan',
+        labaLabel: n.hasPriorYearCutoff ? `Laba Bersih Penjualan Komersial (${n.tahunDipilih})` : `Laba Bersih Penjualan Komersial (s/d ${n.asOfLabel})`,
+        priveLabel: n.hasPriorYearCutoff ? `Alokasi Pakan Kandang Sendiri (${n.tahunDipilih} - Prive)` : 'Alokasi Pakan Kandang Sendiri (Prive Internal)'
+    };
+}
+
 function renderNeraca(n) {
     let cont = document.getElementById('neraca-report-container');
     if (!cont || !n) return;
 
-    let nf = new Intl.NumberFormat('id-ID');
-    let isBalance = Math.abs(n.selisih) < 1;
+    let v = getNeracaViewModel(n);
+    let nf = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 });
+    let isBalance = Math.abs(v.selisih) <= 2;
 
     cont.innerHTML = `
         <div style="text-align:center; border-bottom:2px solid #1e3a8a; padding-bottom:15px; margin-bottom:15px;">
-            <h2 style="margin:0; font-size:20px; color:#1e3a8a; text-transform:uppercase; letter-spacing:0.5px;">PT CITRA BANGUN LESTARI</h2>
-            <div style="font-size:15px; font-weight:bold; color:#334155; margin-top:4px;">LAPORAN POSISI KEUANGAN (NERACA)</div>
-            <div style="font-size:12px; color:#64748b; margin-top:2px;">Posisi Per: <b>${n.asOfLabel}</b></div>
+            <h2 style="margin:0; font-size:20px; color:#1e3a8a; text-transform:uppercase; letter-spacing:0.5px;">PT. CITA BENGGALA LESTARI</h2>
+            <div style="font-size:15px; font-weight:bold; color:#334155; margin-top:4px;">LAPORAN POSISI KEUANGAN (NERACA${v.showPrive ? ' — KONSOLIDASIAN' : ' — DIVISI PAKAN'})</div>
+            <div style="font-size:12px; color:#64748b; margin-top:2px;">Posisi Per: <b>${v.asOfLabel}</b></div>
         </div>
 
         <!-- Status Balance Banner -->
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 15px; border-radius:6px; margin-bottom:20px; font-size:13px; font-weight:bold; ${isBalance ? 'background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;' : 'background:#fef2f2; color:#991b1b; border:1px solid #fecaca;'}">
-            <span>${isBalance ? 'STATUS: NERACA 100% BALANCE (AKTIVA = PASIVA)' : 'STATUS: PERHATIAN ADA SELISIH'}</span>
-            <span>Selisih: Rp ${nf.format(n.selisih)}</span>
+        ${isBalance ? `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 15px; border-radius:6px; margin-bottom:20px; font-size:13px; font-weight:bold; background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">
+            <span>STATUS: NERACA 100% BALANCE (AKTIVA = PASIVA)</span>
+            <span>Selisih: Rp ${nf.format(Math.abs(v.selisih) <= 2 ? 0 : v.selisih)}</span>
         </div>
+        ` : `
+        <div style="background:#fffbeb; border:1px solid #fde68a; border-left:4px solid #f59e0b; border-radius:6px; padding:12px 15px; margin-bottom:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:bold; color:#b45309;">
+                <span>STATUS: TERDAPAT REKONSILIASI FISIK GUDANG</span>
+                <span>Selisih: Rp ${nf.format(v.selisih)}</span>
+            </div>
+            <div style="font-size:11.5px; color:#92400e; margin-top:5px; line-height:1.4;">
+                Persediaan fisik di gudang bernilai <b>Rp ${nf.format(v.saldoPersediaan)}</b>. Selisih ini mencerminkan aset fisik yang sudah berada di gudang namun input HPP / faktur pembelian supplier belum dicatat dalam jurnal pembukuan (Hutang/Kas). Begitu pencatatan jurnal pembelian masuk dan HPP diselesaikan, posisi neraca akan otomatis seimbang.
+            </div>
+        </div>
+        `}
 
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:25px;">
             <!-- BAGIAN KIRI: AKTIVA (ASET) -->
@@ -3373,20 +4420,32 @@ function renderNeraca(n) {
                 <div style="font-weight:600; font-size:12px; color:#475569; margin-bottom:6px;">Aset Lancar:</div>
                 <div style="display:flex; justify-content:space-between; padding:6px 10px; font-size:13px; border-bottom:1px solid #f1f5f9;">
                     <span>• Kas & Bank</span>
-                    <span style="font-weight:600;">Rp ${nf.format(n.saldoKas)}</span>
+                    <span style="font-weight:600;">Rp ${nf.format(v.saldoKas)}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; padding:6px 10px; font-size:13px; border-bottom:1px solid #f1f5f9;">
                     <span>• Piutang Pakan Peternak</span>
-                    <span style="font-weight:600;">Rp ${nf.format(n.saldoPiutang)}</span>
+                    <span style="font-weight:600;">Rp ${nf.format(v.saldoPiutang)}</span>
                 </div>
+                ${(v.saldoKasbon || 0) !== 0 ? `
+                <div style="display:flex; justify-content:space-between; padding:6px 10px; font-size:13px; border-bottom:1px solid #f1f5f9;">
+                    <span>• Piutang Karyawan (Kasbon)</span>
+                    <span style="font-weight:600;">Rp ${nf.format(v.saldoKasbon)}</span>
+                </div>
+                ` : ''}
+                ${(v.piutangDivisiKandang || 0) !== 0 ? `
+                <div style="display:flex; justify-content:space-between; gap:10px; padding:6px 10px; font-size:13px; border-bottom:1px solid #f1f5f9; background:#f8fafc;">
+                    <span style="color:#0369a1;">• Piutang Antar-Divisi (Kandang Sendiri)</span>
+                    <span style="font-weight:600; color:#0369a1; white-space:nowrap;">Rp ${nf.format(v.piutangDivisiKandang)}</span>
+                </div>
+                ` : ''}
                 <div style="display:flex; justify-content:space-between; padding:6px 10px; font-size:13px; border-bottom:1px solid #f1f5f9;">
                     <span>• Persediaan Pakan di Gudang (FIFO)</span>
-                    <span style="font-weight:600;">Rp ${nf.format(n.saldoPersediaan)}</span>
+                    <span style="font-weight:600;">Rp ${nf.format(v.saldoPersediaan)}</span>
                 </div>
 
                 <div style="display:flex; justify-content:space-between; padding:12px 10px; font-size:15px; font-weight:bold; background:#e0f2fe; border-radius:6px; margin-top:25px; border-top:2px solid #0284c7;">
                     <span>TOTAL AKTIVA (ASET)</span>
-                    <span style="color:#0369a1;">Rp ${nf.format(n.totalAktiva)}</span>
+                    <span style="color:#0369a1;">Rp ${nf.format(v.totalAktiva)}</span>
                 </div>
             </div>
 
@@ -3399,30 +4458,47 @@ function renderNeraca(n) {
                 <div style="font-weight:600; font-size:12px; color:#475569; margin-bottom:6px;">I. Kewajiban / Hutang [KODE 2]:</div>
                 <div style="display:flex; justify-content:space-between; padding:6px 10px; font-size:13px; border-bottom:1px solid #f1f5f9;">
                     <span>• Hutang Usaha Supplier Pakan</span>
-                    <span style="font-weight:600;">Rp ${nf.format(n.saldoHutang)}</span>
+                    <span style="font-weight:600;">Rp ${nf.format(v.saldoHutang)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:6px 10px; font-size:13px; border-bottom:1px solid #f1f5f9;">
+                    <span>• Hutang Upah Giling</span>
+                    <span style="font-weight:600; color:#0f766e;">Rp ${nf.format(v.saldoHutangUpahGiling || 0)}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; padding:6px 10px; font-size:12px; font-weight:bold; background:#f8fafc; color:#64748b; margin-bottom:12px;">
                     <span>Total Kewajiban</span>
-                    <span>Rp ${nf.format(n.totalKewajiban)}</span>
+                    <span>Rp ${nf.format(v.totalKewajiban)}</span>
                 </div>
 
                 <div style="font-weight:600; font-size:12px; color:#475569; margin-bottom:6px;">II. Ekuitas / Modal [KODE 3]:</div>
                 <div style="display:flex; justify-content:space-between; padding:6px 10px; font-size:13px; border-bottom:1px solid #f1f5f9;">
-                    <span>• Modal Disetor & Laba Ditahan</span>
-                    <span style="font-weight:600;">Rp ${nf.format(n.ekuitasModal)}</span>
+                    <span>• ${v.modalLabel}</span>
+                    <span style="font-weight:600;">Rp ${nf.format(v.ekuitasModal)}</span>
                 </div>
-                <div style="display:flex; justify-content:space-between; padding:6px 10px; font-size:13px; border-bottom:1px solid #f1f5f9; color:#15803d;">
-                    <span>• Laba Bersih Periode Berjalan</span>
-                    <span style="font-weight:700;">Rp ${nf.format(n.labaBerjalan)}</span>
+                <div style="display:flex; justify-content:space-between; gap:12px; padding:6px 10px; font-size:13px; border-bottom:1px solid #f1f5f9; color:${(v.labaKomersialKumulatif || 0) >= 0 ? '#15803d' : '#b91c1c'};">
+                    <span>• ${v.labaLabel}</span>
+                    <span style="font-weight:700; white-space:nowrap;">${(v.labaKomersialKumulatif || 0) >= 0 ? '+' : ''}Rp ${nf.format(v.labaKomersialKumulatif || 0)}</span>
                 </div>
+                ${(v.potonganPrive || 0) !== 0 ? `
+                <div style="display:flex; justify-content:space-between; gap:12px; padding:6px 10px; font-size:13px; border-bottom:1px solid #f1f5f9; color:#475569;">
+                    <span>• ${v.priveLabel}</span>
+                    <span style="font-weight:600; white-space:nowrap;">(Rp ${nf.format(v.potonganPrive)})</span>
+                </div>
+                <div style="padding:4px 10px 6px; font-size:11px; color:#64748b; border-bottom:1px solid #f1f5f9; background:#f8fafc;">
+                    Alokasi kandang mengurangi stok gudang tanpa mengurangi laba penjualan komersial (karena omzet susu/sapi dicatat terpisah dari buku pakan).
+                </div>
+                ` : (!v.showPrive && (v.piutangAntarDivisi || 0) !== 0 ? `
+                <div style="padding:4px 10px 6px; font-size:11px; color:#0369a1; border-bottom:1px solid #f1f5f9; background:#f0f9ff;">
+                    Ekuitas murni mencerminkan kinerja penjualan pakan komersial; pemakaian kandang sendiri dicatat sebagai <b>Piutang Antar-Divisi</b> di Aktiva. Centang opsi Konsolidasian di atas untuk mode Prive.
+                </div>
+                ` : '')}
                 <div style="display:flex; justify-content:space-between; padding:6px 10px; font-size:12px; font-weight:bold; background:#f8fafc; color:#64748b; margin-bottom:12px;">
                     <span>Total Ekuitas</span>
-                    <span>Rp ${nf.format(n.totalEkuitas)}</span>
+                    <span>Rp ${nf.format(v.totalEkuitas)}</span>
                 </div>
 
                 <div style="display:flex; justify-content:space-between; padding:12px 10px; font-size:15px; font-weight:bold; background:#fef3c7; border-radius:6px; margin-top:10px; border-top:2px solid #f59e0b;">
                     <span>TOTAL PASIVA</span>
-                    <span style="color:#b45309;">Rp ${nf.format(n.totalPasiva)}</span>
+                    <span style="color:#b45309;">Rp ${nf.format(v.totalPasiva)}</span>
                 </div>
             </div>
         </div>
@@ -3441,23 +4517,32 @@ function exportNeraca(fmt) {
         alert("Silakan klik Tampilkan terlebih dahulu!");
         return;
     }
-    let n = neracaDataGlobal;
-    let filename = `Neraca_CBL_${n.asOfLabel.replace(/\s+/g, '_')}`;
+    let v = getNeracaViewModel(neracaDataGlobal);
+    let filename = `Neraca_CBL_${v.asOfLabel.replace(/\s+/g, '_')}${v.showPrive ? '_Konsolidasian' : '_Komersial'}`;
+
+    if (fmt === 'pdf') {
+        cetakPdfNeraca(neracaDataGlobal, filename);
+        return;
+    }
 
     let rows = [
-        { 'Kelompok': 'AKTIVA (ASET)', 'Pos Akun': 'Kas & Bank', 'Saldo (Rp)': n.saldoKas },
-        { 'Kelompok': 'AKTIVA (ASET)', 'Pos Akun': 'Piutang Pakan Peternak', 'Saldo (Rp)': n.saldoPiutang },
-        { 'Kelompok': 'AKTIVA (ASET)', 'Pos Akun': 'Persediaan Pakan di Gudang (FIFO)', 'Saldo (Rp)': n.saldoPersediaan },
-        { 'Kelompok': 'AKTIVA (ASET)', 'Pos Akun': 'TOTAL AKTIVA', 'Saldo (Rp)': n.totalAktiva },
+        { 'Kelompok': 'AKTIVA (ASET)', 'Pos Akun': 'Kas & Bank', 'Saldo (Rp)': v.saldoKas },
+        { 'Kelompok': 'AKTIVA (ASET)', 'Pos Akun': 'Piutang Pakan Peternak', 'Saldo (Rp)': v.saldoPiutang },
+        ...((v.saldoKasbon || 0) !== 0 ? [{ 'Kelompok': 'AKTIVA (ASET)', 'Pos Akun': 'Piutang Karyawan (Kasbon)', 'Saldo (Rp)': v.saldoKasbon }] : []),
+        ...((v.piutangDivisiKandang || 0) !== 0 ? [{ 'Kelompok': 'AKTIVA (ASET)', 'Pos Akun': 'Piutang Antar-Divisi (Kandang Sendiri)', 'Saldo (Rp)': v.piutangDivisiKandang }] : []),
+        { 'Kelompok': 'AKTIVA (ASET)', 'Pos Akun': 'Persediaan Pakan di Gudang (FIFO)', 'Saldo (Rp)': v.saldoPersediaan },
+        { 'Kelompok': 'AKTIVA (ASET)', 'Pos Akun': 'TOTAL AKTIVA', 'Saldo (Rp)': v.totalAktiva },
         { 'Kelompok': '', 'Pos Akun': '', 'Saldo (Rp)': '' },
-        { 'Kelompok': 'PASIVA (KEWAJIBAN)', 'Pos Akun': 'Hutang Usaha Supplier Pakan', 'Saldo (Rp)': n.saldoHutang },
-        { 'Kelompok': 'PASIVA (KEWAJIBAN)', 'Pos Akun': 'TOTAL KEWAJIBAN', 'Saldo (Rp)': n.totalKewajiban },
+        { 'Kelompok': 'PASIVA (KEWAJIBAN)', 'Pos Akun': 'Hutang Usaha Supplier Pakan', 'Saldo (Rp)': v.saldoHutang },
+        { 'Kelompok': 'PASIVA (KEWAJIBAN)', 'Pos Akun': 'Hutang Upah Giling', 'Saldo (Rp)': v.saldoHutangUpahGiling || 0 },
+        { 'Kelompok': 'PASIVA (KEWAJIBAN)', 'Pos Akun': 'TOTAL KEWAJIBAN', 'Saldo (Rp)': v.totalKewajiban },
         { 'Kelompok': '', 'Pos Akun': '', 'Saldo (Rp)': '' },
-        { 'Kelompok': 'PASIVA (EKUITAS)', 'Pos Akun': 'Modal Disetor & Laba Ditahan', 'Saldo (Rp)': n.ekuitasModal },
-        { 'Kelompok': 'PASIVA (EKUITAS)', 'Pos Akun': 'Laba Bersih Periode Berjalan', 'Saldo (Rp)': n.labaBerjalan },
-        { 'Kelompok': 'PASIVA (EKUITAS)', 'Pos Akun': 'TOTAL EKUITAS', 'Saldo (Rp)': n.totalEkuitas },
+        { 'Kelompok': 'PASIVA (EKUITAS)', 'Pos Akun': v.modalLabel, 'Saldo (Rp)': v.ekuitasModal },
+        { 'Kelompok': 'PASIVA (EKUITAS)', 'Pos Akun': v.hasPriorYearCutoff ? `Laba Bersih Penjualan Komersial (${v.tahunDipilih})` : 'Laba Bersih Penjualan Komersial', 'Saldo (Rp)': v.labaKomersialKumulatif || 0 },
+        ...((v.potonganPrive || 0) !== 0 ? [{ 'Kelompok': 'PASIVA (EKUITAS)', 'Pos Akun': v.priveLabel, 'Saldo (Rp)': -(v.potonganPrive || 0) }] : []),
+        { 'Kelompok': 'PASIVA (EKUITAS)', 'Pos Akun': 'TOTAL EKUITAS', 'Saldo (Rp)': v.totalEkuitas },
         { 'Kelompok': '', 'Pos Akun': '', 'Saldo (Rp)': '' },
-        { 'Kelompok': 'PASIVA TOTAL', 'Pos Akun': 'TOTAL PASIVA (KEWAJIBAN + EKUITAS)', 'Saldo (Rp)': n.totalPasiva }
+        { 'Kelompok': 'PASIVA TOTAL', 'Pos Akun': 'TOTAL PASIVA (KEWAJIBAN + EKUITAS)', 'Saldo (Rp)': v.totalPasiva }
     ];
 
     if (fmt === 'xlsx' && typeof XLSX !== 'undefined') {
@@ -3475,6 +4560,417 @@ function exportNeraca(fmt) {
         a.href = URL.createObjectURL(blob);
         a.download = `${filename}.csv`;
         a.click();
+    }
+}
+
+
+// =========================================================================
+// EXPORT PDF FORMAL BERLOGO CBL
+// =========================================================================
+
+function cetakPdfLabaRugi(lr, filename, showKonsolidasi = false) {
+    let nf = new Intl.NumberFormat('id-ID');
+    let activeSementaraCount = showKonsolidasi ? (lr.countHppSementara || 0) : (lr.countHppSementaraKomersial || 0);
+
+    let activeBranches = Object.values(lr.pemakaianKandangPerCabang || {}).filter(b => Object.keys(b.items).length > 0);
+    let pemakaianRowsHtml = "";
+    if (showKonsolidasi && activeBranches.length > 0) {
+        activeBranches.forEach(branch => {
+            let branchSelisih = branch.totalJual - branch.totalHpp;
+            pemakaianRowsHtml += `
+                <tr style="background:#f8fafc; font-weight:bold; font-size:9.5px; border-top:1px solid #94a3b8; border-bottom:1px solid #cbd5e1;">
+                    <td colspan="5" style="padding:5px 6px; color:#0f172a;">${escapeHtmlKP(branch.label)}</td>
+                </tr>
+            `;
+            Object.values(branch.items).sort((a, b) => b.totalHpp - a.totalHpp).forEach(u => {
+                let selisih = u.totalJual - u.totalHpp;
+                pemakaianRowsHtml += `
+                    <tr style="border-bottom:1px solid #e2e8f0; font-size:9px;">
+                        <td style="padding:4px 6px 4px 16px; color:#1e293b;">${escapeHtmlKP(u.unit)}</td>
+                        <td style="padding:4px 6px; text-align:right;">${nf.format(u.totalQty)} Kg</td>
+                        <td style="padding:4px 6px; text-align:right; font-weight:${u.hasEstimasi ? 'bold' : 'normal'}; color:${u.hasEstimasi ? '#2563eb' : '#0f172a'};">
+                            Rp ${nf.format(u.totalHpp)}${u.hasEstimasi ? ' *' : ''}
+                        </td>
+                        <td style="padding:4px 6px; text-align:right; color:#334155;">Rp ${nf.format(u.totalJual)}</td>
+                        <td style="padding:4px 6px; text-align:right; color:#0f172a;">+Rp ${nf.format(selisih)}</td>
+                    </tr>
+                `;
+            });
+            pemakaianRowsHtml += `
+                <tr style="background:#f8fafc; font-weight:bold; font-size:9px; border-bottom:1px solid #94a3b8;">
+                    <td style="padding:4px 6px 4px 12px; color:#475569;">Subtotal ${escapeHtmlKP(branch.label)}</td>
+                    <td style="padding:4px 6px; text-align:right;">${nf.format(branch.totalQty)} Kg</td>
+                    <td style="padding:4px 6px; text-align:right;">Rp ${nf.format(branch.totalHpp)}</td>
+                    <td style="padding:4px 6px; text-align:right;">Rp ${nf.format(branch.totalJual)}</td>
+                    <td style="padding:4px 6px; text-align:right;">+Rp ${nf.format(branchSelisih)}</td>
+                </tr>
+            `;
+        });
+    }
+
+    let bebanRowsHtml = "";
+    Object.keys(lr.bebanOperasionalMap).sort().forEach(kat => {
+        bebanRowsHtml += `
+            <tr>
+                <td style="padding:3px 6px 3px 16px; font-size:9.5px; color:#334155;">${escapeHtmlKP(kat)}</td>
+                <td style="padding:3px 6px; text-align:right; font-size:9.5px; color:#0f172a;">Rp ${nf.format(lr.bebanOperasionalMap[kat])}</td>
+            </tr>
+        `;
+    });
+
+    let el = document.createElement('div');
+    el.style.width = '100%';
+    el.style.maxWidth = '670px';
+    el.style.boxSizing = 'border-box';
+    el.style.padding = '12px 14px';
+    el.style.background = '#ffffff';
+    el.style.fontFamily = "Arial, Helvetica, sans-serif";
+    el.style.color = '#0f172a';
+
+    el.innerHTML = `
+        <!-- KOP SURAT FORMAL -->
+        <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #1e3a8a; padding-bottom:8px; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <img src="https://raw.githubusercontent.com/wildansyif/pakan-cbl/2e732398572a6ac7d3512559c4344d40ab0902f9/Logo%20CBL.png" style="height:42px; width:auto;" alt="Logo CBL" />
+                <div>
+                    <div style="font-size:14px; font-weight:bold; color:#1e3a8a; letter-spacing:0.4px;">PT. CITA BENGGALA LESTARI</div>
+                    <div style="font-size:8.5px; color:#334155; font-weight:bold; margin-top:1px;">Unit Bisnis Logistik & Distribusi Pakan Ternak</div>
+                    <div style="font-size:8px; color:#64748b;">Cikahuripan RT.04/RW.10, Kec. Lembang, Kab. Bandung Barat 40391</div>
+                </div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:11px; font-weight:bold; color:#0f172a; text-transform:uppercase;">LAPORAN LABA RUGI</div>
+                <div style="font-size:8.5px; color:#475569;">${showKonsolidasi ? 'Konsolidasian Holding' : 'Divisi Pakan (Standalone)'}</div>
+                <div style="font-size:8.5px; color:#475569; margin-top:1px;">Periode: <b>${lr.periodeLabel}</b></div>
+            </div>
+        </div>
+
+        ${activeSementaraCount > 0 ? `
+        <div style="border:1px solid #bfdbfe; border-left:3px solid #2563eb; padding:6px 8px; margin-bottom:10px; font-size:8.5px; color:#1e40af; background:#f8fafc;">
+            <b>Catatan (*) :</b> Angka bertanda <b>* warna biru</b> merupakan estimasi HPP sementara (<i>Menunggu input HPP</i>) yang akan otomatis terbarui saat nilai HPP riil diinput.
+        </div>
+        ` : ''}
+
+        <!-- TABEL UTAMA LABA RUGI FORMAL -->
+        <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
+            <tbody>
+                <!-- I. PENDAPATAN -->
+                <tr>
+                    <td colspan="2" style="padding:5px 6px; font-size:10px; font-weight:bold; color:#1e3a8a; border-bottom:1px solid #94a3b8; background:#f8fafc;">
+                        I. PENDAPATAN OPERASIONAL KOMERSIAL
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding:3px 6px 3px 16px; font-size:9.5px;">Pendapatan Penjualan Pakan (Komersial)</td>
+                    <td style="padding:3px 6px; text-align:right; font-size:9.5px; width:160px;">Rp ${nf.format(lr.revPenjualanPakan)}</td>
+                </tr>
+                <tr>
+                    <td style="padding:3px 6px 3px 16px; font-size:9.5px;">Pendapatan Jasa Ongkir / Ekspedisi</td>
+                    <td style="padding:3px 6px; text-align:right; font-size:9.5px;">Rp ${nf.format(lr.revJasaOngkir)}</td>
+                </tr>
+                ${lr.revRetur > 0 ? `
+                <tr>
+                    <td style="padding:3px 6px 3px 16px; font-size:9.5px;">Retur Penjualan</td>
+                    <td style="padding:3px 6px; text-align:right; font-size:9.5px;">(Rp ${nf.format(lr.revRetur)})</td>
+                </tr>` : ''}
+                ${lr.revDiskon > 0 ? `
+                <tr>
+                    <td style="padding:3px 6px 3px 16px; font-size:9.5px;">Potongan & Diskon Penjualan</td>
+                    <td style="padding:3px 6px; text-align:right; font-size:9.5px;">(Rp ${nf.format(lr.revDiskon)})</td>
+                </tr>` : ''}
+                <tr>
+                    <td style="padding:5px 6px; font-size:9.5px; font-weight:bold; border-top:1px solid #cbd5e1; border-bottom:1px solid #94a3b8;">TOTAL PENDAPATAN BERSIH (NET SALES)</td>
+                    <td style="padding:5px 6px; text-align:right; font-size:9.5px; font-weight:bold; border-top:1px solid #cbd5e1; border-bottom:1px solid #94a3b8;">Rp ${nf.format(lr.netSalesKomersial)}</td>
+                </tr>
+
+                <!-- II. HPP -->
+                <tr>
+                    <td colspan="2" style="padding:8px 6px 4px 6px; font-size:10px; font-weight:bold; color:#1e3a8a; border-bottom:1px solid #94a3b8; background:#f8fafc;">
+                        II. HARGA POKOK PENJUALAN (HPP FIFO)
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding:4px 6px 4px 16px; font-size:9.5px;">Beban Pokok Penjualan Pakan Komersial${lr.cogsHasEstimasi ? ' <span style="color:#2563eb; font-weight:bold;">(*Sementara)</span>' : ''}</td>
+                    <td style="padding:4px 6px; text-align:right; font-size:9.5px; font-weight:${lr.cogsHasEstimasi ? 'bold' : 'normal'}; color:${lr.cogsHasEstimasi ? '#2563eb' : '#0f172a'};">(Rp ${nf.format(lr.cogsPakanKomersial)})${lr.cogsHasEstimasi ? ' *' : ''}</td>
+                </tr>
+                <tr>
+                    <td style="padding:5px 6px; font-size:10px; font-weight:bold; border-top:1px solid #94a3b8; border-bottom:1px solid #94a3b8; background:#f8fafc;">LABA KOTOR KOMERSIAL (GROSS PROFIT — ${lr.grossMarginKomersial}%)</td>
+                    <td style="padding:5px 6px; text-align:right; font-size:10px; font-weight:bold; border-top:1px solid #94a3b8; border-bottom:1px solid #94a3b8; background:#f8fafc;">Rp ${nf.format(lr.grossProfitKomersial)}</td>
+                </tr>
+
+                <!-- III. BEBAN OPERASIONAL -->
+                <tr>
+                    <td colspan="2" style="padding:8px 6px 4px 6px; font-size:10px; font-weight:bold; color:#1e3a8a; border-bottom:1px solid #94a3b8; background:#f8fafc;">
+                        III. BEBAN OPERASIONAL GUDANG & LAPANGAN
+                    </td>
+                </tr>
+                ${bebanRowsHtml || '<tr><td colspan="2" style="padding:4px 16px; font-size:9px; color:#64748b;">Tidak ada data beban operasional.</td></tr>'}
+                <tr>
+                    <td style="padding:5px 6px; font-size:9.5px; font-weight:bold; border-top:1px solid #cbd5e1;">TOTAL BEBAN OPERASIONAL GUDANG</td>
+                    <td style="padding:5px 6px; text-align:right; font-size:9.5px; font-weight:bold; border-top:1px solid #cbd5e1;">(Rp ${nf.format(lr.totalBebanOperasionalGudang)})</td>
+                </tr>
+
+                <!-- LABA BERSIH DIVISI PAKAN -->
+                <tr>
+                    <td style="padding:7px 6px; font-size:10.5px; font-weight:bold; border-top:1.5px solid #0f172a; border-bottom:3px double #0f172a; background:#f8fafc;">
+                        LABA BERSIH OPERASIONAL DIVISI PAKAN (${lr.netMarginDivisiPakan}%)
+                    </td>
+                    <td style="padding:7px 6px; text-align:right; font-size:10.5px; font-weight:bold; border-top:1.5px solid #0f172a; border-bottom:3px double #0f172a; background:#f8fafc;">
+                        Rp ${nf.format(lr.labaBersihDivisiPakan)}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        ${showKonsolidasi ? `
+        <div style="margin-top:10px; margin-bottom:10px; page-break-inside:avoid;">
+            <div style="font-weight:bold; font-size:10px; color:#1e3a8a; border-bottom:1px solid #94a3b8; padding:4px 6px; background:#f8fafc; margin-bottom:4px;">
+                IV. ALOKASI KONSUMSI PAKAN TERNAK SENDIRI (HOLDING INTERNAL)
+            </div>
+            <table style="width:100%; border-collapse:collapse; font-size:9px; border:1px solid #cbd5e1;">
+                <thead>
+                    <tr style="background:#f1f5f9; border-bottom:1px solid #94a3b8;">
+                        <th style="padding:4px 6px; text-align:left;">Cabang / Unit Ternak</th>
+                        <th style="padding:4px 6px; text-align:right;">Total Qty (Kg)</th>
+                        <th style="padding:4px 6px; text-align:right;">Modal (HPP FIFO)</th>
+                        <th style="padding:4px 6px; text-align:right;">Harga Jual Normal</th>
+                        <th style="padding:4px 6px; text-align:right;">Selisih (Subsidi)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${pemakaianRowsHtml || '<tr><td colspan="5" style="padding:6px; text-align:center; color:#64748b;">Tidak ada pemakaian internal.</td></tr>'}
+                </tbody>
+                <tfoot>
+                    <tr style="background:#f8fafc; font-weight:bold; border-top:1.5px solid #0f172a; border-bottom:1.5px solid #0f172a; font-size:9px;">
+                        <td style="padding:5px 6px;">TOTAL ALOKASI INTERNAL</td>
+                        <td style="padding:5px 6px; text-align:right;">${nf.format(lr.totalPemakaianQty)} Kg</td>
+                        <td style="padding:5px 6px; text-align:right;">Rp ${nf.format(lr.totalPemakaianHpp)}</td>
+                        <td style="padding:5px 6px; text-align:right;">Rp ${nf.format(lr.totalPemakaianJual)}</td>
+                        <td style="padding:5px 6px; text-align:right;">+Rp ${nf.format(lr.totalSubsidiInternal)}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
+            <tr>
+                <td style="padding:6px 6px; font-size:10.5px; font-weight:bold; border-top:1.5px solid #0f172a; border-bottom:3px double #0f172a; background:#f8fafc;">
+                    V. HASIL BERSIH KONSOLIDASIAN HOLDING
+                </td>
+                <td style="padding:6px 6px; text-align:right; font-size:10.5px; font-weight:bold; border-top:1.5px solid #0f172a; border-bottom:3px double #0f172a; background:#f8fafc; width:160px;">
+                    Rp ${nf.format(lr.labaBersihKonsolidasian)}
+                </td>
+            </tr>
+        </table>
+        ` : ''}
+
+        <!-- TANDA TANGAN FORMAL -->
+        <div style="margin-top:28px; display:flex; justify-content:space-between; text-align:center; font-size:9px; color:#1e293b; page-break-inside:avoid;">
+            <div style="width:30%;">
+                <div>Dibuat Oleh,</div>
+                <div style="margin-top:42px; font-weight:bold; border-bottom:1px solid #0f172a; display:inline-block; min-width:125px;">( Staf Keuangan & Akuntansi )</div>
+                <div style="font-size:8px; color:#64748b; margin-top:2px;">Divisi Keuangan PT CBL</div>
+            </div>
+            <div style="width:30%;">
+                <div>Diperiksa Oleh,</div>
+                <div style="margin-top:42px; font-weight:bold; border-bottom:1px solid #0f172a; display:inline-block; min-width:125px;">( Manajer Operasional )</div>
+                <div style="font-size:8px; color:#64748b; margin-top:2px;">Logistik & Pengadaan Pakan</div>
+            </div>
+            <div style="width:30%;">
+                <div>Disetujui Oleh,</div>
+                <div style="margin-top:42px; font-weight:bold; border-bottom:1px solid #0f172a; display:inline-block; min-width:125px;">( Direktur Utama )</div>
+                <div style="font-size:8px; color:#64748b; margin-top:2px;">PT. CITA BENGGALA LESTARI</div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(el);
+    let opt = {
+        margin: [8, 8, 8, 8],
+        filename: `${filename}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    if (typeof html2pdf !== 'undefined') {
+        html2pdf().set(opt).from(el).save().then(() => {
+            document.body.removeChild(el);
+        }).catch(err => {
+            console.error("Gagal cetak PDF LR:", err);
+            document.body.removeChild(el);
+            alert("Terjadi kendala saat membuat file PDF: " + err.message);
+        });
+    } else {
+        alert("Library html2pdf belum tersedia. Silakan gunakan opsi cetak browser.");
+        document.body.removeChild(el);
+    }
+}
+
+function cetakPdfNeraca(n, filename) {
+    let v = getNeracaViewModel(n);
+    let nf = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 });
+    let isBalance = Math.abs(v.selisih) <= 2;
+
+    let el = document.createElement('div');
+    el.style.width = '100%';
+    el.style.maxWidth = '670px';
+    el.style.boxSizing = 'border-box';
+    el.style.padding = '12px 14px';
+    el.style.background = '#ffffff';
+    el.style.fontFamily = "Arial, Helvetica, sans-serif";
+    el.style.color = '#0f172a';
+
+    el.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #1e3a8a; padding-bottom:8px; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <img src="https://raw.githubusercontent.com/wildansyif/pakan-cbl/2e732398572a6ac7d3512559c4344d40ab0902f9/Logo%20CBL.png" style="height:42px; width:auto;" alt="Logo CBL" />
+                <div>
+                    <div style="font-size:14px; font-weight:bold; color:#1e3a8a; letter-spacing:0.4px;">PT. CITA BENGGALA LESTARI</div>
+                    <div style="font-size:8.5px; color:#334155; font-weight:bold; margin-top:1px;">Unit Bisnis Logistik & Distribusi Pakan Ternak</div>
+                    <div style="font-size:8px; color:#64748b;">Cikahuripan RT.04/RW.10, Kec. Lembang, Kab. Bandung Barat 40391</div>
+                </div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:11px; font-weight:bold; color:#0f172a; text-transform:uppercase;">LAPORAN POSISI KEUANGAN (NERACA)</div>
+                <div style="font-size:8.5px; color:#475569;">${v.showPrive ? 'Konsolidasian (Mode Prive Internal)' : 'Divisi Pakan (Komersial Mandiri)'}</div>
+                <div style="font-size:8.5px; color:#475569; margin-top:1px;">Posisi Per: <b>${v.asOfLabel}</b></div>
+            </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 10px; border:1px solid #cbd5e1; border-left:3px solid ${isBalance ? '#1e3a8a' : '#64748b'}; background:#f8fafc; margin-bottom:12px; font-size:9.5px; font-weight:bold;">
+            <span>${isBalance ? 'STATUS: NERACA 100% BALANCE (AKTIVA = PASIVA)' : 'STATUS: TERDAPAT REKONSILIASI FISIK GUDANG'}</span>
+            <span>Selisih: Rp ${nf.format(Math.abs(v.selisih) <= 2 ? 0 : v.selisih)}</span>
+        </div>
+
+        <table style="width:100%; border-collapse:collapse; margin-bottom:18px; table-layout:fixed;">
+            <thead>
+                <tr style="background:#f1f5f9; border-top:1.5px solid #0f172a; border-bottom:1px solid #94a3b8; font-size:10px;">
+                    <th style="padding:6px 8px; text-align:left; width:50%; border-right:1px solid #cbd5e1; color:#1e3a8a;">AKTIVA (ASET)</th>
+                    <th style="padding:6px 8px; text-align:left; width:50%; color:#1e3a8a;">PASIVA (KEWAJIBAN & EKUITAS)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="vertical-align:top; padding:8px; border-right:1px solid #cbd5e1; border-bottom:1px solid #cbd5e1;">
+                        <div style="font-weight:bold; font-size:9.5px; color:#334155; margin-bottom:4px;">Aset Lancar:</div>
+                        <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:9.5px; border-bottom:1px solid #f1f5f9;">
+                            <span>• Kas & Bank</span>
+                            <span>Rp ${nf.format(v.saldoKas)}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:9.5px; border-bottom:1px solid #f1f5f9;">
+                            <span>• Piutang Pakan Peternak</span>
+                            <span>Rp ${nf.format(v.saldoPiutang)}</span>
+                        </div>
+                        ${(v.saldoKasbon || 0) !== 0 ? `
+                        <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:9.5px; border-bottom:1px solid #f1f5f9;">
+                            <span>• Piutang Karyawan (Kasbon)</span>
+                            <span>Rp ${nf.format(v.saldoKasbon)}</span>
+                        </div>
+                        ` : ''}
+                        ${(v.piutangDivisiKandang || 0) !== 0 ? `
+                        <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:9.5px; border-bottom:1px solid #f1f5f9; color:#0369a1;">
+                            <span>• Piutang Antar-Divisi (Kandang Sendiri)</span>
+                            <span>Rp ${nf.format(v.piutangDivisiKandang)}</span>
+                        </div>
+                        ` : ''}
+                        <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:9.5px; border-bottom:1px solid #f1f5f9;">
+                            <span>• Persediaan Pakan di Gudang</span>
+                            <span>Rp ${nf.format(v.saldoPersediaan)}</span>
+                        </div>
+                    </td>
+                    <td style="vertical-align:top; padding:8px; border-bottom:1px solid #cbd5e1;">
+                        <div style="font-weight:bold; font-size:9.5px; color:#334155; margin-bottom:4px;">I. Kewajiban:</div>
+                        <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:9.5px; border-bottom:1px solid #f1f5f9;">
+                            <span>• Hutang Usaha Supplier Pakan</span>
+                            <span>Rp ${nf.format(v.saldoHutang)}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:9.5px; border-bottom:1px solid #f1f5f9;">
+                            <span>• Hutang Upah Giling</span>
+                            <span>Rp ${nf.format(v.saldoHutangUpahGiling || 0)}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:9px; font-weight:bold; color:#475569; margin-bottom:8px;">
+                            <span>Total Kewajiban</span>
+                            <span>Rp ${nf.format(v.totalKewajiban)}</span>
+                        </div>
+
+                        <div style="font-weight:bold; font-size:9.5px; color:#334155; margin-bottom:4px;">II. Ekuitas:</div>
+                        <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:9.5px; border-bottom:1px solid #f1f5f9;">
+                            <span>• ${v.modalLabel}</span>
+                            <span>Rp ${nf.format(v.ekuitasModal)}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:9.5px; border-bottom:1px solid #f1f5f9; color:${(v.labaKomersialKumulatif || 0) >= 0 ? '#15803d' : '#b91c1c'};">
+                            <span>• ${v.hasPriorYearCutoff ? `Laba Bersih Penjualan Komersial (${v.tahunDipilih})` : 'Laba Bersih Penjualan Komersial'}</span>
+                            <span>${(v.labaKomersialKumulatif || 0) >= 0 ? '+' : ''}Rp ${nf.format(v.labaKomersialKumulatif || 0)}</span>
+                        </div>
+                        ${(v.potonganPrive || 0) !== 0 ? `
+                        <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:9.5px; border-bottom:1px solid #f1f5f9; color:#475569;">
+                            <span>• ${v.priveLabel}</span>
+                            <span>(Rp ${nf.format(v.potonganPrive)})</span>
+                        </div>
+                        ` : ''}
+                        <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:9px; font-weight:bold; color:#475569;">
+                            <span>Total Ekuitas</span>
+                            <span>Rp ${nf.format(v.totalEkuitas)}</span>
+                        </div>
+                    </td>
+                </tr>
+                <tr style="background:#f8fafc; font-weight:bold; font-size:10px; border-top:1.5px solid #0f172a; border-bottom:3px double #0f172a;">
+                    <td style="padding:7px 8px; border-right:1px solid #cbd5e1;">
+                        <div style="display:flex; justify-content:space-between;">
+                            <span>TOTAL AKTIVA</span>
+                            <span>Rp ${nf.format(v.totalAktiva)}</span>
+                        </div>
+                    </td>
+                    <td style="padding:7px 8px;">
+                        <div style="display:flex; justify-content:space-between;">
+                            <span>TOTAL PASIVA</span>
+                            <span>Rp ${nf.format(v.totalPasiva)}</span>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div style="margin-top:30px; display:flex; justify-content:space-between; text-align:center; font-size:9px; color:#1e293b; page-break-inside:avoid;">
+            <div style="width:30%;">
+                <div>Dibuat Oleh,</div>
+                <div style="margin-top:42px; font-weight:bold; border-bottom:1px solid #0f172a; display:inline-block; min-width:125px;">( Staf Keuangan & Akuntansi )</div>
+                <div style="font-size:8px; color:#64748b; margin-top:2px;">Divisi Keuangan PT CBL</div>
+            </div>
+            <div style="width:30%;">
+                <div>Diperiksa Oleh,</div>
+                <div style="margin-top:42px; font-weight:bold; border-bottom:1px solid #0f172a; display:inline-block; min-width:125px;">( Manajer Operasional )</div>
+                <div style="font-size:8px; color:#64748b; margin-top:2px;">Logistik & Pengadaan Pakan</div>
+            </div>
+            <div style="width:30%;">
+                <div>Disetujui Oleh,</div>
+                <div style="margin-top:42px; font-weight:bold; border-bottom:1px solid #0f172a; display:inline-block; min-width:125px;">( Direktur Utama )</div>
+                <div style="font-size:8px; color:#64748b; margin-top:2px;">PT. CITA BENGGALA LESTARI</div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(el);
+    let opt = {
+        margin: [8, 8, 8, 8],
+        filename: `${filename}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    if (typeof html2pdf !== 'undefined') {
+        html2pdf().set(opt).from(el).save().then(() => {
+            document.body.removeChild(el);
+        }).catch(err => {
+            console.error("Gagal cetak PDF Neraca:", err);
+            document.body.removeChild(el);
+            alert("Terjadi kendala saat membuat file PDF: " + err.message);
+        });
+    } else {
+        alert("Library html2pdf belum tersedia. Silakan gunakan opsi cetak browser.");
+        document.body.removeChild(el);
     }
 }
 
@@ -3519,3 +5015,6 @@ window.closeHeaderFilter = closeHeaderFilter;
 window.updateHeaderFilterIcons = updateHeaderFilterIcons;
 window.changePageBatch = changePageBatch;
 window.getBatchStatus = getBatchStatus;
+window.cetakPdfLabaRugi = cetakPdfLabaRugi;
+window.cetakPdfNeraca = cetakPdfNeraca;
+window.formatDetailPotonganNota = formatDetailPotonganNota;

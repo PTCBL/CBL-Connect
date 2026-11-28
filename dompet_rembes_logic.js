@@ -366,8 +366,8 @@ function isiPilihanKategoriDompet() {
     let kategoriList = (typeof KATG_KELUAR !== 'undefined') ? KATG_KELUAR : [
         "BBM / Solar", "Tambal Ban / Isi Angin", "Servis Rutin / Ganti Oli",
         "Perbaikan & Sparepart Kendaraan", "Cuci Armada", "Perawatan Kendaraan",
-        "OPR Ekspedisi Pakan", "Bongkar Muat", "OPR Kandang", "Listrik, Air & Internet",
-        "Perlengkapan & Kebersihan", "Konsumsi & Dapur", "Kasbon", "Lainnya"
+        "OPR Ekspedisi Pakan", "Bongkar Muat", "Upah Giling", "OPR Kandang", "Listrik, Air & Internet",
+        "Perlengkapan & Kebersihan", "Konsumsi & Dapur", "Bayar Hutang Pakan", "Tarik Deposit", "Kasbon", "Lainnya"
     ];
 
     formSel.innerHTML = "";
@@ -1087,8 +1087,8 @@ function bukaEditDompet(id) {
     let item = dompetDataAktif.find(d => d.id === id);
     if (!item) return;
 
-    dompetEditId = id;
     bukaFormInputDompet();
+    dompetEditId = id;
 
     document.getElementById('dompet-form-title').innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">edit</span> Edit Transaksi Kas`;
     document.getElementById('btn-simpan-dompet').innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">save</span> Simpan Perubahan`;
@@ -1739,11 +1739,12 @@ async function eksekusiCetakPDF() {
 /**
  * AUTO-SYNC DARI LAPORAN GUDANG (BONGKAR MUAT CASH OUT)
  */
-async function syncBongkarMuatKeDompet({ tanggal, nominal, keterangan, relasi, cabangStr, petugas }) {
+async function syncBongkarMuatKeDompet({ tanggal, nominal, keterangan, relasi, cabangStr, petugas, cashflowId, buktiUrl }) {
     try {
         let sUrl = typeof SUPA_URL !== 'undefined' ? SUPA_URL : 'https://hwpbkdmaeqovhxttkrmj.supabase.co';
         let sKey = typeof SUPA_ANON_KEY !== 'undefined' ? SUPA_ANON_KEY : '';
         let petName = petugas || (typeof activeUser !== 'undefined' && activeUser ? activeUser : 'Wildan');
+        let cleanBukti = (buktiUrl && buktiUrl !== '-') ? buktiUrl : '-';
 
         let payload = {
             tanggal: tanggal || new Date().toISOString().split('T')[0],
@@ -1751,23 +1752,28 @@ async function syncBongkarMuatKeDompet({ tanggal, nominal, keterangan, relasi, c
             jenis: 'Keluar',
             metode: 'Cash',
             kategori: 'Bongkar Muat',
-            relasi: `Kuli Gudang ${cabangStr || ''}`,
+            relasi: relasi || `Kuli Gudang ${cabangStr || ''}`,
             nominal: nominal,
             keterangan: keterangan || `Upah bongkar pakan masuk`,
-            bukti_url: '-',
-            struk_status: 'tidak_ada',
+            bukti_url: cleanBukti,
+            struk_status: (cleanBukti !== '-') ? 'ada' : 'tidak_ada',
             masuk_cashflow: true,
+            cashflow_id: cashflowId || null,
             status_reimburse: 'BELUM',
             petugas: petName
         };
 
-        await fetch(`${sUrl}/rest/v1/dompet_rembes`, {
+        let resDompet = await fetch(`${sUrl}/rest/v1/dompet_rembes`, {
             method: 'POST',
             headers: { 'apikey': sKey, 'Authorization': `Bearer ${sKey}`, 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
+        if (!resDompet.ok) {
+            console.error("Gagal insert Bongkar Muat ke Dompet Rembes:", await resDompet.text());
+            return;
+        }
 
-        console.log("Auto-sync Bongkar Muat ke Dompet Rembes Berhasil");
+        console.log("Auto-sync Bongkar Muat ke Dompet Rembes Berhasil (cashflow_id:", cashflowId || null, ")");
         if (typeof muatDataDompet === 'function') {
             muatDataDompet(true);
         }
